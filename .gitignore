@@ -1,0 +1,38 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+
+# Node / frontend
+node_modules/
+web/node_modules/
+web/dist/
+*.tsbuildinfo
+
+# Go
+bin/
+coverage.out
+
+# Build artifacts
+build/
+dist/
+out/
+
+# SQLite / local data
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# OS / editor noise
+.DS_Store
+.idea/
+.vscode/
+
+# Temporary repo imports
+tmp/
+tmp-repos/

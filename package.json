@@ -1,0 +1,12 @@
+{
+  "name": "practicehelper",
+  "private": true,
+  "packageManager": "pnpm@10.26.1",
+  "scripts": {
+    "web:dev": "pnpm --dir web dev",
+    "web:build": "pnpm --dir web build",
+    "web:lint": "pnpm --dir web lint",
+    "web:format": "pnpm --dir web format",
+    "web:test": "pnpm --dir web test"
+  }
+}
