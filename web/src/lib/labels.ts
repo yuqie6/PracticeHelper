@@ -34,6 +34,14 @@ export function formatImportStatusLabel(t: Translate, status: string): string {
   return translateOrFallback(t, `enums.importStatus.${status}`, humanizeToken(status));
 }
 
+export function formatImportJobStatusLabel(t: Translate, status: string): string {
+  return translateOrFallback(t, `enums.importJobStatus.${status}`, humanizeToken(status));
+}
+
+export function formatImportJobStageLabel(t: Translate, stage: string): string {
+  return translateOrFallback(t, `enums.importJobStage.${stage}`, humanizeToken(stage));
+}
+
 export function formatWeaknessKindLabel(t: Translate, kind: string): string {
   return translateOrFallback(t, `enums.weaknessKind.${kind}`, humanizeToken(kind));
 }

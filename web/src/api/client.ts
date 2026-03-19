@@ -29,6 +29,26 @@ export interface ProjectProfile {
   import_status: string;
 }
 
+export interface ProjectImportJob {
+  id: string;
+  repo_url: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  stage:
+    | 'queued'
+    | 'analyzing_repository'
+    | 'persisting_project'
+    | 'completed'
+    | 'failed';
+  message: string;
+  error_message?: string;
+  project_id?: string;
+  project_name?: string;
+  created_at: string;
+  updated_at: string;
+  started_at?: string;
+  finished_at?: string;
+}
+
 export interface WeaknessTag {
   id: string;
   kind: string;
@@ -224,11 +244,15 @@ export function saveProfile(payload: Partial<UserProfile>): Promise<UserProfile>
   });
 }
 
-export function importProject(repoUrl: string): Promise<ProjectProfile> {
+export function importProject(repoUrl: string): Promise<ProjectImportJob> {
   return request('/api/projects/import', {
     method: 'POST',
     body: JSON.stringify({ repo_url: repoUrl }),
   });
+}
+
+export function listImportJobs(): Promise<ProjectImportJob[]> {
+  return request('/api/import-jobs');
 }
 
 export function listProjects(): Promise<ProjectProfile[]> {

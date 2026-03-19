@@ -25,6 +25,47 @@
       :message="importError"
     />
 
+    <div class="neo-panel space-y-3">
+      <p class="neo-kicker bg-[var(--neo-blue)]">{{ t('projects.jobsTitle') }}</p>
+      <div v-if="importJobs.length" class="space-y-3">
+        <article
+          v-for="job in importJobs"
+          :key="job.id"
+          class="space-y-3 border-2 border-black bg-white px-4 py-4 md:border-4"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="space-y-1">
+              <p class="text-sm font-black uppercase tracking-[0.08em]">
+                {{ formatImportJobStatusLabel(t, job.status) }}
+              </p>
+              <p class="text-base font-semibold">{{ job.message }}</p>
+            </div>
+            <span class="neo-badge bg-[var(--neo-yellow)]">
+              {{ formatImportJobStageLabel(t, job.stage) }}
+            </span>
+          </div>
+
+          <div class="space-y-1 text-sm font-semibold text-black/80">
+            <p>{{ t('projects.jobRepo') }}: {{ job.repo_url }}</p>
+            <p v-if="job.error_message">{{ job.error_message }}</p>
+            <p v-if="job.project_name">
+              {{ t('projects.jobResult') }}: {{ job.project_name }}
+            </p>
+          </div>
+
+          <button
+            v-if="job.project_id"
+            type="button"
+            class="neo-button-dark"
+            @click="selectProject(job.project_id)"
+          >
+            {{ t('projects.openProject') }}
+          </button>
+        </article>
+      </div>
+      <p v-else class="neo-note">{{ t('projects.jobsEmpty') }}</p>
+    </div>
+
     <div class="neo-grid lg:grid-cols-[0.8fr_1.2fr]">
       <div class="neo-panel space-y-3">
         <p class="neo-kicker bg-[var(--neo-yellow)]">{{ t('projects.listTitle') }}</p>
@@ -109,9 +150,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import { importProject, listProjects, updateProject, type ProjectProfile } from '../api/client';
+import {
+  importProject,
+  listImportJobs,
+  listProjects,
+  updateProject,
+  type ProjectImportJob,
+  type ProjectProfile,
+} from '../api/client';
 import NoticePanel from '../components/NoticePanel.vue';
-import { formatImportStatusLabel } from '../lib/labels';
+import {
+  formatImportJobStageLabel,
+  formatImportJobStatusLabel,
+  formatImportStatusLabel,
+} from '../lib/labels';
 
 const queryClient = useQueryClient();
 const repoUrl = ref('');
@@ -137,6 +189,24 @@ const { data } = useQuery({
 });
 
 const projects = computed(() => data.value ?? []);
+
+const { data: importJobsData } = useQuery({
+  queryKey: ['import-jobs'],
+  queryFn: listImportJobs,
+  refetchInterval: (query) => {
+    const jobs = (query.state.data as ProjectImportJob[] | undefined) ?? [];
+    return jobs.some((job) => ['queued', 'running'].includes(job.status)) ? 3000 : false;
+  },
+});
+
+const importJobs = computed(() => importJobsData.value ?? []);
+
+watch(
+  () => importJobs.value.map((job) => `${job.id}:${job.status}:${job.project_id}`).join('|'),
+  async () => {
+    await queryClient.invalidateQueries({ queryKey: ['projects'] });
+  },
+);
 
 watch(
   projects,
@@ -175,7 +245,10 @@ const importMutation = useMutation({
   onSuccess: async (project) => {
     repoUrl.value = '';
     importError.value = '';
-    selectedProjectId.value = project.id;
+    if (project.project_id) {
+      selectedProjectId.value = project.project_id;
+    }
+    await queryClient.invalidateQueries({ queryKey: ['import-jobs'] });
     await queryClient.invalidateQueries({ queryKey: ['projects'] });
   },
   onError: (error) => {
