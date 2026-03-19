@@ -2,8 +2,7 @@
   <section class="neo-page space-y-6">
     <header class="neo-panel bg-[var(--neo-red)] text-black">
       <p class="neo-kicker bg-white">{{ t('train.hero.kicker') }}</p>
-      <h2 class="neo-heading">{{ t('train.hero.title') }}</h2>
-      <p class="mt-3 text-base font-semibold">
+      <p class="text-base font-semibold">
         {{ t('train.hero.description') }}
       </p>
     </header>
@@ -35,14 +34,20 @@
     />
 
     <StreamTracePanel
-      v-if="isStarting && (streamReasoning.length || streamContent)"
+      v-if="isStarting && streamSections.length"
       :kicker="t('session.processingKicker')"
       :title="t('progress.createSession.title')"
       :description="t('progress.createSession.description')"
       :reasoning-title="t('session.reasoningTitle')"
       :content-title="t('session.contentTitle')"
-      :reasoning="streamReasoning"
-      :content="streamContent"
+      :sections="streamSections"
+    />
+
+    <NoticePanel
+      v-if="startError"
+      tone="error"
+      :title="t('train.startErrorTitle')"
+      :message="startError"
     />
 
     <form class="neo-panel space-y-4" @submit.prevent="submit">
@@ -103,6 +108,7 @@ import {
   type StreamEvent,
   type TrainingSessionSummary,
 } from '../api/client';
+import NoticePanel from '../components/NoticePanel.vue';
 import ProgressPanel from '../components/ProgressPanel.vue';
 import StreamTracePanel from '../components/StreamTracePanel.vue';
 import {
@@ -111,6 +117,7 @@ import {
   formatStatusLabel,
   formatTopicLabel,
 } from '../lib/labels';
+import { appendStreamEvent, type StreamSection } from '../lib/streaming';
 import { useProgressSteps } from '../lib/useProgressSteps';
 
 const router = useRouter();
@@ -122,8 +129,8 @@ const form = reactive({
   project_id: '',
   intensity: 'standard',
 });
-const streamReasoning = ref<string[]>([]);
-const streamContent = ref('');
+const streamSections = ref<StreamSection[]>([]);
+const startError = ref('');
 
 const { data: projects } = useQuery({
   queryKey: ['projects'],
@@ -144,12 +151,15 @@ const mutation = useMutation({
     project_id?: string;
     intensity: string;
   }) => {
-    streamReasoning.value = [];
-    streamContent.value = '';
+    streamSections.value = [];
+    startError.value = '';
     return createSessionStream(payload, handleStreamEvent);
   },
   onSuccess: async (session) => {
     await router.push(`/sessions/${session.id}`);
+  },
+  onError: (error) => {
+    startError.value = error instanceof Error ? error.message : t('common.requestFailed');
   },
 });
 
@@ -175,13 +185,7 @@ function submit() {
 }
 
 function handleStreamEvent(event: StreamEvent) {
-  if (event.type === 'reasoning' && event.text) {
-    streamReasoning.value = [...streamReasoning.value, event.text];
-  }
-
-  if (event.type === 'content' && event.text) {
-    streamContent.value += event.text;
-  }
+  streamSections.value = appendStreamEvent(streamSections.value, event);
 }
 
 function formatSessionName(session: TrainingSessionSummary): string {

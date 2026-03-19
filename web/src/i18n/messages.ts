@@ -17,6 +17,7 @@ export const messages = {
     },
     common: {
       loading: '加载中...',
+      requestFailed: '请求失败，请稍后重试。',
       notProvided: '暂未填写',
       unnamedSession: '未命名训练',
       unknownSession: '未命名内容',
@@ -24,6 +25,7 @@ export const messages = {
       saving: '保存中...',
       start: '开始训练',
       starting: '启动中...',
+      retry: '重试',
       submit: '提交回答',
       submitting: '提交中...',
       continue: '继续下一轮',
@@ -71,6 +73,8 @@ export const messages = {
         project: '项目表达',
         expression: '表达方式',
         followup_breakdown: '追问应对',
+        depth: '展开深度',
+        detail: '细节支撑',
       },
     },
     home: {
@@ -140,6 +144,10 @@ export const messages = {
       },
       saveSuccess: '画像已更新，后续推荐会基于这份信息生成。',
       saveAction: '保存画像',
+      emptyTitle: '还没有保存画像',
+      emptyDescription: '先填写这份表单并保存，首页推荐和训练上下文才会更准确。',
+      loadErrorTitle: '画像加载失败',
+      saveErrorTitle: '画像保存失败',
     },
     projects: {
       hero: {
@@ -150,6 +158,7 @@ export const messages = {
       },
       importPlaceholder: 'https://github.com/yourname/your-project',
       importAction: '导入仓库',
+      importErrorTitle: '导入失败',
       listTitle: '项目列表',
       emptyList: '先导入一个公开的 GitHub 仓库。',
       editorTitle: '项目信息编辑',
@@ -164,6 +173,7 @@ export const messages = {
         followups: '可继续追问点',
       },
       saveAction: '保存项目信息',
+      saveErrorTitle: '保存失败',
     },
     train: {
       hero: {
@@ -182,6 +192,7 @@ export const messages = {
       resumeDescription: '{name} · {status}',
       chooseProject: '请选择项目',
       startAction: '开始这一轮训练',
+      startErrorTitle: '启动失败',
     },
     session: {
       hero: {
@@ -206,6 +217,34 @@ export const messages = {
       processingReviewDescription: '系统正在汇总整轮表现并整理复盘卡。',
       placeholderInitial: '先说结论，再解释原因，最后给一个真实项目或场景例子。',
       placeholderFollowup: '直接回应追问，补充关键信息，不要重复上一次的回答。',
+      submitErrorTitle: '提交失败',
+      streamPending: '模型已经开始返回内容，但还在整理成结构化结果，请稍候。',
+      streamSectionCounter: '过程片段 {index}',
+      streamKinds: {
+        prepare: '正在准备上下文',
+        drafting: '模型生成中',
+        finalizing: '正在整理结果',
+        processing: '处理中',
+        question: '问题草稿',
+        evaluation: '评估结果',
+        review: '复盘草稿',
+      },
+      streamFields: {
+        score: '当前得分：{score}',
+        scoreBreakdown: '分项得分',
+        followupQuestion: '下一刀追问',
+      },
+      streamContexts: {
+        read_question_templates: '已读取基础题模板',
+        read_project_brief: '已读取项目摘要与亮点',
+        read_context_chunks: '已读取源码与文档片段',
+        read_weakness_memory: '已读取历史薄弱点',
+        read_evaluation_context: '已读取当前题目与回答',
+        read_session_summary: '已读取整轮训练摘要',
+        read_turn_history: '已读取历史问答记录',
+        read_repo_overview: '已读取仓库概览',
+        read_repo_chunks: '已读取关键源码片段',
+      },
     },
     progress: {
       createSession: {
@@ -230,6 +269,11 @@ export const messages = {
         title: '复盘会总结这轮表现，并给出下一步重点。',
         loading: '复盘加载中...',
       },
+      headerError: '复盘暂时无法加载。',
+      loadingTitle: '正在读取复盘',
+      loadErrorTitle: '复盘加载失败',
+      emptyTitle: '这轮复盘还没准备好',
+      emptyDescription: '可能还在生成中，或者这轮训练还没有成功收口。',
       scoreBreakdown: '分项得分',
       highlights: '回答亮点',
       gaps: '需要补强',
@@ -255,6 +299,7 @@ export const messages = {
     },
     common: {
       loading: 'Loading...',
+      requestFailed: 'Request failed. Please try again.',
       notProvided: 'Not provided',
       unnamedSession: 'Untitled session',
       unknownSession: 'Untitled item',
@@ -262,6 +307,7 @@ export const messages = {
       saving: 'Saving...',
       start: 'Start training',
       starting: 'Starting...',
+      retry: 'Retry',
       submit: 'Submit answer',
       submitting: 'Submitting...',
       continue: 'Continue',
@@ -309,6 +355,8 @@ export const messages = {
         project: 'Project explanation',
         expression: 'Communication',
         followup_breakdown: 'Follow-up handling',
+        depth: 'Depth',
+        detail: 'Supporting detail',
       },
     },
     home: {
@@ -380,6 +428,10 @@ export const messages = {
       },
       saveSuccess: 'Profile updated. Future recommendations will use this information.',
       saveAction: 'Save profile',
+      emptyTitle: 'No saved profile yet',
+      emptyDescription: 'Fill out this form and save it first so recommendations and training context become more accurate.',
+      loadErrorTitle: 'Failed to load profile',
+      saveErrorTitle: 'Failed to save profile',
     },
     projects: {
       hero: {
@@ -390,6 +442,7 @@ export const messages = {
       },
       importPlaceholder: 'https://github.com/yourname/your-project',
       importAction: 'Import repository',
+      importErrorTitle: 'Import failed',
       listTitle: 'Project list',
       emptyList: 'Import a public GitHub repository first.',
       editorTitle: 'Edit project details',
@@ -404,6 +457,7 @@ export const messages = {
         followups: 'Follow-up angles',
       },
       saveAction: 'Save project details',
+      saveErrorTitle: 'Save failed',
     },
     train: {
       hero: {
@@ -422,6 +476,7 @@ export const messages = {
       resumeDescription: '{name} · {status}',
       chooseProject: 'Select a project',
       startAction: 'Start this session',
+      startErrorTitle: 'Start failed',
     },
     session: {
       hero: {
@@ -446,6 +501,34 @@ export const messages = {
       processingReviewDescription: 'The system is summarizing the session and preparing the review card.',
       placeholderInitial: 'State your conclusion first, explain why, then give a real example.',
       placeholderFollowup: 'Answer the follow-up directly and add the missing detail without repeating yourself.',
+      submitErrorTitle: 'Submit failed',
+      streamPending: 'The model is already returning content, but the structured result is still being assembled.',
+      streamSectionCounter: 'Stream block {index}',
+      streamKinds: {
+        prepare: 'Preparing context',
+        drafting: 'Generating content',
+        finalizing: 'Finalizing result',
+        processing: 'Processing',
+        question: 'Question draft',
+        evaluation: 'Evaluation draft',
+        review: 'Review draft',
+      },
+      streamFields: {
+        score: 'Current score: {score}',
+        scoreBreakdown: 'Score breakdown',
+        followupQuestion: 'Next follow-up',
+      },
+      streamContexts: {
+        read_question_templates: 'Question templates loaded',
+        read_project_brief: 'Project brief loaded',
+        read_context_chunks: 'Code and docs context loaded',
+        read_weakness_memory: 'Weakness history loaded',
+        read_evaluation_context: 'Current question and answer loaded',
+        read_session_summary: 'Session summary loaded',
+        read_turn_history: 'Turn history loaded',
+        read_repo_overview: 'Repository overview loaded',
+        read_repo_chunks: 'Key source chunks loaded',
+      },
     },
     progress: {
       createSession: {
@@ -470,6 +553,11 @@ export const messages = {
         title: 'The review summarizes this session and highlights what to practice next.',
         loading: 'Loading review...',
       },
+      headerError: 'The review is temporarily unavailable.',
+      loadingTitle: 'Loading review',
+      loadErrorTitle: 'Failed to load review',
+      emptyTitle: 'This review is not ready yet',
+      emptyDescription: 'It may still be generating, or the session did not finish successfully.',
       scoreBreakdown: 'Score breakdown',
       highlights: 'Highlights',
       gaps: 'Needs improvement',

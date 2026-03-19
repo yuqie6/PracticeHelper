@@ -2,11 +2,32 @@
   <section class="neo-page space-y-6">
     <header class="neo-panel bg-[var(--neo-blue)]">
       <p class="neo-kicker bg-white">{{ t('profile.hero.kicker') }}</p>
-      <h2 class="neo-heading">{{ t('profile.hero.title') }}</h2>
-      <p class="mt-3 text-base font-semibold">
+      <p class="text-base font-semibold">
         {{ t('profile.hero.description') }}
       </p>
     </header>
+
+    <NoticePanel
+      v-if="loadError"
+      tone="error"
+      :title="t('profile.loadErrorTitle')"
+      :message="loadError"
+    />
+    <button
+      v-if="loadError"
+      type="button"
+      class="neo-button-dark"
+      @click="refetch()"
+    >
+      {{ t('common.retry') }}
+    </button>
+
+    <NoticePanel
+      v-else-if="!data && !isLoading"
+      tone="info"
+      :title="t('profile.emptyTitle')"
+      :message="t('profile.emptyDescription')"
+    />
 
     <form class="neo-panel space-y-4" @submit.prevent="submit">
       <div class="neo-grid md:grid-cols-2">
@@ -77,6 +98,13 @@
         <span class="neo-note">{{ successMessage }}</span>
       </div>
     </form>
+
+    <NoticePanel
+      v-if="saveError"
+      tone="error"
+      :title="t('profile.saveErrorTitle')"
+      :message="saveError"
+    />
   </section>
 </template>
 
@@ -86,9 +114,11 @@ import { computed, reactive, ref, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { getProfile, saveProfile, type UserProfile } from '../api/client';
+import NoticePanel from '../components/NoticePanel.vue';
 
 const queryClient = useQueryClient();
 const successMessage = ref('');
+const saveError = ref('');
 const { t } = useI18n();
 
 const form = reactive({
@@ -102,10 +132,14 @@ const techStacksRaw = ref('');
 const projectsRaw = ref('');
 const weaknessesRaw = ref('');
 
-const { data } = useQuery({
+const { data, error, isLoading, refetch } = useQuery({
   queryKey: ['profile'],
   queryFn: getProfile,
 });
+
+const loadError = computed(() =>
+  error.value instanceof Error ? error.value.message : '',
+);
 
 watchEffect(() => {
   const profile = data.value;
@@ -121,6 +155,10 @@ const mutation = useMutation({
     queryClient.setQueryData(['profile'], profile);
     await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     successMessage.value = t('profile.saveSuccess');
+    saveError.value = '';
+  },
+  onError: (error) => {
+    saveError.value = error instanceof Error ? error.message : t('common.requestFailed');
   },
 });
 
@@ -145,6 +183,7 @@ function splitCsv(input: string): string[] {
 
 function submit() {
   successMessage.value = '';
+  saveError.value = '';
   mutation.mutate({
     ...form,
     tech_stacks: splitCsv(techStacksRaw.value),

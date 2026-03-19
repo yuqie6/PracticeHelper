@@ -3,11 +3,10 @@
     <div class="neo-grid xl:grid-cols-[1.3fr_0.7fr]">
       <div class="neo-panel bg-[var(--neo-yellow)]">
         <p class="neo-kicker bg-white">{{ t('home.hero.kicker') }}</p>
-        <h2 class="neo-heading">{{ t('home.hero.title') }}</h2>
-        <p class="mt-4 max-w-3xl text-base font-semibold leading-7">
+        <p class="text-lg font-bold leading-7">
           {{ dashboard?.today_focus ?? t('common.firstTrainingHint') }}
         </p>
-        <div class="mt-6 flex flex-wrap gap-3">
+        <div class="mt-4 flex flex-wrap gap-3">
           <RouterLink to="/train" class="neo-button-red">
             {{ t('home.hero.actionPrimary') }}
           </RouterLink>

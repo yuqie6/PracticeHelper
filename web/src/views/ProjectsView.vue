@@ -2,8 +2,7 @@
   <section class="neo-page space-y-6">
     <header class="neo-panel bg-[var(--neo-green)]">
       <p class="neo-kicker bg-white">{{ t('projects.hero.kicker') }}</p>
-      <h2 class="neo-heading">{{ t('projects.hero.title') }}</h2>
-      <p class="mt-3 text-base font-semibold">
+      <p class="text-base font-semibold">
         {{ t('projects.hero.description') }}
       </p>
     </header>
@@ -18,6 +17,13 @@
         {{ isImporting ? t('common.starting') : t('projects.importAction') }}
       </button>
     </form>
+
+    <NoticePanel
+      v-if="importError"
+      tone="error"
+      :title="t('projects.importErrorTitle')"
+      :message="importError"
+    />
 
     <div class="neo-grid lg:grid-cols-[0.8fr_1.2fr]">
       <div class="neo-panel space-y-3">
@@ -88,6 +94,13 @@
         </form>
       </div>
     </div>
+
+    <NoticePanel
+      v-if="saveError"
+      tone="error"
+      :title="t('projects.saveErrorTitle')"
+      :message="saveError"
+    />
   </section>
 </template>
 
@@ -97,11 +110,14 @@ import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { importProject, listProjects, updateProject, type ProjectProfile } from '../api/client';
+import NoticePanel from '../components/NoticePanel.vue';
 import { formatImportStatusLabel } from '../lib/labels';
 
 const queryClient = useQueryClient();
 const repoUrl = ref('');
 const selectedProjectId = ref('');
+const importError = ref('');
+const saveError = ref('');
 const { t } = useI18n();
 
 const editor = reactive({
@@ -158,8 +174,12 @@ const importMutation = useMutation({
   mutationFn: importProject,
   onSuccess: async (project) => {
     repoUrl.value = '';
+    importError.value = '';
     selectedProjectId.value = project.id;
     await queryClient.invalidateQueries({ queryKey: ['projects'] });
+  },
+  onError: (error) => {
+    importError.value = error instanceof Error ? error.message : t('common.requestFailed');
   },
 });
 
@@ -167,7 +187,11 @@ const updateMutation = useMutation({
   mutationFn: ({ projectId, payload }: { projectId: string; payload: Partial<ProjectProfile> }) =>
     updateProject(projectId, payload),
   onSuccess: async () => {
+    saveError.value = '';
     await queryClient.invalidateQueries({ queryKey: ['projects'] });
+  },
+  onError: (error) => {
+    saveError.value = error instanceof Error ? error.message : t('common.requestFailed');
   },
 });
 
@@ -188,6 +212,7 @@ function selectProject(projectId: string) {
 }
 
 function submitImport() {
+  importError.value = '';
   mutationGuard(repoUrl.value, () => importMutation.mutate(repoUrl.value));
 }
 
@@ -196,6 +221,7 @@ function submitUpdate() {
     return;
   }
 
+  saveError.value = '';
   updateMutation.mutate({
     projectId: selectedProject.value.id,
     payload: {

@@ -2,11 +2,38 @@
   <section class="neo-page space-y-6">
     <header class="neo-panel bg-[var(--neo-blue)]">
       <p class="neo-kicker bg-white">{{ t('review.hero.kicker') }}</p>
-      <h2 class="neo-heading">{{ t('review.hero.title') }}</h2>
-      <p class="mt-3 text-base font-semibold">
-        {{ review?.overall ?? t('review.hero.loading') }}
+      <p class="text-base font-semibold">
+        {{ review?.overall ?? reviewHeaderText }}
       </p>
     </header>
+
+    <NoticePanel
+      v-if="loadError"
+      tone="error"
+      :title="t('review.loadErrorTitle')"
+      :message="loadError"
+    />
+    <button
+      v-if="loadError"
+      type="button"
+      class="neo-button-dark"
+      @click="refetch()"
+    >
+      {{ t('common.retry') }}
+    </button>
+
+    <div v-else-if="isLoading" class="neo-panel space-y-2">
+      <p class="neo-kicker bg-[var(--neo-yellow)]">{{ t('review.loadingTitle') }}</p>
+      <p class="text-sm font-semibold">{{ t('review.hero.loading') }}</p>
+    </div>
+
+    <div v-else-if="!review" class="neo-panel space-y-2">
+      <p class="neo-kicker bg-[var(--neo-yellow)]">{{ t('review.emptyTitle') }}</p>
+      <p class="text-sm font-semibold">{{ t('review.emptyDescription') }}</p>
+      <RouterLink to="/train" class="neo-button-dark mt-2">
+        {{ t('review.continueAction') }}
+      </RouterLink>
+    </div>
 
     <div v-if="review" class="neo-grid lg:grid-cols-[0.9fr_1.1fr]">
       <div class="neo-panel space-y-4">
@@ -61,15 +88,28 @@ import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute } from 'vue-router';
 
 import { getReview } from '../api/client';
+import NoticePanel from '../components/NoticePanel.vue';
 
 const route = useRoute();
 const reviewId = computed(() => route.params.id as string);
 const { t } = useI18n();
 
-const { data } = useQuery({
+const { data, error, isLoading, refetch } = useQuery({
   queryKey: ['review', reviewId],
   queryFn: () => getReview(reviewId.value),
 });
 
 const review = computed(() => data.value ?? null);
+const loadError = computed(() =>
+  error.value instanceof Error ? error.value.message : '',
+);
+const reviewHeaderText = computed(() => {
+  if (loadError.value) {
+    return t('review.headerError');
+  }
+  if (isLoading.value) {
+    return t('review.hero.loading');
+  }
+  return t('review.emptyDescription');
+});
 </script>

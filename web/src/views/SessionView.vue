@@ -2,8 +2,7 @@
   <section class="neo-page space-y-6">
     <header class="neo-panel bg-[var(--neo-yellow)]">
       <p class="neo-kicker bg-white">{{ t('session.hero.kicker') }}</p>
-      <h2 class="neo-heading">{{ t('session.hero.title') }}</h2>
-      <p class="mt-3 text-base font-semibold">
+      <p class="text-base font-semibold">
         {{ t('session.hero.description', { status: currentStatusLabel }) }}
       </p>
     </header>
@@ -18,29 +17,26 @@
     />
 
     <StreamTracePanel
-      v-if="showProgressPanel && (streamReasoning.length || streamContent)"
+      v-if="showProgressPanel && streamSections.length"
       :kicker="t('session.processingKicker')"
       :title="progressTitle"
       :description="progressDescription"
       :reasoning-title="t('session.reasoningTitle')"
       :content-title="t('session.contentTitle')"
-      :reasoning="streamReasoning"
-      :content="streamContent"
+      :sections="streamSections"
+    />
+
+    <NoticePanel
+      v-if="submitError"
+      tone="error"
+      :title="t('session.submitErrorTitle')"
+      :message="submitError"
     />
 
     <div v-else-if="session && activePrompt" class="neo-grid lg:grid-cols-[1.1fr_0.9fr]">
       <div class="neo-panel space-y-4">
         <p class="neo-kicker bg-[var(--neo-red)]">{{ t('session.currentQuestion') }}</p>
         <h3 class="text-2xl font-black">{{ activePrompt.question }}</h3>
-        <ul class="flex flex-wrap gap-2">
-          <li
-            v-for="point in activePrompt.expectedPoints"
-            :key="point"
-            class="neo-badge bg-[var(--neo-blue)]"
-          >
-            {{ point }}
-          </li>
-        </ul>
 
         <form class="space-y-4" @submit.prevent="submit">
           <textarea v-model="answer" class="neo-textarea" :placeholder="placeholderText" />
@@ -86,17 +82,19 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
 import { getSession, submitAnswerStream, type StreamEvent } from '../api/client';
+import NoticePanel from '../components/NoticePanel.vue';
 import ProgressPanel from '../components/ProgressPanel.vue';
 import StreamTracePanel from '../components/StreamTracePanel.vue';
 import { formatStatusLabel } from '../lib/labels';
+import { appendStreamEvent, type StreamSection } from '../lib/streaming';
 import { useProgressSteps } from '../lib/useProgressSteps';
 
 const route = useRoute();
 const router = useRouter();
 const queryClient = useQueryClient();
 const answer = ref('');
-const streamReasoning = ref<string[]>([]);
-const streamContent = ref('');
+const streamSections = ref<StreamSection[]>([]);
+const submitError = ref('');
 const { t, tm } = useI18n();
 
 const sessionId = computed(() => route.params.id as string);
@@ -146,8 +144,8 @@ const placeholderText = computed(() =>
 
 const mutation = useMutation({
   mutationFn: (payload: string) => {
-    streamReasoning.value = [];
-    streamContent.value = '';
+    streamSections.value = [];
+    submitError.value = '';
     return submitAnswerStream(sessionId.value, payload, handleStreamEvent);
   },
   onSuccess: async (updated) => {
@@ -155,6 +153,9 @@ const mutation = useMutation({
     answer.value = '';
     await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     await queryClient.invalidateQueries({ queryKey: ['weaknesses'] });
+  },
+  onError: (error) => {
+    submitError.value = error instanceof Error ? error.message : t('common.requestFailed');
   },
 });
 
@@ -246,12 +247,6 @@ function submit() {
 }
 
 function handleStreamEvent(event: StreamEvent) {
-  if (event.type === 'reasoning' && event.text) {
-    streamReasoning.value = [...streamReasoning.value, event.text];
-  }
-
-  if (event.type === 'content' && event.text) {
-    streamContent.value += event.text;
-  }
+  streamSections.value = appendStreamEvent(streamSections.value, event);
 }
 </script>
