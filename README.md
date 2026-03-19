@@ -86,7 +86,7 @@ make help
 | `make bootstrap` | 执行 `scripts/bootstrap.sh` 完成本地初始化 |
 | `make setup` | 安装前端、Python 依赖和本地工具 |
 | `make dev-web` | 启动前端开发服务器（端口 5173） |
-| `make dev-server` | 启动 Go API 服务（端口 8080） |
+| `make dev-server` | 启动 Go API 服务（端口 8090） |
 | `make dev-sidecar` | 启动 Python sidecar（端口 8000） |
 | `make lint` | 运行三端 lint 检查 |
 | `make format` | 运行三端格式化 |

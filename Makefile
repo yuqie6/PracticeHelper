@@ -52,7 +52,7 @@ check: lint test build ## 运行完整校验流水线
 dev-web: ## 启动前端开发服务器 (5173)
 	$(ENV_LOADER); pnpm --dir "$(WEB_DIR)" dev
 
-dev-server: ## 启动 Go API 服务 (8080)
+dev-server: ## 启动 Go API 服务 (8090)
 	$(ENV_LOADER); cd "$(SERVER_DIR)" && GOCACHE=/tmp/go-build go run -tags "$(GO_SQLITE_TAGS)" ./cmd/api
 
 dev-sidecar: ## 启动 Python sidecar (8000)

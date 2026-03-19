@@ -15,7 +15,7 @@ type Config struct {
 
 func Load() Config {
 	return Config{
-		Port:           getEnvInt("PRACTICEHELPER_SERVER_PORT", 8080),
+		Port:           getEnvInt("PRACTICEHELPER_SERVER_PORT", 8090),
 		DatabasePath:   getEnv("PRACTICEHELPER_SERVER_DB_PATH", "../data/practicehelper.db"),
 		SidecarURL:     getEnv("PRACTICEHELPER_SERVER_SIDECAR_URL", "http://127.0.0.1:8000"),
 		SidecarTimeout: 30 * time.Second,
