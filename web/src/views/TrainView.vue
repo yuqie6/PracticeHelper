@@ -25,6 +25,15 @@
       </div>
     </div>
 
+    <ProgressPanel
+      v-if="isStarting"
+      :kicker="t('session.processingKicker')"
+      :title="t('progress.createSession.title')"
+      :description="t('progress.createSession.description')"
+      :steps="createSessionSteps"
+      :active-index="createSessionStepIndex"
+    />
+
     <form class="neo-panel space-y-4" @submit.prevent="submit">
       <div class="neo-grid md:grid-cols-2">
         <label class="space-y-2">
@@ -77,15 +86,17 @@ import { useI18n } from 'vue-i18n';
 import { RouterLink, useRouter } from 'vue-router';
 
 import { createSession, getDashboard, listProjects, type TrainingSessionSummary } from '../api/client';
+import ProgressPanel from '../components/ProgressPanel.vue';
 import {
   formatIntensityLabel,
   formatModeLabel,
   formatStatusLabel,
   formatTopicLabel,
 } from '../lib/labels';
+import { useProgressSteps } from '../lib/useProgressSteps';
 
 const router = useRouter();
-const { t } = useI18n();
+const { t, tm } = useI18n();
 
 const form = reactive({
   mode: 'basics' as 'basics' | 'project',
@@ -114,6 +125,16 @@ const mutation = useMutation({
 });
 
 const isStarting = computed(() => mutation.isPending.value);
+const createSessionSteps = computed(() => tm('progress.createSession.steps') as string[]);
+const createSessionProgressSteps = computed(() => [
+  { afterMs: 0, label: createSessionSteps.value[0] },
+  { afterMs: 1200, label: createSessionSteps.value[1] },
+  { afterMs: 2600, label: createSessionSteps.value[2] },
+]);
+const { activeIndex: createSessionStepIndex } = useProgressSteps(
+  isStarting,
+  createSessionProgressSteps,
+);
 
 function submit() {
   mutation.mutate({

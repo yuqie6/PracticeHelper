@@ -56,6 +56,7 @@ export const messages = {
       status: {
         draft: '草稿',
         active: '进行中',
+        generating_question: '正在生成问题',
         waiting_answer: '等待回答',
         evaluating: '评估中',
         followup: '追问中',
@@ -194,8 +195,32 @@ export const messages = {
       strengths: '优点',
       gaps: '待补强点',
       feedbackEmpty: '先回答当前问题，反馈会显示在这里。',
+      processingKicker: '处理中',
+      processingGeneratingQuestionTitle: '正在准备本轮问题',
+      processingGeneratingQuestionDescription: '系统正在整理上下文并生成问题，请稍候。',
+      processingEvaluatingTitle: '正在评估你的回答',
+      processingEvaluatingDescription: '系统正在分析本轮答案并组织下一步反馈。',
+      processingReviewTitle: '正在生成复盘',
+      processingReviewDescription: '系统正在汇总整轮表现并整理复盘卡。',
       placeholderInitial: '先说结论，再解释原因，最后给一个真实项目或场景例子。',
       placeholderFollowup: '直接回应追问，补充关键信息，不要重复上一次的回答。',
+    },
+    progress: {
+      createSession: {
+        title: '正在准备训练',
+        description: '系统会先读取上下文，再生成当前问题。',
+        steps: ['读取训练上下文', '调用模型生成问题', '整理训练页面'],
+      },
+      evaluateMain: {
+        title: '正在评估主问题回答',
+        description: '系统会先分析回答，再生成追问。',
+        steps: ['保存你的回答', '调用模型评估答案', '生成追问与反馈'],
+      },
+      evaluateFollowup: {
+        title: '正在生成本轮复盘',
+        description: '系统会先完成追问评估，再整理复盘卡。',
+        steps: ['保存追问回答', '完成最终评估', '生成复盘卡'],
+      },
     },
     review: {
       hero: {
@@ -267,6 +292,7 @@ export const messages = {
       status: {
         draft: 'Draft',
         active: 'In progress',
+        generating_question: 'Generating question',
         waiting_answer: 'Waiting for answer',
         evaluating: 'Evaluating',
         followup: 'Follow-up',
@@ -407,8 +433,32 @@ export const messages = {
       strengths: 'Strengths',
       gaps: 'Gaps',
       feedbackEmpty: 'Answer the current question first. Feedback will appear here.',
+      processingKicker: 'Processing',
+      processingGeneratingQuestionTitle: 'Preparing the session question',
+      processingGeneratingQuestionDescription: 'The system is reading context and generating the question.',
+      processingEvaluatingTitle: 'Evaluating your answer',
+      processingEvaluatingDescription: 'The system is analyzing the answer and preparing the next step.',
+      processingReviewTitle: 'Generating the review',
+      processingReviewDescription: 'The system is summarizing the session and preparing the review card.',
       placeholderInitial: 'State your conclusion first, explain why, then give a real example.',
       placeholderFollowup: 'Answer the follow-up directly and add the missing detail without repeating yourself.',
+    },
+    progress: {
+      createSession: {
+        title: 'Preparing your session',
+        description: 'The system reads context first and then generates the question.',
+        steps: ['Read training context', 'Call the model', 'Prepare the session view'],
+      },
+      evaluateMain: {
+        title: 'Evaluating the main answer',
+        description: 'The system evaluates the answer first and then prepares the follow-up.',
+        steps: ['Save your answer', 'Call the model', 'Prepare the follow-up and feedback'],
+      },
+      evaluateFollowup: {
+        title: 'Generating the review',
+        description: 'The system completes the follow-up evaluation and then prepares the review card.',
+        steps: ['Save the follow-up answer', 'Complete the final evaluation', 'Generate the review card'],
+      },
     },
     review: {
       hero: {
