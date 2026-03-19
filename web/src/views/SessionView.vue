@@ -96,6 +96,8 @@ const activePrompt = computed(() => {
   if (!turn) {
     return null;
   }
+  // 这里不是单纯切换展示文案，而是在把后端 session 状态映射成当前唯一允许作答的题目。
+  // completed 必须返回 null，避免前端在复盘已生成后继续展示可提交的输入框。
   if (session.value?.status === 'followup' && turn.followup_question) {
     return {
       question: turn.followup_question,
@@ -132,6 +134,8 @@ const isSubmitting = computed(() => mutation.isPending.value);
 watch(
   session,
   async (value) => {
+    // 训练页只承载“可继续回答”的中间态；一旦 session 已完成且 review 已落库，
+    // 无论是首次加载已完成会话，还是本页刚提交完答案，都应该立即回到 review 页面。
     if (value?.status === 'completed' && value.review_id) {
       await router.push(`/reviews/${value.review_id}`);
     }

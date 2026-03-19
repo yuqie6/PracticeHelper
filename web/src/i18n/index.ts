@@ -24,6 +24,8 @@ function getInitialLocale(): AppLocale {
     return 'zh-CN';
   }
 
+  // 已保存的语言选择优先级高于浏览器探测，避免用户手动切换后又被系统语言反向覆盖。
+  // 无浏览器环境统一回退中文，是为了让 SSR/测试环境首屏行为稳定且可预测。
   const saved = window.localStorage.getItem(STORAGE_KEY);
   if (saved && isSupportedLocale(saved)) {
     return saved;

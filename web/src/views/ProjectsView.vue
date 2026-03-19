@@ -125,6 +125,8 @@ const projects = computed(() => data.value ?? []);
 watch(
   projects,
   (items) => {
+    // 页面交互默认是“列表有数据就始终绑定一个当前编辑对象”，
+    // 这里只在还没有用户选择时自动选首项，避免 refetch 把正在编辑的项目切走。
     if (!selectedProjectId.value && items.length > 0) {
       selectProject(items[0].id);
     }
@@ -140,6 +142,8 @@ watch(selectedProject, (project) => {
   if (!project) {
     return;
   }
+  // 编辑器用逗号/换行文本框承载数组字段，目的是降低手工维护成本，
+  // 所以这里需要把后端结构化数据稳定映射回用户可直接粘贴编辑的文本格式。
   editor.name = project.name;
   editor.summary = project.summary;
   editor.tech_stack = project.tech_stack.join(', ');
@@ -171,6 +175,8 @@ const isImporting = computed(() => importMutation.isPending.value);
 const isUpdating = computed(() => updateMutation.isPending.value);
 
 function splitLines(value: string): string[] {
+  // 保存时同时接受换行和中英文逗号，主要是兼容用户从 README、飞书或简历里直接粘贴内容，
+  // 而不是要求前端把每类字段拆成更重的多控件编辑器。
   return value
     .split(/[\n,，]/)
     .map((item) => item.trim())

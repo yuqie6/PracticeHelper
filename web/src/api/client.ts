@@ -106,6 +106,9 @@ export interface Dashboard {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // 这里封装的是当前 PracticeHelper API 的统一 JSON 契约：
+  // 成功响应默认是 { data: T }，失败响应尽量从 { error.message } 提取可展示文案。
+  // 如果后续出现 204、文件下载或非 JSON 接口，应该新增专用请求函数而不是继续复用这里。
   const response = await fetch(path, {
     headers: {
       'Content-Type': 'application/json',
