@@ -2,11 +2,14 @@ package controller
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"practicehelper/server/internal/domain"
+	"practicehelper/server/internal/observability"
 	"practicehelper/server/internal/repo"
 	"practicehelper/server/internal/service"
 )
@@ -220,7 +223,35 @@ func (h *Handler) listWeaknesses(c *gin.Context) {
 
 func requestLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		requestID := c.GetHeader(observability.RequestIDHeader)
+		if requestID == "" {
+			requestID = observability.NewRequestID()
+		}
+
+		startedAt := time.Now()
+		c.Writer.Header().Set(observability.RequestIDHeader, requestID)
+		c.Request = c.Request.WithContext(observability.WithRequestID(c.Request.Context(), requestID))
+
 		c.Next()
+
+		duration := time.Since(startedAt)
+		attrs := []any{
+			"request_id", requestID,
+			"method", c.Request.Method,
+			"path", c.FullPath(),
+			"raw_path", c.Request.URL.Path,
+			"status", c.Writer.Status(),
+			"duration_ms", duration.Milliseconds(),
+			"client_ip", c.ClientIP(),
+		}
+
+		if len(c.Errors) > 0 {
+			attrs = append(attrs, "errors", c.Errors.String())
+			slog.ErrorContext(c.Request.Context(), "http request failed", attrs...)
+			return
+		}
+
+		slog.InfoContext(c.Request.Context(), "http request completed", attrs...)
 	}
 }
 

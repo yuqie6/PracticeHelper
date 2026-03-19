@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"practicehelper/server/internal/config"
 	"practicehelper/server/internal/controller"
@@ -15,7 +17,13 @@ import (
 func main() {
 	cfg := config.Load()
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger, cleanup, err := buildLogger(cfg.LogPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build logger failed: %v\n", err)
+		os.Exit(1)
+	}
+	defer cleanup()
+	slog.SetDefault(logger)
 
 	repository, err := repo.Open(cfg.DatabasePath)
 	if err != nil {
@@ -35,4 +43,26 @@ func main() {
 		logger.Error("server exited", "error", err)
 		os.Exit(1)
 	}
+}
+
+func buildLogger(logPath string) (*slog.Logger, func(), error) {
+	handlerOptions := &slog.HandlerOptions{Level: slog.LevelInfo}
+	writer := io.Writer(os.Stdout)
+	cleanup := func() {}
+
+	if logPath != "" {
+		if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+			return nil, cleanup, fmt.Errorf("create log dir: %w", err)
+		}
+
+		file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			return nil, cleanup, fmt.Errorf("open log file: %w", err)
+		}
+
+		writer = io.MultiWriter(os.Stdout, file)
+		cleanup = func() { _ = file.Close() }
+	}
+
+	return slog.New(slog.NewJSONHandler(writer, handlerOptions)), cleanup, nil
 }
