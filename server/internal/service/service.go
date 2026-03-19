@@ -106,6 +106,9 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 		return nil, ErrInvalidMode
 	}
 
+	// 训练会话在创建时就要把首题持久化下来，而不是等用户答题后再补写，
+	// 这样页面刷新后仍能恢复到同一轮训练上下文。topic 也在这里统一 trim/lower，
+	// 避免 basics 模式因为大小写和空白差异导致模板命中不稳定。
 	startedAt := time.Now().UTC()
 	session := &domain.TrainingSession{
 		ID:         newID("sess"),
@@ -148,6 +151,8 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 		}
 		session.Project = project
 		generateRequest.Project = project
+		// project 模式优先用 followup_points + summary 组装检索词，
+		// 目的是把 sidecar 的首题约束在“最值得追问的项目点”上，而不是退化成全仓库泛扫。
 		query := strings.Join(append(project.FollowupPoints, project.Summary), " ")
 		chunks, err := s.repo.SearchProjectChunks(ctx, project.ID, query, 6)
 		if err != nil {
@@ -195,6 +200,8 @@ func (s *Service) SubmitAnswer(ctx context.Context, sessionID string, request do
 
 	switch session.Status {
 	case domain.StatusWaitingAnswer, domain.StatusActive:
+		// 当前实现固定走“一道主问题 + 一道追问”的有限状态机：
+		// 首答先落主评估和弱点，再把 session 切到 followup，保证中间态可恢复。
 		contextChunks, err := s.lookupSessionContext(ctx, session)
 		if err != nil {
 			return nil, err
@@ -236,6 +243,8 @@ func (s *Service) SubmitAnswer(ctx context.Context, sessionID string, request do
 			_ = s.coolDownSessionWeakness(ctx, session, evaluation.WeaknessHits)
 		}
 	case domain.StatusFollowup:
+		// 追问答完后先固化 turn 与弱点，再进入 review 生成流程；
+		// 这些步骤故意不包成一个大事务，这样 sidecar 调用失败时可以保留 review_pending 中间态供后续恢复。
 		contextChunks, err := s.lookupSessionContext(ctx, session)
 		if err != nil {
 			return nil, err
@@ -337,6 +346,9 @@ func (s *Service) lookupSessionContext(ctx context.Context, session *domain.Trai
 }
 
 func (s *Service) coolDownSessionWeakness(ctx context.Context, session *domain.TrainingSession, hits []domain.WeaknessHit) error {
+	// 这里是“答得好就给弱点降温”的启发式修正，不追求精确评分模型。
+	// 命中的具体弱点和本轮主维度（topic/project）都会被轻微衰减；
+	// 即便降温失败，也不能反向影响训练主流程，所以这里统一忽略 repo 写入错误。
 	for _, hit := range hits {
 		_ = s.repo.RelieveWeakness(ctx, hit.Kind, hit.Label, 0.18)
 	}

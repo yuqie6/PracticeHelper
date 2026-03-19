@@ -308,6 +308,8 @@ func (s *Store) CreateImportedProject(ctx context.Context, analysis *domain.Anal
 	projectID := newID("proj")
 	now := nowUTC()
 
+	// 项目导入必须把 profile、原始 chunk 和 FTS 副本一起写成功或一起回滚，
+	// 否则后续 project 页面能看到项目，但检索不到代码片段，状态会不一致。
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin create project: %w", err)
@@ -425,6 +427,9 @@ func (s *Store) SearchProjectChunks(ctx context.Context, projectID, query string
 		limit = 5
 	}
 
+	// 这里服务的是“为提问/追问捞少量高相关片段”，不是通用语义搜索。
+	// 没有可用检索词时回退到 importance 排序，至少保证 sidecar 能拿到项目骨架；
+	// 有检索词时则走保守的 SQLite FTS token 匹配，优先稳定和低成本。
 	terms := buildFTSQuery(query)
 	var rows *sql.Rows
 	var err error
@@ -624,6 +629,8 @@ func (s *Store) SaveSession(ctx context.Context, session *domain.TrainingSession
 }
 
 func (s *Store) CreateReview(ctx context.Context, review *domain.ReviewCard) error {
+	// 一个 session 只保留一张 review card。冲突时覆盖内容是为了支持重试/补生成，
+	// 调用方应把这里视为幂等写，而不是为同一轮训练追加多份历史版本。
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO review_cards (id, session_id, overall, highlights_json, gaps_json, suggested_topics_json, next_training_focus_json, score_breakdown_json, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -671,6 +678,9 @@ func (s *Store) GetReview(ctx context.Context, reviewID string) (*domain.ReviewC
 
 func (s *Store) UpsertWeaknesses(ctx context.Context, sessionID string, hits []domain.WeaknessHit) error {
 	now := nowUTC()
+	// weakness_tags 存的是聚合后的“热度快照”，不是原始事件日志。
+	// 同一轮先按 kind/label 去重，避免一次评估里的重复命中把 severity 人为放大；
+	// 后续增量也会做封顶，让长期问题逐步升温，但不会被单次异常值拉爆。
 	for _, hit := range dedupeWeaknessHits(hits) {
 		if hit.Label == "" || hit.Kind == "" {
 			continue
@@ -1140,6 +1150,8 @@ func newID(prefix string) string {
 }
 
 func buildFTSQuery(raw string) string {
+	// 这里只做非常保守的 ASCII token 提取，目的是减少 SQLite FTS 的误匹配和奇怪转义问题。
+	// 代价是中文、符号和超短 token 的召回会偏弱，所以它只适合作为导入仓库后的轻量检索兜底。
 	parts := strings.FieldsFunc(strings.ToLower(raw), func(r rune) bool {
 		return (r < 'a' || r > 'z') && (r < '0' || r > '9') && (r < 'A' || r > 'Z') && r <= 127
 	})
