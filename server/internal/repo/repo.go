@@ -271,7 +271,7 @@ func (s *Store) SaveUserProfile(ctx context.Context, input domain.UserProfileInp
 	now := nowUTC()
 	deadline := ""
 	if input.ApplicationDeadline != nil {
-		deadline = *input.ApplicationDeadline
+		deadline = normalizeDateString(*input.ApplicationDeadline)
 	}
 
 	if _, err := s.db.ExecContext(ctx, `
@@ -751,7 +751,7 @@ func (s *Store) ListRecentSessions(ctx context.Context, limit int) ([]domain.Tra
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT ts.id, ts.mode, ts.topic, COALESCE(pp.name, ''), ts.status, ts.total_score, ts.updated_at
+		SELECT ts.id, ts.mode, ts.topic, COALESCE(pp.name, ''), ts.status, ts.total_score, ts.review_id, ts.updated_at
 		FROM training_sessions ts
 		LEFT JOIN project_profiles pp ON ts.project_id = pp.id
 		ORDER BY ts.updated_at DESC
@@ -764,9 +764,9 @@ func (s *Store) ListRecentSessions(ctx context.Context, limit int) ([]domain.Tra
 
 	items := make([]domain.TrainingSessionSummary, 0)
 	for rows.Next() {
-		var id, mode, topic, projectName, status, updatedAt string
+		var id, mode, topic, projectName, status, reviewID, updatedAt string
 		var totalScore float64
-		if err := rows.Scan(&id, &mode, &topic, &projectName, &status, &totalScore, &updatedAt); err != nil {
+		if err := rows.Scan(&id, &mode, &topic, &projectName, &status, &totalScore, &reviewID, &updatedAt); err != nil {
 			return nil, fmt.Errorf("scan recent session: %w", err)
 		}
 
@@ -777,11 +777,44 @@ func (s *Store) ListRecentSessions(ctx context.Context, limit int) ([]domain.Tra
 			ProjectName: projectName,
 			Status:      status,
 			TotalScore:  totalScore,
+			ReviewID:    reviewID,
 			UpdatedAt:   parseTime(updatedAt),
 		})
 	}
 
 	return items, nil
+}
+
+func (s *Store) GetLatestResumableSession(ctx context.Context) (*domain.TrainingSessionSummary, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT ts.id, ts.mode, ts.topic, COALESCE(pp.name, ''), ts.status, ts.total_score, ts.review_id, ts.updated_at
+		FROM training_sessions ts
+		LEFT JOIN project_profiles pp ON ts.project_id = pp.id
+		WHERE ts.status IN (?, ?, ?, ?)
+		ORDER BY ts.updated_at DESC
+		LIMIT 1
+	`, domain.StatusDraft, domain.StatusActive, domain.StatusWaitingAnswer, domain.StatusFollowup)
+
+	var id, mode, topic, projectName, status, reviewID, updatedAt string
+	var totalScore float64
+	if err := row.Scan(&id, &mode, &topic, &projectName, &status, &totalScore, &reviewID, &updatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("get latest resumable session: %w", err)
+	}
+
+	return &domain.TrainingSessionSummary{
+		ID:          id,
+		Mode:        mode,
+		Topic:       topic,
+		ProjectName: projectName,
+		Status:      status,
+		TotalScore:  totalScore,
+		ReviewID:    reviewID,
+		UpdatedAt:   parseTime(updatedAt),
+	}, nil
 }
 
 func insertTurn(ctx context.Context, tx *sql.Tx, turn *domain.TrainingTurn) error {
@@ -1039,11 +1072,19 @@ func parseTime(raw string) time.Time {
 	if raw == "" {
 		return time.Time{}
 	}
-	parsed, err := time.Parse(time.RFC3339Nano, raw)
-	if err != nil {
-		return time.Time{}
+
+	for _, layout := range []string{time.RFC3339Nano, time.DateOnly} {
+		parsed, err := time.Parse(layout, raw)
+		if err == nil {
+			if layout == time.DateOnly {
+				return time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, time.UTC)
+			}
+
+			return parsed
+		}
 	}
-	return parsed
+
+	return time.Time{}
 }
 
 func parseNullableTime(raw string) *time.Time {
@@ -1066,6 +1107,20 @@ func toNullableTimeString(value *time.Time) string {
 		return ""
 	}
 	return value.UTC().Format(time.RFC3339Nano)
+}
+
+func normalizeDateString(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	parsed := parseTime(raw)
+	if parsed.IsZero() {
+		return raw
+	}
+
+	return parsed.UTC().Format(time.RFC3339Nano)
 }
 
 func mustJSON(value any) string {

@@ -173,6 +173,7 @@ type TrainingSessionSummary struct {
 	ProjectName string    `json:"project_name,omitempty"`
 	Status      string    `json:"status"`
 	TotalScore  float64   `json:"total_score"`
+	ReviewID    string    `json:"review_id,omitempty"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
@@ -180,6 +181,7 @@ type Dashboard struct {
 	Profile           *UserProfile             `json:"profile"`
 	Weaknesses        []WeaknessTag            `json:"weaknesses"`
 	RecentSessions    []TrainingSessionSummary `json:"recent_sessions"`
+	CurrentSession    *TrainingSessionSummary  `json:"current_session,omitempty"`
 	TodayFocus        string                   `json:"today_focus"`
 	RecommendedTrack  string                   `json:"recommended_track"`
 	DaysUntilDeadline *int                     `json:"days_until_deadline,omitempty"`
