@@ -69,9 +69,13 @@ sidecar 的核心链路（项目导入、出题、评估、复盘）依赖外部
 PRACTICEHELPER_SIDECAR_MODEL=你的模型名
 PRACTICEHELPER_SIDECAR_OPENAI_BASE_URL=http://127.0.0.1:3000/v1
 PRACTICEHELPER_SIDECAR_OPENAI_API_KEY=你的密钥
+PRACTICEHELPER_SERVER_SIDECAR_TIMEOUT_SECONDS=90
 ```
 
 不配置时，所有 sidecar 接口会直接返回 503 错误。
+如果你接的是响应偏慢的真实 LLM，或者要导入稍大的 GitHub 仓库，建议把
+`PRACTICEHELPER_SERVER_SIDECAR_TIMEOUT_SECONDS` 保持在 `90` 以上，避免 Go API
+在 sidecar 实际返回前先超时。
 
 ### 日志与排障
 
