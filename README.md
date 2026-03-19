@@ -75,15 +75,26 @@ PRACTICEHELPER_SIDECAR_OPENAI_API_KEY=你的密钥
 
 ## 开发命令
 
+先执行下面命令可以查看所有分组后的入口：
+
+```bash
+make help
+```
+
 | 命令 | 作用 |
 |------|------|
-| `make web-dev` | 启动前端开发服务器（端口 5173） |
-| `make server-dev` | 启动 Go API 服务（端口 8080） |
-| `make sidecar-dev` | 启动 Python sidecar（端口 8000） |
+| `make bootstrap` | 执行 `scripts/bootstrap.sh` 完成本地初始化 |
+| `make setup` | 安装前端、Python 依赖和本地工具 |
+| `make dev-web` | 启动前端开发服务器（端口 5173） |
+| `make dev-server` | 启动 Go API 服务（端口 8080） |
+| `make dev-sidecar` | 启动 Python sidecar（端口 8000） |
 | `make lint` | 运行三端 lint 检查 |
 | `make format` | 运行三端格式化 |
 | `make test` | 运行三端测试 |
 | `make build` | 构建前端产物和编译 Go 后端 |
+| `make check` | 顺序执行 `lint`、`test`、`build` 完整校验 |
+
+兼容旧习惯时，`make web-dev` / `make server-dev` / `make sidecar-dev` 仍然可用，但推荐统一切到 `dev-*` 这一组命名。
 
 手动运行 Go 服务时需要带 FTS5 编译标签：
 
