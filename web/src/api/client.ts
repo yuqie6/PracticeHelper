@@ -105,6 +105,15 @@ export interface Dashboard {
   days_until_deadline?: number;
 }
 
+export interface StreamEvent {
+  type: 'phase' | 'context' | 'reasoning' | 'content' | 'result' | 'error';
+  phase?: string;
+  name?: string;
+  text?: string;
+  message?: string;
+  data?: unknown;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // 这里封装的是当前 PracticeHelper API 的统一 JSON 契约：
   // 成功响应默认是 { data: T }，失败响应尽量从 { error.message } 提取可展示文案。
@@ -126,6 +135,78 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   const payload = (await response.json()) as ApiEnvelope<T>;
   return payload.data;
+}
+
+async function requestStream<T>(
+  path: string,
+  init: RequestInit,
+  onEvent: (event: StreamEvent) => void,
+): Promise<T> {
+  const response = await fetch(path, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init.headers ?? {}),
+    },
+    ...init,
+  });
+
+  if (!response.ok || !response.body) {
+    const payload = (await response.json().catch(() => null)) as
+      | { error?: { message?: string } }
+      | null;
+    throw new Error(payload?.error?.message ?? '请求失败');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: T | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) {
+        continue;
+      }
+
+      const event = JSON.parse(line) as StreamEvent;
+      onEvent(event);
+
+      if (event.type === 'error') {
+        throw new Error(event.message ?? '流式请求失败');
+      }
+
+      if (event.type === 'result') {
+        result = event.data as T;
+      }
+    }
+  }
+
+  if (buffer.trim()) {
+    const event = JSON.parse(buffer.trim()) as StreamEvent;
+    onEvent(event);
+    if (event.type === 'error') {
+      throw new Error(event.message ?? '流式请求失败');
+    }
+    if (event.type === 'result') {
+      result = event.data as T;
+    }
+  }
+
+  if (result == null) {
+    throw new Error('流式请求未返回最终结果');
+  }
+
+  return result;
 }
 
 export function getDashboard(): Promise<Dashboard> {
@@ -173,6 +254,21 @@ export function createSession(payload: {
   });
 }
 
+export function createSessionStream(
+  payload: {
+    mode: 'basics' | 'project';
+    topic?: string;
+    project_id?: string;
+    intensity: string;
+  },
+  onEvent: (event: StreamEvent) => void,
+): Promise<TrainingSession> {
+  return requestStream('/api/sessions/stream', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, onEvent);
+}
+
 export function getSession(sessionId: string): Promise<TrainingSession> {
   return request(`/api/sessions/${sessionId}`);
 }
@@ -182,6 +278,17 @@ export function submitAnswer(sessionId: string, answer: string): Promise<Trainin
     method: 'POST',
     body: JSON.stringify({ answer }),
   });
+}
+
+export function submitAnswerStream(
+  sessionId: string,
+  answer: string,
+  onEvent: (event: StreamEvent) => void,
+): Promise<TrainingSession> {
+  return requestStream(`/api/sessions/${sessionId}/answer/stream`, {
+    method: 'POST',
+    body: JSON.stringify({ answer }),
+  }, onEvent);
 }
 
 export function getReview(reviewId: string): Promise<ReviewCard> {

@@ -17,6 +17,17 @@
       :active-index="progressStepIndex"
     />
 
+    <StreamTracePanel
+      v-if="showProgressPanel && (streamReasoning.length || streamContent)"
+      :kicker="t('session.processingKicker')"
+      :title="progressTitle"
+      :description="progressDescription"
+      :reasoning-title="t('session.reasoningTitle')"
+      :content-title="t('session.contentTitle')"
+      :reasoning="streamReasoning"
+      :content="streamContent"
+    />
+
     <div v-else-if="session && activePrompt" class="neo-grid lg:grid-cols-[1.1fr_0.9fr]">
       <div class="neo-panel space-y-4">
         <p class="neo-kicker bg-[var(--neo-red)]">{{ t('session.currentQuestion') }}</p>
@@ -74,8 +85,9 @@ import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
-import { getSession, submitAnswer } from '../api/client';
+import { getSession, submitAnswerStream, type StreamEvent } from '../api/client';
 import ProgressPanel from '../components/ProgressPanel.vue';
+import StreamTracePanel from '../components/StreamTracePanel.vue';
 import { formatStatusLabel } from '../lib/labels';
 import { useProgressSteps } from '../lib/useProgressSteps';
 
@@ -83,6 +95,8 @@ const route = useRoute();
 const router = useRouter();
 const queryClient = useQueryClient();
 const answer = ref('');
+const streamReasoning = ref<string[]>([]);
+const streamContent = ref('');
 const { t, tm } = useI18n();
 
 const sessionId = computed(() => route.params.id as string);
@@ -131,7 +145,11 @@ const placeholderText = computed(() =>
 );
 
 const mutation = useMutation({
-  mutationFn: (payload: string) => submitAnswer(sessionId.value, payload),
+  mutationFn: (payload: string) => {
+    streamReasoning.value = [];
+    streamContent.value = '';
+    return submitAnswerStream(sessionId.value, payload, handleStreamEvent);
+  },
   onSuccess: async (updated) => {
     queryClient.setQueryData(['session', sessionId], updated);
     answer.value = '';
@@ -225,5 +243,15 @@ function submit() {
     return;
   }
   mutation.mutate(answer.value);
+}
+
+function handleStreamEvent(event: StreamEvent) {
+  if (event.type === 'reasoning' && event.text) {
+    streamReasoning.value = [...streamReasoning.value, event.text];
+  }
+
+  if (event.type === 'content' && event.text) {
+    streamContent.value += event.text;
+  }
 }
 </script>

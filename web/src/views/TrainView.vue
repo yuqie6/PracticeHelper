@@ -34,6 +34,17 @@
       :active-index="createSessionStepIndex"
     />
 
+    <StreamTracePanel
+      v-if="isStarting && (streamReasoning.length || streamContent)"
+      :kicker="t('session.processingKicker')"
+      :title="t('progress.createSession.title')"
+      :description="t('progress.createSession.description')"
+      :reasoning-title="t('session.reasoningTitle')"
+      :content-title="t('session.contentTitle')"
+      :reasoning="streamReasoning"
+      :content="streamContent"
+    />
+
     <form class="neo-panel space-y-4" @submit.prevent="submit">
       <div class="neo-grid md:grid-cols-2">
         <label class="space-y-2">
@@ -81,12 +92,19 @@
 
 <script setup lang="ts">
 import { useMutation, useQuery } from '@tanstack/vue-query';
-import { computed, reactive } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRouter } from 'vue-router';
 
-import { createSession, getDashboard, listProjects, type TrainingSessionSummary } from '../api/client';
+import {
+  createSessionStream,
+  getDashboard,
+  listProjects,
+  type StreamEvent,
+  type TrainingSessionSummary,
+} from '../api/client';
 import ProgressPanel from '../components/ProgressPanel.vue';
+import StreamTracePanel from '../components/StreamTracePanel.vue';
 import {
   formatIntensityLabel,
   formatModeLabel,
@@ -104,6 +122,8 @@ const form = reactive({
   project_id: '',
   intensity: 'standard',
 });
+const streamReasoning = ref<string[]>([]);
+const streamContent = ref('');
 
 const { data: projects } = useQuery({
   queryKey: ['projects'],
@@ -118,7 +138,16 @@ const { data: dashboard } = useQuery({
 const currentSession = computed(() => dashboard.value?.current_session ?? null);
 
 const mutation = useMutation({
-  mutationFn: createSession,
+  mutationFn: (payload: {
+    mode: 'basics' | 'project';
+    topic?: string;
+    project_id?: string;
+    intensity: string;
+  }) => {
+    streamReasoning.value = [];
+    streamContent.value = '';
+    return createSessionStream(payload, handleStreamEvent);
+  },
   onSuccess: async (session) => {
     await router.push(`/sessions/${session.id}`);
   },
@@ -143,6 +172,16 @@ function submit() {
     project_id: form.mode === 'project' ? form.project_id : undefined,
     intensity: form.intensity,
   });
+}
+
+function handleStreamEvent(event: StreamEvent) {
+  if (event.type === 'reasoning' && event.text) {
+    streamReasoning.value = [...streamReasoning.value, event.text];
+  }
+
+  if (event.type === 'content' && event.text) {
+    streamContent.value += event.text;
+  }
 }
 
 function formatSessionName(session: TrainingSessionSummary): string {
