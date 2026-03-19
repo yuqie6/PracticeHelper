@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -70,6 +71,8 @@ class AgentRuntime:
             self._model_client = OpenAICompatibleModelClient(settings)
 
     def analyze_repo(self, request: AnalyzeRepoRequest) -> AnalyzeRepoResponse:
+        started_at = time.perf_counter()
+        logger.info("analyze_repo started repo_url=%s", request.repo_url)
         self._require_model_client()
         bundle = collect_repo_analysis_bundle(request, self._settings)
         tools = [
@@ -126,7 +129,7 @@ class AgentRuntime:
             user_prompt=user_prompt,
             tools=tools,
         )
-        return AnalyzeRepoResponse(
+        response = AnalyzeRepoResponse(
             repo_url=bundle.repo_url,
             name=bundle.name,
             default_branch=bundle.default_branch,
@@ -140,8 +143,16 @@ class AgentRuntime:
             followup_points=draft.followup_points,
             chunks=bundle.chunks,
         )
+        logger.info(
+            "analyze_repo completed repo_url=%s duration_ms=%.2f",
+            request.repo_url,
+            (time.perf_counter() - started_at) * 1000,
+        )
+        return response
 
     def generate_question(self, request: GenerateQuestionRequest) -> GenerateQuestionResponse:
+        started_at = time.perf_counter()
+        logger.info("generate_question started mode=%s topic=%s", request.mode, request.topic)
         tools = [
             RuntimeTool(
                 name="read_question_templates",
@@ -196,14 +207,28 @@ class AgentRuntime:
 }
 """.strip(),
         )
-        return self._run_task(
+        response = self._run_task(
             response_model=GenerateQuestionResponse,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=tools,
         )
+        logger.info(
+            "generate_question completed mode=%s topic=%s duration_ms=%.2f",
+            request.mode,
+            request.topic,
+            (time.perf_counter() - started_at) * 1000,
+        )
+        return response
 
     def evaluate_answer(self, request: EvaluateAnswerRequest) -> EvaluationResult:
+        started_at = time.perf_counter()
+        logger.info(
+            "evaluate_answer started mode=%s topic=%s is_followup=%s",
+            request.mode,
+            request.topic,
+            request.is_followup,
+        )
         tools = [
             RuntimeTool(
                 name="read_evaluation_context",
@@ -258,14 +283,24 @@ class AgentRuntime:
 }
 """.strip(),
         )
-        return self._run_task(
+        response = self._run_task(
             response_model=EvaluationResult,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=tools,
         )
+        logger.info(
+            "evaluate_answer completed mode=%s topic=%s is_followup=%s duration_ms=%.2f",
+            request.mode,
+            request.topic,
+            request.is_followup,
+            (time.perf_counter() - started_at) * 1000,
+        )
+        return response
 
     def generate_review(self, request: GenerateReviewRequest) -> ReviewCard:
+        started_at = time.perf_counter()
+        logger.info("generate_review started session_id=%s", request.session.id)
         tools = [
             RuntimeTool(
                 name="read_session_summary",
@@ -317,12 +352,18 @@ class AgentRuntime:
 }
 """.strip(),
         )
-        return self._run_task(
+        response = self._run_task(
             response_model=ReviewCard,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=tools,
         )
+        logger.info(
+            "generate_review completed session_id=%s duration_ms=%.2f",
+            request.session.id,
+            (time.perf_counter() - started_at) * 1000,
+        )
+        return response
 
     def _run_task(
         self,

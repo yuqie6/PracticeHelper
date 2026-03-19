@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import logging
+import secrets
+import time
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -18,9 +23,62 @@ from app.schemas import (
 )
 
 settings = load_settings()
+logger = logging.getLogger(__name__)
+
+
+def configure_logging() -> None:
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+
+    if settings.log_path:
+        log_path = Path(settings.log_path)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(log_path, encoding="utf-8"))
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+
+
+configure_logging()
 flows = build_flows(settings)
 
 app = FastAPI(title="PracticeHelper Sidecar", version="0.1.0")
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID", f"req_{secrets.token_hex(8)}")
+    started_at = time.perf_counter()
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception(
+            "sidecar request failed",
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+            },
+        )
+        raise
+
+    duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+    response.headers["X-Request-ID"] = request_id
+    logger.info(
+        "sidecar request completed",
+        extra={
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": duration_ms,
+        },
+    )
+    return response
 
 
 @app.exception_handler(ModelClientError)
