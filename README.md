@@ -73,6 +73,17 @@ PRACTICEHELPER_SIDECAR_OPENAI_API_KEY=你的密钥
 
 不配置时，所有 sidecar 接口会直接返回 503 错误。
 
+### 日志与排障
+
+当前 Go API 和 sidecar 都会同时输出结构化日志到控制台和本地文件，默认路径如下：
+
+```bash
+PRACTICEHELPER_SERVER_LOG_PATH=../data/logs/server.log
+PRACTICEHELPER_SIDECAR_LOG_PATH=../data/logs/sidecar.log
+```
+
+前后端之间会透传 `X-Request-ID`，便于串联一次训练请求在 API 和 sidecar 两侧的日志。
+
 ## 开发命令
 
 先执行下面命令可以查看所有分组后的入口：
@@ -113,6 +124,8 @@ cd server && GOCACHE=/tmp/go-build go run -tags sqlite_fts5 ./cmd/api
 - [x] 项目训练闭环（基于项目上下文的出题 + 追问 + 复盘）
 - [x] weakness memory 与 dashboard 推荐
 - [x] 前端 6 个页面完整交互（HomeView / ProfileView / ProjectsView / TrainView / SessionView / ReviewView）
+- [x] 请求级结构化日志、日志落盘、训练恢复入口、日期倒计时修复
+- [x] 训练创建 / 回答提交阶段的可见等待态
 - [ ] 端到端验证（配置真实 LLM 后跑通完整流程）
 - [ ] 错误处理与健壮性
 - [ ] 训练质量调优（prompt 优化、种子题目扩充）
