@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"practicehelper/server/internal/domain"
+	"practicehelper/server/internal/observability"
 )
 
 type Client struct {
@@ -74,20 +76,28 @@ func (c *Client) postJSON(ctx context.Context, path string, requestBody any, tar
 	}
 
 	request.Header.Set("Content-Type", "application/json")
+	if requestID := observability.RequestIDFromContext(ctx); requestID != "" {
+		request.Header.Set(observability.RequestIDHeader, requestID)
+	}
 
+	startedAt := time.Now()
 	response, err := c.httpClient.Do(request)
 	if err != nil {
+		slog.ErrorContext(ctx, "sidecar request failed", "path", path, "duration_ms", time.Since(startedAt).Milliseconds(), "error", err)
 		return fmt.Errorf("call sidecar: %w", err)
 	}
 	defer func() { _ = response.Body.Close() }()
 
 	if response.StatusCode >= http.StatusBadRequest {
+		slog.ErrorContext(ctx, "sidecar request returned error status", "path", path, "status", response.StatusCode, "duration_ms", time.Since(startedAt).Milliseconds())
 		return fmt.Errorf("sidecar returned status %d", response.StatusCode)
 	}
 
 	if err := json.NewDecoder(response.Body).Decode(target); err != nil {
 		return fmt.Errorf("decode sidecar response: %w", err)
 	}
+
+	slog.InfoContext(ctx, "sidecar request completed", "path", path, "status", response.StatusCode, "duration_ms", time.Since(startedAt).Milliseconds())
 
 	return nil
 }

@@ -11,6 +11,7 @@ class Settings:
     openai_base_url: str
     openai_api_key: str
     llm_timeout_seconds: float
+    log_path: str = ""
 
     @property
     def llm_enabled(self) -> bool:
@@ -26,4 +27,5 @@ def load_settings() -> Settings:
         llm_timeout_seconds=float(
             os.getenv("PRACTICEHELPER_SIDECAR_LLM_TIMEOUT_SECONDS", "45").strip()
         ),
+        log_path=os.getenv("PRACTICEHELPER_SIDECAR_LOG_PATH", "../data/logs/sidecar.log").strip(),
     )
