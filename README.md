@@ -1,148 +1,107 @@
 # PracticeHelper
 
-PracticeHelper 是一个面向 **后端 / Agent 方向求职者** 的面试训练 Agent。
+PracticeHelper 是一个面向后端 / AI Agent 方向求职者的面试训练工具。
 
-它的目标不是做一个“会背答案的八股题库”，而是做一个 **真的能把人练到更会面试** 的训练搭子。
+它不是题库，而是一个能根据你的真实项目和薄弱环节持续追问、打分、复盘的训练 Agent。
 
-## 项目定位
+## 它能做什么
 
-PracticeHelper 聚焦三件事：
+1. **基础知识训练** —— 围绕 Go、Redis、Kafka、网络等后端核心主题，由 Agent 出题、评分、追问，模拟真实面试官的连续追问节奏。
+2. **项目面试训练** —— 导入你的 GitHub 仓库，Agent 自动分析代码后，围绕技术选型、架构 trade-off、难点和个人贡献进行深挖训练。
+3. **训练复盘** —— 每轮训练结束后生成复盘卡，指出亮点、漏洞和下一步建议。
+4. **薄弱点记忆** —— 系统持续记录你答得差的主题和表达卡壳点，并在后续训练中优先针对这些弱项出题。
 
-1. **八股训练**：Go / MySQL / Redis / Kafka / 网络 / 操作系统 / Agent / RAG 等。
-2. **项目面试训练**：围绕真实项目经历做追问、纠偏和表达打磨。
-3. **模拟面试与复盘**：记录薄弱点，形成持续训练闭环。
+## 目录结构
 
-## 核心理念
-
-- 不做单纯题库 bot
-- 不做只会给标准答案的问答壳
-- 要做“会诊断你哪里虚、然后继续追问”的训练 Agent
-- 默认服务单人自用（先把自己练强），后续再考虑泛化
-
-## v0 范围
-
-第一版只做最关键的训练闭环：
-
-- 用户画像初始化
-- 八股训练
-- 项目训练
-- 训练后复盘卡
-- 薄弱点记录
-
-v0 明确不做：
-
-- 在线代码执行 / 判题系统
-- 多用户 SaaS
-- 复杂权限系统
-- 通用型 Repo Chat
-- 全真模拟面试
-- 过度工程化的多 agent 编排
+```
+practicehelper/
+  web/                  # Vue 3 前端
+  server/               # Go API 服务
+  sidecar/              # Python AI sidecar
+  docs/                 # 产品文档（PRD / ARCHITECTURE / PLAN）
+  data/                 # SQLite 数据库（本地生成，不入库）
+  scripts/              # 开发脚本
+  styles/               # 设计资源
+  tests/                # 跨模块测试
+  .tools/               # 本地开发工具（golangci-lint 等）
+  Makefile              # 统一开发命令入口
+```
 
 ## 技术栈
 
-当前已拍板的技术栈如下：
+| 层 | 选型 |
+|---|------|
+| 前端 | Vue 3 + Vite + TypeScript + pnpm + Vue Router + @tanstack/vue-query + Tailwind CSS |
+| Go 服务 | Gin + SQLite + FTS5 + golangci-lint |
+| Python sidecar | FastAPI + LangGraph + Pydantic + Ruff |
+| 前端风格 | neo-brutalist（粗边框、硬阴影、无圆角、高对比） |
 
-- 前端：`Vue 3 + Vite + TypeScript + pnpm + Vue Router + @tanstack/vue-query + Tailwind CSS`
-- 前端风格：`新野兽派（neo-brutalist）`
-- Go 后端：`Gin + SQLite + FTS5 + golangci-lint`
-- Python sidecar：`FastAPI + LangGraph + Pydantic + Ruff`
-- 训练链路：Go 负责 API / 数据 / 状态机，Python 负责仓库分析、出题、评估、复盘
-- 检索方案：只基于 `project_profile` 和 `repo_chunks` 做受控检索，不单独引入向量库
+## 环境搭建
 
-## 前端风格
+### 前置依赖
 
-前端统一采用 `neo-brutalist` 风格：
+- Node.js + pnpm
+- Go 1.21+
+- Python 3.13+ + uv
 
-- 粗边框
-- 硬阴影
-- 无圆角
-- 高对比
-- 功能主义
-- expressive
+### 一键初始化
 
-设计约束：
-
-- 优先使用纯黑边框
-- 使用硬边缘阴影
-- 统一保持直角
-- 以黑白为主，配鲜艳强调色
-- 不用圆角
-- 不用渐变
-- 不用灰色边框
-
-## 推荐目录结构
-
-```text
-practicehelper/
-  README.md
-  PRD.md
-  PLAN.md
-  ARCHITECTURE.md
-  Makefile
-  .gitignore
-  pnpm-workspace.yaml
-  styles/
-    neo-brutalist/
-  web/
-  server/
-  sidecar/
-  docs/
-  scripts/
+```bash
+./scripts/bootstrap.sh
 ```
 
-## 当前状态
+该脚本会依次执行：复制 `.env.example` 为 `.env`、安装前端依赖、同步 Python 虚拟环境、运行 Go 测试、运行 Python 测试、构建前端。
 
-- [x] 项目目录已创建
-- [x] 项目文档初始化
-- [x] 技术栈拍板
-- [x] MVP 边界确认
-- [ ] 项目骨架初始化
-- [ ] 三端最小联通
+### 手动初始化
 
-## 本地开发
+```bash
+cp .env.example .env
+pnpm install
+cd sidecar && uv sync && cd ..
+cd server && GOCACHE=/tmp/go-build go test -tags sqlite_fts5 ./... && cd ..
+```
 
-计划提供统一入口：
+### 配置 LLM
 
-- `make web-dev`
-- `make server-dev`
-- `make sidecar-dev`
-- `make lint`
-- `make test`
+sidecar 的核心链路（项目导入、出题、评估、复盘）依赖外部 LLM。需要在 `.env` 中配置：
 
-## 下一步
+```
+PRACTICEHELPER_SIDECAR_MODEL=你的模型名
+PRACTICEHELPER_SIDECAR_OPENAI_BASE_URL=http://127.0.0.1:3000/v1
+PRACTICEHELPER_SIDECAR_OPENAI_API_KEY=你的密钥
+```
 
-1. 起 Vue / Gin / FastAPI 三端骨架
-2. 接入 SQLite 与基础数据模型
-3. 跑通画像初始化和首页空态
-4. 跑通项目导入与第一轮训练
+不配置时，所有 sidecar 接口会直接返回 503 错误。
 
-## 环境初始化
+## 开发命令
 
-按这个顺序就能把本地依赖装起来：
+| 命令 | 作用 |
+|------|------|
+| `make web-dev` | 启动前端开发服务器（端口 5173） |
+| `make server-dev` | 启动 Go API 服务（端口 8080） |
+| `make sidecar-dev` | 启动 Python sidecar（端口 8000） |
+| `make lint` | 运行三端 lint 检查 |
+| `make format` | 运行三端格式化 |
+| `make test` | 运行三端测试 |
+| `make build` | 构建前端产物和编译 Go 后端 |
 
-    cp .env.example .env
-    pnpm install
-    cd sidecar && uv sync
-    cd ../server && GOCACHE=/tmp/go-build go test -tags sqlite_fts5 ./...
+手动运行 Go 服务时需要带 FTS5 编译标签：
 
-也可以直接跑：
+```bash
+cd server && GOCACHE=/tmp/go-build go run -tags sqlite_fts5 ./cmd/api
+```
 
-    ./scripts/bootstrap.sh
+## 当前进度
 
-如果希望 sidecar 走真实 agent runtime，而不是启发式兜底，需要在 `.env` 里至少配置：
-
-    PRACTICEHELPER_SIDECAR_MODEL=你的模型名
-    PRACTICEHELPER_SIDECAR_OPENAI_BASE_URL=http://127.0.0.1:3000/v1
-    PRACTICEHELPER_SIDECAR_OPENAI_API_KEY=你的密钥
-
-不配这三项时，仓库分析仍可运行，但出题、评估、复盘会退回启发式逻辑。
-
-如果直接手动运行 Go 服务，请带上 FTS5 编译标签：
-
-    cd server && GOCACHE=/tmp/go-build go run -tags sqlite_fts5 ./cmd/api
-
-本地开发默认端口：
-
-- Web: 5173
-- Server: 8080
-- Sidecar: 8000
+- [x] 产品文档与技术栈决策
+- [x] 三端骨架搭建（Vue + Gin + FastAPI 均可本地启动）
+- [x] 统一开发脚本与 lint / format / test
+- [x] 用户画像闭环（表单 + CRUD + dashboard 聚合）
+- [x] GitHub 项目导入闭环（克隆 + 分析 + 画像编辑 + FTS5 索引）
+- [x] 基础知识训练闭环（出题 + 评分 + 追问 + 复盘）
+- [x] 项目训练闭环（基于项目上下文的出题 + 追问 + 复盘）
+- [x] weakness memory 与 dashboard 推荐
+- [x] 前端 6 个页面完整交互（HomeView / ProfileView / ProjectsView / TrainView / SessionView / ReviewView）
+- [ ] 端到端验证（配置真实 LLM 后跑通完整流程）
+- [ ] 错误处理与健壮性
+- [ ] 训练质量调优（prompt 优化、种子题目扩充）

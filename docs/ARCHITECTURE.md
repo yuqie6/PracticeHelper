@@ -1,241 +1,160 @@
-# ARCHITECTURE - PracticeHelper
+# 架构文档 - PracticeHelper
 
-## 1. 设计目标
+## 1. 系统总览
 
-PracticeHelper 的架构优先支持：
+PracticeHelper 由三个进程组成，通过 HTTP 通信：
 
-- 快速迭代 MVP
-- 单用户自用场景
-- 训练记录与薄弱点可持续积累
-- 后续逐步扩展到模拟面试 / 算法训练 / JD 定制训练
+```
+浏览器 ──HTTP──▶ Go API（:8080）──HTTP──▶ Python sidecar（:8000）──HTTP──▶ LLM Provider
+                    │
+                    ▼
+                SQLite（data/practicehelper.db）
+```
 
-## 2. 总体技术栈
+- **Go API** 是唯一对外暴露的后端，负责路由、持久化、状态管理，以及转发 AI 任务给 sidecar。
+- **Python sidecar** 是内部服务，不直接对外暴露。它接收 Go 的结构化请求，通过 LLM 完成仓库分析、出题、评估和复盘，返回结构化 JSON。
+- **Vue 前端** 通过 Vite 反向代理（开发时）或同源部署（生产时）调用 Go API。
 
-### 2.1 前端
+## 2. Go 服务分层
 
-- `Vue 3`
-- `Vite`
-- `TypeScript`
-- `pnpm`
-- `Vue Router`
-- `@tanstack/vue-query`
-- `Tailwind CSS`
+```
+server/
+  cmd/api/main.go           # 入口：加载配置 → 打开数据库 → 创建 sidecar client → 注册路由 → 启动
+  internal/
+    config/config.go         # 从环境变量读取 Port / DatabasePath / SidecarURL
+    controller/router.go     # Gin 路由与 handler：解析请求 → 调用 service → 序列化响应
+    service/service.go       # 业务逻辑：训练会话编排、出题/评分调度、薄弱点更新
+    domain/types.go          # 所有数据结构定义
+    repo/repo.go             # SQLite 存储层：DDL、CRUD、FTS5 检索
+    sidecar/client.go        # sidecar HTTP 客户端：序列化请求 → POST → 反序列化响应
+```
 
-### 2.2 Go 服务
+调用链路：`controller → service → repo` + `service → sidecar/client`。controller 不直接访问数据库，service 不直接处理 HTTP。
 
-- `Gin`
-- `database/sql`
-- `SQLite`
-- `FTS5`
-- `golangci-lint`
+## 3. Python sidecar 管线
 
-### 2.3 Python sidecar
+```
+sidecar/app/
+  main.py            # FastAPI 入口：4 个 POST 端点，每个调用对应的 LangGraph flow
+  config.py          # 从环境变量读取 LLM 配置
+  schemas.py         # Pydantic 请求/响应模型（与 Go 侧 domain/types.go 字段对齐）
+  langgraph_flows.py # 4 条 LangGraph 图，每条是 START → run → END 的单节点图
+  agent_runtime.py   # 核心 AI 逻辑：tool-loop 模式与 single-shot 降级
+  llm_client.py      # OpenAI 兼容的 HTTP 客户端（用 urllib 实现，无第三方依赖）
+  repo_context.py    # 仓库克隆、文件过滤、chunk 切分、技术栈检测
+```
 
-- `FastAPI`
-- `LangGraph`
-- `Pydantic`
-- `Ruff`
+### 3.1 AgentRuntime 的双模式执行
 
-## 3. 架构分层
+每个 AI 任务（出题、评估等）执行时：
+
+1. **Tool-loop 模式（优先）**：向 LLM 发送系统 prompt + 用户 prompt + 工具定义，LLM 可以主动调用工具读取上下文，最多循环 4 轮，最终输出结构化 JSON。
+2. **Single-shot 降级**：如果 tool-loop 失败（网络错误、JSON 解析失败等），将所有工具数据直接拼入 prompt，让 LLM 一次性输出结果。
+3. 两种模式都失败时，直接抛出异常，不做启发式兜底。
 
-### 3.1 Web
+### 3.2 仓库导入管线（repo_context.py）
 
-负责：
+`analyze_repo` 调用时：
 
-- 页面路由
-- 用户输入
-- 训练过程展示
-- 首页与复盘展示
+1. `git clone --depth 1` 到临时目录
+2. 递归扫描文件，过滤条件：后缀在白名单内（`.go`/`.py`/`.ts`/`.md` 等）、不在忽略目录中（`node_modules`/`.git` 等）、大小 ≤ 256KB
+3. 按路径重要性排序（README/docs 优先，`cmd/`/`internal/`/`app/`/`src/` 次之），取前 80 个文件
+4. 文本按 1400 字符切分（220 字符重叠），生成 `RepoChunk` 列表，最多保留 120 个
+5. 检测技术栈（基于文件名和后缀的关键词映射）
+6. 将以上数据打包为 `RepoAnalysisBundle`，供 AgentRuntime 读取并生成项目画像
 
-### 3.2 Go API
+### 3.3 LangGraph 的实际用法
 
-负责：
+当前 4 条 LangGraph 图都是单节点线性图（`START → run → END`），本质上是 `AgentRuntime` 方法的薄壳。保留 LangGraph 是为后续扩展（如多步骤训练流程）预留结构，但 v0 不做复杂多节点编排。
 
-- 提供前端 API
-- 管理 SQLite 持久化
-- 管理训练会话状态机
-- 调用 Python sidecar
-- 汇总弱项与推荐结果
+## 4. 数据库 Schema
 
-### 3.3 Python sidecar
+SQLite 共 9 张表（含 1 张 FTS5 虚拟表），启动时自动建表：
 
-负责：
+| 表 | 用途 | 关键字段 |
+|---|------|---------|
+| `user_profile` | 用户画像（单行，`id` 固定为 1） | target_role, current_stage, tech_stacks_json, self_reported_weaknesses_json |
+| `project_profiles` | 导入的项目画像 | repo_url（UNIQUE）, summary, highlights_json, challenges_json, followup_points_json |
+| `repo_chunks` | 项目源码文本片段 | project_id（外键）, file_path, content, importance, fts_key |
+| `repo_chunks_fts` | FTS5 全文索引（镜像 repo_chunks） | chunk_id, project_id, file_path, file_type, content |
+| `question_templates` | 基础知识题目模板（预置种子数据） | mode, topic, prompt, focus_points_json, score_weights_json |
+| `training_sessions` | 训练会话 | mode（basics/project）, status, total_score, review_id |
+| `training_turns` | 训练回合（主问题 + 追问） | session_id（外键）, question, answer, evaluation_json, followup_* |
+| `review_cards` | 复盘卡 | session_id（UNIQUE 外键）, overall, highlights_json, gaps_json |
+| `weakness_tags` | 薄弱点标签 | kind, label（联合 UNIQUE）, severity, frequency |
 
-- GitHub 仓库分析
-- 训练问题生成
-- 回答评估
-- 复盘生成
+JSON 数组字段（如 `tech_stacks_json`）存储为 `TEXT`，在 Go 侧用 `json.Marshal`/`json.Unmarshal` 序列化。
 
-sidecar 对外只暴露 4 个内部接口：
+## 5. 训练状态机
 
-- `analyze_repo`
-- `generate_question`
-- `evaluate_answer`
-- `generate_review`
+一次训练会话的状态流转：
 
-## 4. 模块草图
+```
+waiting_answer ──用户回答主问题──▶ followup ──用户回答追问──▶ review_pending ──生成复盘卡──▶ completed
+```
 
-### 4.1 Profile 模块
+具体流程：
 
-负责：
+1. `CreateSession`：Go 向 sidecar 请求生成主问题，创建 session（状态 `waiting_answer`）和第一个 turn。
+2. 第一次 `SubmitAnswer`：Go 将用户答案发给 sidecar 评分，sidecar 返回评估结果 + 追问问题。状态变为 `followup`。
+3. 第二次 `SubmitAnswer`：Go 将追问答案发给 sidecar 评分，然后请求生成复盘卡。状态变为 `completed`。
 
-- 用户画像初始化
-- 求职方向、项目列表、目标岗位维护
-
-### 4.2 Project Import 模块
-
-负责：
-
-- 仓库抓取
-- 文本文件过滤
-- chunk 切分
-- 项目画像草稿生成
-
-### 4.3 Training Engine 模块
-
-负责：
-
-- 生成训练流程
-- 提问、追问
-- 控制一轮训练的状态流转
-
-### 4.4 Evaluation 模块
-
-负责：
-
-- 对回答进行评分
-- 识别回答中的漏洞
-- 提炼薄弱点标签
-- 输出训练复盘卡
-
-### 4.5 Memory / Review 模块
-
-负责：
-
-- 存储历史训练记录
-- 汇总薄弱点
-- 给出下一轮训练建议
-
-## 5. 数据对象
-
-核心对象至少包括：
-
-- `user_profile`
-- `project_profile`
-- `repo_chunk`
-- `question_template`
-- `training_session`
-- `training_turn`
-- `review_card`
-- `weakness_tag`
-
-## 6. API 边界
-
-最小 API 集合固定为：
-
-- `POST /api/profile`
-- `GET /api/profile`
-- `PATCH /api/profile`
-- `POST /api/projects/import`
-- `GET /api/projects`
-- `GET /api/projects/:id`
-- `PATCH /api/projects/:id`
-- `POST /api/sessions`
-- `POST /api/sessions/:id/answer`
-- `GET /api/sessions/:id`
-- `GET /api/reviews/:id`
-- `GET /api/weaknesses`
-
-## 7. 核心流程
-
-### 7.1 八股训练流程
-
-1. 选择训练主题
-2. Go 服务准备上下文与题库模板
-3. sidecar 生成主问题
-4. 用户回答
-5. sidecar 评分并生成追问
-6. sidecar 输出复盘卡
-7. Go 服务更新弱项
-
-### 7.2 项目训练流程
-
-1. 选择项目
-2. Go 服务检索 `project_profile` 和 `repo_chunks`
-3. sidecar 基于检索上下文生成问题
-4. 用户作答
-5. sidecar 围绕技术与 trade-off 追问
-6. sidecar 输出项目表达复盘
-7. Go 服务更新项目维度弱项
-
-### 7.3 项目导入流程
-
-1. 用户输入 GitHub 仓库 URL
-2. Go 服务校验并调用 `analyze_repo`
-3. Python sidecar 拉取仓库并扫描白名单文本
-4. sidecar 提取项目摘要、亮点、风险点和可追问点
-5. Go 服务持久化 `project_profile` 和 `repo_chunks`
-6. 用户确认或编辑项目画像
-
-## 8. 检索策略
-
-训练时实时检索只从已导入的 `repo_chunks` 和 `project_profile` 中取上下文：
-
-- 使用 `SQLite FTS5`
-- 对文档文件、架构文件、核心源码路径给予更高权重
-- 不引入单独向量库
-- 不提供独立 repo chat 能力
-
-## 9. LangGraph 使用边界
-
-v0 使用 LangGraph，但保持克制：
-
-- 不做复杂多 agent 协作
-- 不做长链路自治
-- 只把 LangGraph 用在可控的训练编排与仓库分析流程
-
-建议拆成 4 条受控 graph：
-
-- `analyze_repo_graph`
-- `generate_question_graph`
-- `evaluate_answer_graph`
-- `generate_review_graph`
-
-每条 graph 都以结构化状态输入输出，并由 Pydantic 做 schema 校验。
-
-## 10. 训练状态机
-
-训练状态机固定为：
-
-`draft -> active -> waiting_answer -> evaluating -> followup -> review_pending -> completed`
-
-每轮训练默认 2 段式：
-
-- 主问题 1 个
-- 追问 1 到 2 个
-
-结束后立刻生成复盘卡，不做无限对话。
-
-## 11. 前端设计约束
-
-前端统一采用 `neo-brutalist` 风格：
-
-- 粗边框
-- 硬阴影
-- 无圆角
-- 高对比
-- 黑白主色加亮色强调
-
-明确避免：
-
-- 圆角
-- 渐变
-- 灰色边框
-
-## 12. 工程原则
-
-- **先单体，后拆分**：v0 不需要微服务
-- **先本地存储，后远程化**：单用户场景优先 SQLite
-- **先结构清晰，后功能扩张**：模块边界清楚，但不过度抽象
-- **先把 LLM 用在最值钱的地方**：提问、追问、评估、复盘
-- **先让 fallback 可用**：LLM 不可用时也要有基础兜底结果
+每轮训练固定为 2 段式（1 个主问题 + 1 个追问），结束后立即生成复盘卡。
+
+### 薄弱点更新机制
+
+- 每次评估后，sidecar 返回的 `weakness_hits` 会写入 `weakness_tags` 表。
+- 新弱项直接插入；已有弱项的 severity 按 `current + hit × 0.35` 递增（上限 1.5），frequency +1。
+- 如果某次评分 ≥ 75 分，相关弱项的 severity 会下调 0.18（答好了就降温）。
+
+## 6. API 清单
+
+所有接口前缀 `/api`，响应格式 `{"data": ...}` 或 `{"error": {"message": "..."}}`。
+
+| 方法 | 路径 | 用途 |
+|------|------|------|
+| GET | `/healthz` | 健康检查 |
+| GET | `/api/dashboard` | 首页聚合数据（画像 + 弱项 Top 5 + 最近会话 + 今日建议） |
+| GET | `/api/profile` | 获取用户画像 |
+| POST | `/api/profile` | 创建/更新用户画像 |
+| PATCH | `/api/profile` | 同 POST（兼容两种语义） |
+| POST | `/api/projects/import` | 导入 GitHub 仓库（触发 sidecar 分析） |
+| GET | `/api/projects` | 列出所有已导入项目 |
+| GET | `/api/projects/:id` | 获取单个项目详情 |
+| PATCH | `/api/projects/:id` | 编辑项目画像 |
+| POST | `/api/sessions` | 创建训练会话（触发 sidecar 出题） |
+| GET | `/api/sessions/:id` | 获取会话详情（含所有回合） |
+| POST | `/api/sessions/:id/answer` | 提交回答（触发 sidecar 评分，可能触发复盘生成） |
+| GET | `/api/reviews/:id` | 获取复盘卡 |
+| GET | `/api/weaknesses` | 列出所有薄弱点标签 |
+
+## 7. 检索策略
+
+项目训练时的上下文检索仅使用 SQLite FTS5，不引入向量数据库：
+
+- 检索范围限于当前项目的 `repo_chunks`
+- 查询词由项目的 `followup_points` + `summary` 拼接而成
+- FTS5 查询构建：过滤掉 < 2 字符的 token，每个 token 加双引号后用 `OR` 连接
+- 无 FTS 匹配时回退到按 `importance DESC` 排序取 top N
+- 每次检索默认取 6 个 chunk
+
+## 8. 前端页面
+
+| 路由 | 页面 | 对应组件 |
+|------|------|---------|
+| `/` | 首页（Dashboard） | HomeView.vue |
+| `/profile` | 用户画像编辑 | ProfileView.vue |
+| `/projects` | 项目列表与导入 | ProjectsView.vue |
+| `/train` | 训练配置（选模式/主题/项目） | TrainView.vue |
+| `/sessions/:id` | 训练过程（问答交互） | SessionView.vue |
+| `/reviews/:id` | 复盘卡展示 | ReviewView.vue |
+
+前端通过 `web/src/api/client.ts` 封装的 fetch 函数与 Go API 通信，开发时由 Vite 代理 `/api` 到 `:8080`。
+
+## 9. 设计约束
+
+- **单用户单体架构**：v0 只服务一个用户，不做多用户、不做微服务拆分。
+- **SQLite 即全部存储**：不引入 Redis、PostgreSQL 或向量数据库。
+- **LLM 是硬依赖**：sidecar 核心链路不保留启发式兜底，LLM 不可用时直接报错。
+- **LangGraph 保持克制**：当前只用单节点图做调度壳，不做复杂多 agent 编排。
+- **前端 neo-brutalist 风格**：粗边框、硬阴影、无圆角、黑白主色配鲜艳强调色。禁止圆角、渐变、灰色边框。
