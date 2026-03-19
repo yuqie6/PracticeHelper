@@ -1,7 +1,11 @@
-<script setup lang="ts">
-import HelloWorld from './components/HelloWorld.vue'
-</script>
-
 <template>
-  <HelloWorld />
+  <AppShell>
+    <RouterView />
+  </AppShell>
 </template>
+
+<script setup lang="ts">
+import { RouterView } from 'vue-router';
+
+import AppShell from './components/AppShell.vue';
+</script>

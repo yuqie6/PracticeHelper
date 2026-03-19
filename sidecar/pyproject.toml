@@ -1,0 +1,28 @@
+[project]
+name = "practicehelper-sidecar"
+version = "0.1.0"
+description = "PracticeHelper Python sidecar for repo analysis and interview orchestration"
+readme = "../README.md"
+requires-python = ">=3.13"
+dependencies = [
+  "fastapi>=0.116.0",
+  "langgraph>=0.6.5",
+  "pydantic>=2.11.0",
+  "uvicorn>=0.35.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4.0",
+  "ruff>=0.13.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

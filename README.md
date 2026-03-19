@@ -115,3 +115,22 @@ practicehelper/
 2. 接入 SQLite 与基础数据模型
 3. 跑通画像初始化和首页空态
 4. 跑通项目导入与第一轮训练
+
+## 环境初始化
+
+按这个顺序就能把本地依赖装起来：
+
+    cp .env.example .env
+    pnpm install
+    cd sidecar && uv sync
+    cd ../server && GOCACHE=/tmp/go-build go test ./...
+
+也可以直接跑：
+
+    ./scripts/bootstrap.sh
+
+本地开发默认端口：
+
+- Web: 5173
+- Server: 8080
+- Sidecar: 8000
