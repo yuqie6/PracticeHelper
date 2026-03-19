@@ -1,58 +1,78 @@
 <template>
   <section class="neo-page space-y-6">
     <header class="neo-panel bg-[var(--neo-blue)]">
-      <p class="neo-kicker bg-white">Profile Builder</p>
-      <h2 class="neo-heading">先让系统认识你，再决定该往哪打。</h2>
+      <p class="neo-kicker bg-white">{{ t('profile.hero.kicker') }}</p>
+      <h2 class="neo-heading">{{ t('profile.hero.title') }}</h2>
       <p class="mt-3 text-base font-semibold">
-        这里记录目标岗位、阶段、技术栈和主讲项目，后面所有推荐和追问都会以这份画像为底。
+        {{ t('profile.hero.description') }}
       </p>
     </header>
 
     <form class="neo-panel space-y-4" @submit.prevent="submit">
       <div class="neo-grid md:grid-cols-2">
         <label class="space-y-2">
-          <span class="neo-subheading">目标岗位</span>
-          <input v-model="form.target_role" class="neo-input" placeholder="Go 后端 / Agent 工程师" />
+          <span class="neo-subheading">{{ t('profile.fields.targetRole') }}</span>
+          <input
+            v-model="form.target_role"
+            class="neo-input"
+            :placeholder="t('profile.placeholders.targetRole')"
+          />
         </label>
         <label class="space-y-2">
-          <span class="neo-subheading">目标公司类型</span>
-          <input v-model="form.target_company_type" class="neo-input" placeholder="AI 应用 / 中厂 / 创业团队" />
+          <span class="neo-subheading">{{ t('profile.fields.targetCompanyType') }}</span>
+          <input
+            v-model="form.target_company_type"
+            class="neo-input"
+            :placeholder="t('profile.placeholders.targetCompanyType')"
+          />
         </label>
       </div>
 
       <div class="neo-grid md:grid-cols-2">
         <label class="space-y-2">
-          <span class="neo-subheading">当前阶段</span>
-          <input v-model="form.current_stage" class="neo-input" placeholder="大三 / 实习前 / 秋招前" />
+          <span class="neo-subheading">{{ t('profile.fields.currentStage') }}</span>
+          <input
+            v-model="form.current_stage"
+            class="neo-input"
+            :placeholder="t('profile.placeholders.currentStage')"
+          />
         </label>
         <label class="space-y-2">
-          <span class="neo-subheading">目标投递时间</span>
+          <span class="neo-subheading">{{ t('profile.fields.applicationDeadline') }}</span>
           <input v-model="form.application_deadline" type="date" class="neo-input" />
         </label>
       </div>
 
       <label class="space-y-2">
-        <span class="neo-subheading">技术栈</span>
-        <input v-model="techStacksRaw" class="neo-input" placeholder="Go, Redis, Kafka, LangGraph" />
+        <span class="neo-subheading">{{ t('profile.fields.techStacks') }}</span>
+        <input
+          v-model="techStacksRaw"
+          class="neo-input"
+          :placeholder="t('profile.placeholders.techStacks')"
+        />
       </label>
 
       <label class="space-y-2">
-        <span class="neo-subheading">主讲项目</span>
-        <input v-model="projectsRaw" class="neo-input" placeholder="Mirror, SneakerFlash, OfferPilot" />
+        <span class="neo-subheading">{{ t('profile.fields.primaryProjects') }}</span>
+        <input
+          v-model="projectsRaw"
+          class="neo-input"
+          :placeholder="t('profile.placeholders.primaryProjects')"
+        />
       </label>
 
       <label class="space-y-2">
-        <span class="neo-subheading">自我感知弱项</span>
+        <span class="neo-subheading">{{ t('profile.fields.weaknesses') }}</span>
         <textarea
           v-model="weaknessesRaw"
           class="neo-textarea"
-          placeholder="例如：项目 trade-off 讲不硬、Kafka 幂等一追问就虚"
+          :placeholder="t('profile.placeholders.weaknesses')"
         />
       </label>
 
       <div class="flex flex-wrap items-center gap-3">
         <button type="submit" class="neo-button-dark" :disabled="isSaving">
-          {{ isSaving ? '保存中...' : '保存画像' }}
+          {{ isSaving ? t('common.saving') : t('profile.saveAction') }}
         </button>
         <span class="neo-note">{{ successMessage }}</span>
       </div>
@@ -63,11 +83,13 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, reactive, ref, watchEffect } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 import { getProfile, saveProfile, type UserProfile } from '../api/client';
 
 const queryClient = useQueryClient();
 const successMessage = ref('');
+const { t } = useI18n();
 
 const form = reactive({
   target_role: '',
@@ -98,7 +120,7 @@ const mutation = useMutation({
   onSuccess: async (profile) => {
     queryClient.setQueryData(['profile'], profile);
     await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-    successMessage.value = '画像已更新，后续推荐会立刻用上。';
+    successMessage.value = t('profile.saveSuccess');
   },
 });
 

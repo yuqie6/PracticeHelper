@@ -1,10 +1,31 @@
 import { describeProfile, describeSession, describeWeakness } from './dashboard';
+import { messages } from '../i18n/messages';
+
+function createTranslator(locale: 'zh-CN' | 'en' = 'zh-CN') {
+  return (key: string, named?: Record<string, unknown>) => {
+    const value = key.split('.').reduce<unknown>((current, segment) => {
+      if (!current || typeof current !== 'object') {
+        return undefined;
+      }
+
+      return (current as Record<string, unknown>)[segment];
+    }, messages[locale]);
+
+    if (typeof value !== 'string') {
+      return key;
+    }
+
+    return value.replace(/\{(\w+)\}/g, (_, token) => String(named?.[token] ?? ''));
+  };
+}
 
 describe('dashboard helpers', () => {
+  const t = createTranslator();
+
   it('describes missing dashboard data with empty-state copy', () => {
-    expect(describeWeakness(null)).toContain('还没有薄弱点画像');
-    expect(describeSession(null)).toContain('还没有历史训练记录');
-    expect(describeProfile(null)).toContain('画像还没初始化');
+    expect(describeWeakness(null, t)).toContain('还没有薄弱点记录');
+    expect(describeSession(null, t)).toContain('还没有历史训练记录');
+    expect(describeProfile(null, t)).toContain('画像还没初始化');
   });
 
   it('describes populated dashboard data', () => {
@@ -46,8 +67,9 @@ describe('dashboard helpers', () => {
       days_until_deadline: 13,
     };
 
-    expect(describeWeakness(dashboard)).toContain('redis');
-    expect(describeSession(dashboard)).toContain('completed');
-    expect(describeProfile(dashboard)).toContain('Mirror');
+    expect(describeWeakness(dashboard, t)).toContain('知识点');
+    expect(describeWeakness(dashboard, t)).toContain('redis');
+    expect(describeSession(dashboard, t)).toContain('已完成');
+    expect(describeProfile(dashboard, t)).toContain('Mirror');
   });
 });

@@ -1,45 +1,45 @@
 <template>
   <section class="neo-page space-y-6">
     <header class="neo-panel bg-[var(--neo-red)] text-black">
-      <p class="neo-kicker bg-white">Question Trainer</p>
-      <h2 class="neo-heading">训练模式先选准，再让系统狠狠干你最虚的地方。</h2>
+      <p class="neo-kicker bg-white">{{ t('train.hero.kicker') }}</p>
+      <h2 class="neo-heading">{{ t('train.hero.title') }}</h2>
       <p class="mt-3 text-base font-semibold">
-        八股训练适合打单点，项目训练适合把真实项目讲硬。v0 默认每轮主问题 + 1 次追问。
+        {{ t('train.hero.description') }}
       </p>
     </header>
 
     <form class="neo-panel space-y-4" @submit.prevent="submit">
       <div class="neo-grid md:grid-cols-2">
         <label class="space-y-2">
-          <span class="neo-subheading">训练模式</span>
+          <span class="neo-subheading">{{ t('train.fields.mode') }}</span>
           <select v-model="form.mode" class="neo-select">
-            <option value="basics">八股训练</option>
-            <option value="project">项目训练</option>
+            <option value="basics">{{ formatModeLabel(t, 'basics') }}</option>
+            <option value="project">{{ formatModeLabel(t, 'project') }}</option>
           </select>
         </label>
         <label class="space-y-2">
-          <span class="neo-subheading">强度</span>
+          <span class="neo-subheading">{{ t('train.fields.intensity') }}</span>
           <select v-model="form.intensity" class="neo-select">
-            <option value="light">轻刷</option>
-            <option value="standard">标准</option>
-            <option value="pressure">压迫训练</option>
+            <option value="light">{{ formatIntensityLabel(t, 'light') }}</option>
+            <option value="standard">{{ formatIntensityLabel(t, 'standard') }}</option>
+            <option value="pressure">{{ formatIntensityLabel(t, 'pressure') }}</option>
           </select>
         </label>
       </div>
 
       <label v-if="form.mode === 'basics'" class="space-y-2">
-        <span class="neo-subheading">主题</span>
+        <span class="neo-subheading">{{ t('train.fields.topic') }}</span>
         <select v-model="form.topic" class="neo-select">
-          <option value="go">Go</option>
-          <option value="redis">Redis</option>
-          <option value="kafka">Kafka</option>
+          <option value="go">{{ formatTopicLabel(t, 'go') }}</option>
+          <option value="redis">{{ formatTopicLabel(t, 'redis') }}</option>
+          <option value="kafka">{{ formatTopicLabel(t, 'kafka') }}</option>
         </select>
       </label>
 
       <label v-else class="space-y-2">
-        <span class="neo-subheading">选择项目</span>
+        <span class="neo-subheading">{{ t('train.fields.project') }}</span>
         <select v-model="form.project_id" class="neo-select">
-          <option disabled value="">请选择项目</option>
+          <option disabled value="">{{ t('train.chooseProject') }}</option>
           <option v-for="project in projects ?? []" :key="project.id" :value="project.id">
             {{ project.name }}
           </option>
@@ -47,7 +47,7 @@
       </label>
 
       <button type="submit" class="neo-button-dark" :disabled="isStarting">
-        {{ isStarting ? '启动中...' : '开始这一轮训练' }}
+        {{ isStarting ? t('common.starting') : t('train.startAction') }}
       </button>
     </form>
   </section>
@@ -56,11 +56,14 @@
 <script setup lang="ts">
 import { useMutation, useQuery } from '@tanstack/vue-query';
 import { computed, reactive } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { createSession, listProjects } from '../api/client';
+import { formatIntensityLabel, formatModeLabel, formatTopicLabel } from '../lib/labels';
 
 const router = useRouter();
+const { t } = useI18n();
 
 const form = reactive({
   mode: 'basics' as 'basics' | 'project',

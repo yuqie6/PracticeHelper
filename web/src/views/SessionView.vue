@@ -1,16 +1,16 @@
 <template>
   <section class="neo-page space-y-6">
     <header class="neo-panel bg-[var(--neo-yellow)]">
-      <p class="neo-kicker bg-white">Mock Loop</p>
-      <h2 class="neo-heading">现在别查答案，先把这道题像面试现场一样讲出来。</h2>
+      <p class="neo-kicker bg-white">{{ t('session.hero.kicker') }}</p>
+      <h2 class="neo-heading">{{ t('session.hero.title') }}</h2>
       <p class="mt-3 text-base font-semibold">
-        当前状态：{{ session?.status ?? '加载中' }}。系统会先看主问题，再根据你回答补一刀追问。
+        {{ t('session.hero.description', { status: currentStatusLabel }) }}
       </p>
     </header>
 
     <div v-if="session && activePrompt" class="neo-grid lg:grid-cols-[1.1fr_0.9fr]">
       <div class="neo-panel space-y-4">
-        <p class="neo-kicker bg-[var(--neo-red)]">当前问题</p>
+        <p class="neo-kicker bg-[var(--neo-red)]">{{ t('session.currentQuestion') }}</p>
         <h3 class="text-2xl font-black">{{ activePrompt.question }}</h3>
         <ul class="flex flex-wrap gap-2">
           <li
@@ -25,17 +25,19 @@
         <form class="space-y-4" @submit.prevent="submit">
           <textarea v-model="answer" class="neo-textarea" :placeholder="placeholderText" />
           <button type="submit" class="neo-button-dark" :disabled="isSubmitting">
-            {{ isSubmitting ? '提交中...' : '提交回答' }}
+            {{ isSubmitting ? t('common.submitting') : t('common.submit') }}
           </button>
         </form>
       </div>
 
       <div class="neo-panel space-y-4">
-        <p class="neo-kicker bg-[var(--neo-green)]">过程反馈</p>
+        <p class="neo-kicker bg-[var(--neo-green)]">{{ t('session.feedback') }}</p>
         <template v-if="lastTurn?.evaluation">
-          <p class="text-lg font-black">主问题评分：{{ lastTurn.evaluation.score }}</p>
+          <p class="text-lg font-black">
+            {{ t('session.mainScore', { score: lastTurn.evaluation.score }) }}
+          </p>
           <div class="space-y-2">
-            <p class="neo-subheading">优点</p>
+            <p class="neo-subheading">{{ t('session.strengths') }}</p>
             <ul class="space-y-2">
               <li v-for="item in lastTurn.evaluation.strengths" :key="item" class="neo-note">
                 {{ item }}
@@ -43,7 +45,7 @@
             </ul>
           </div>
           <div class="space-y-2">
-            <p class="neo-subheading">漏洞</p>
+            <p class="neo-subheading">{{ t('session.gaps') }}</p>
             <ul class="space-y-2">
               <li v-for="item in lastTurn.evaluation.gaps" :key="item" class="neo-note">
                 {{ item }}
@@ -51,7 +53,7 @@
             </ul>
           </div>
         </template>
-        <p v-else class="neo-note">先回答主问题，反馈会实时落在这里。</p>
+        <p v-else class="neo-note">{{ t('session.feedbackEmpty') }}</p>
       </div>
     </div>
   </section>
@@ -60,14 +62,17 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
 import { getSession, submitAnswer } from '../api/client';
+import { formatStatusLabel } from '../lib/labels';
 
 const route = useRoute();
 const router = useRouter();
 const queryClient = useQueryClient();
 const answer = ref('');
+const { t } = useI18n();
 
 const sessionId = computed(() => route.params.id as string);
 
@@ -78,6 +83,13 @@ const { data } = useQuery({
 
 const session = computed(() => data.value ?? null);
 const lastTurn = computed(() => session.value?.turns?.[session.value.turns.length - 1]);
+const currentStatusLabel = computed(() => {
+  if (!session.value?.status) {
+    return t('common.loading');
+  }
+
+  return formatStatusLabel(t, session.value.status);
+});
 
 const activePrompt = computed(() => {
   const turn = lastTurn.value;
@@ -101,8 +113,8 @@ const activePrompt = computed(() => {
 
 const placeholderText = computed(() =>
   session.value?.status === 'followup'
-    ? '别重复上一次的话，直接把追问打实。'
-    : '先讲结论，再讲为什么，最后给一个真实落地场景。',
+    ? t('session.placeholderFollowup')
+    : t('session.placeholderInitial'),
 );
 
 const mutation = useMutation({

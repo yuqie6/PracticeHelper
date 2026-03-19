@@ -1,10 +1,10 @@
 <template>
   <section class="neo-page space-y-6">
     <header class="neo-panel bg-[var(--neo-green)]">
-      <p class="neo-kicker bg-white">Project Interviewer</p>
-      <h2 class="neo-heading">把 GitHub 仓库压成一份能拿去面试的项目资产。</h2>
+      <p class="neo-kicker bg-white">{{ t('projects.hero.kicker') }}</p>
+      <h2 class="neo-heading">{{ t('projects.hero.title') }}</h2>
       <p class="mt-3 text-base font-semibold">
-        v0 先走仓库导入 + 手工修正。系统帮你扫材料，你负责把真正值钱的亮点和坑补硬。
+        {{ t('projects.hero.description') }}
       </p>
     </header>
 
@@ -12,16 +12,16 @@
       <input
         v-model="repoUrl"
         class="neo-input flex-1"
-        placeholder="https://github.com/yourname/your-project"
+        :placeholder="t('projects.importPlaceholder')"
       />
       <button type="submit" class="neo-button-red" :disabled="isImporting">
-        {{ isImporting ? '导入中...' : '导入仓库' }}
+        {{ isImporting ? t('common.starting') : t('projects.importAction') }}
       </button>
     </form>
 
     <div class="neo-grid lg:grid-cols-[0.8fr_1.2fr]">
       <div class="neo-panel space-y-3">
-        <p class="neo-kicker bg-[var(--neo-yellow)]">项目列表</p>
+        <p class="neo-kicker bg-[var(--neo-yellow)]">{{ t('projects.listTitle') }}</p>
         <button
           v-for="project in projects"
           :key="project.id"
@@ -30,58 +30,60 @@
           :class="{ 'bg-[var(--neo-yellow)]': selectedProjectId === project.id }"
           @click="selectProject(project.id)"
         >
-          <p class="text-sm font-black uppercase">{{ project.import_status }}</p>
+          <p class="text-sm font-black uppercase">
+            {{ formatImportStatusLabel(t, project.import_status) }}
+          </p>
           <p class="text-lg font-bold">{{ project.name }}</p>
           <p class="mt-1 text-sm font-semibold">{{ project.repo_url }}</p>
         </button>
-        <p v-if="!projects.length" class="neo-note">先导入一个公开 GitHub 仓库。</p>
+        <p v-if="!projects.length" class="neo-note">{{ t('projects.emptyList') }}</p>
       </div>
 
-      <div class="neo-panel" v-if="selectedProject">
-        <p class="neo-kicker bg-[var(--neo-red)]">项目画像编辑</p>
+      <div v-if="selectedProject" class="neo-panel">
+        <p class="neo-kicker bg-[var(--neo-red)]">{{ t('projects.editorTitle') }}</p>
         <form class="space-y-4" @submit.prevent="submitUpdate">
           <label class="space-y-2">
-            <span class="neo-subheading">项目名</span>
+            <span class="neo-subheading">{{ t('projects.fields.name') }}</span>
             <input v-model="editor.name" class="neo-input" />
           </label>
 
           <label class="space-y-2">
-            <span class="neo-subheading">项目摘要</span>
+            <span class="neo-subheading">{{ t('projects.fields.summary') }}</span>
             <textarea v-model="editor.summary" class="neo-textarea" />
           </label>
 
           <label class="space-y-2">
-            <span class="neo-subheading">技术栈</span>
-            <input v-model="editor.tech_stack" class="neo-input" placeholder="Go, Gin, SQLite" />
+            <span class="neo-subheading">{{ t('projects.fields.techStack') }}</span>
+            <input v-model="editor.tech_stack" class="neo-input" />
           </label>
 
           <label class="space-y-2">
-            <span class="neo-subheading">亮点</span>
+            <span class="neo-subheading">{{ t('projects.fields.highlights') }}</span>
             <textarea v-model="editor.highlights" class="neo-textarea" />
           </label>
 
           <label class="space-y-2">
-            <span class="neo-subheading">难点</span>
+            <span class="neo-subheading">{{ t('projects.fields.challenges') }}</span>
             <textarea v-model="editor.challenges" class="neo-textarea" />
           </label>
 
           <label class="space-y-2">
-            <span class="neo-subheading">trade-off</span>
+            <span class="neo-subheading">{{ t('projects.fields.tradeoffs') }}</span>
             <textarea v-model="editor.tradeoffs" class="neo-textarea" />
           </label>
 
           <label class="space-y-2">
-            <span class="neo-subheading">ownership 点</span>
+            <span class="neo-subheading">{{ t('projects.fields.ownership') }}</span>
             <textarea v-model="editor.ownership_points" class="neo-textarea" />
           </label>
 
           <label class="space-y-2">
-            <span class="neo-subheading">可追问点</span>
+            <span class="neo-subheading">{{ t('projects.fields.followups') }}</span>
             <textarea v-model="editor.followup_points" class="neo-textarea" />
           </label>
 
           <button class="neo-button-dark" type="submit" :disabled="isUpdating">
-            {{ isUpdating ? '保存中...' : '保存项目画像' }}
+            {{ isUpdating ? t('common.saving') : t('projects.saveAction') }}
           </button>
         </form>
       </div>
@@ -92,12 +94,15 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, reactive, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 import { importProject, listProjects, updateProject, type ProjectProfile } from '../api/client';
+import { formatImportStatusLabel } from '../lib/labels';
 
 const queryClient = useQueryClient();
 const repoUrl = ref('');
 const selectedProjectId = ref('');
+const { t } = useI18n();
 
 const editor = reactive({
   name: '',
@@ -177,13 +182,14 @@ function selectProject(projectId: string) {
 }
 
 function submitImport() {
-  importMutation.mutate(repoUrl.value);
+  mutationGuard(repoUrl.value, () => importMutation.mutate(repoUrl.value));
 }
 
 function submitUpdate() {
   if (!selectedProject.value) {
     return;
   }
+
   updateMutation.mutate({
     projectId: selectedProject.value.id,
     payload: {
@@ -197,5 +203,13 @@ function submitUpdate() {
       followup_points: splitLines(editor.followup_points),
     },
   });
+}
+
+function mutationGuard(value: string, action: () => void) {
+  if (!value.trim()) {
+    return;
+  }
+
+  action();
 }
 </script>
