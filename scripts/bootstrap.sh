@@ -12,6 +12,11 @@ if [ ! -f .env ]; then
   cp .env.example .env
 fi
 
+set -a
+# shellcheck disable=SC1091
+. "./.env"
+set +a
+
 pnpm install
 (
   cd sidecar
@@ -19,7 +24,7 @@ pnpm install
 )
 (
   cd server
-  GOCACHE=/tmp/go-build go test ./...
+  GOCACHE=/tmp/go-build go test -tags sqlite_fts5 ./...
 )
 (
   cd sidecar

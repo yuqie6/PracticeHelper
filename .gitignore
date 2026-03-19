@@ -36,3 +36,11 @@ data/
 # Temporary repo imports
 tmp/
 tmp-repos/
+
+.env
+.env.*
+!.env.example
+
+.tools/
+
+AGENTS.md
