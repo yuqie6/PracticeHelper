@@ -80,6 +80,7 @@ export interface TrainingSessionSummary {
   project_name?: string;
   status: string;
   total_score: number;
+  review_id?: string;
   updated_at: string;
 }
 
@@ -98,6 +99,7 @@ export interface Dashboard {
   profile: UserProfile | null;
   weaknesses: WeaknessTag[];
   recent_sessions: TrainingSessionSummary[];
+  current_session?: TrainingSessionSummary | null;
   today_focus: string;
   recommended_track: string;
   days_until_deadline?: number;

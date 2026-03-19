@@ -52,6 +52,10 @@ a {
     @apply rounded-none border-2 border-black bg-[var(--neo-paper)] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] md:border-4 md:p-6 md:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)];
   }
 
+  .neo-panel-soft {
+    @apply rounded-none border-2 border-black/70 bg-white/80 p-4 md:border-4 md:p-5;
+  }
+
   .neo-button {
     @apply inline-flex items-center justify-center rounded-none border-2 border-black bg-[var(--neo-yellow)] px-4 py-2 text-sm font-extrabold uppercase tracking-[0.08em] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 active:translate-x-1 active:translate-y-1 active:shadow-none md:border-4 md:px-5;
   }
@@ -94,5 +98,9 @@ a {
 
   .neo-kicker {
     @apply mb-2 inline-flex border-2 border-black bg-[var(--neo-blue)] px-2 py-1 text-xs font-black uppercase tracking-[0.08em];
+  }
+
+  .neo-link-card {
+    @apply block border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 md:border-4;
   }
 }

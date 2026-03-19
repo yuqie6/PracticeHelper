@@ -55,16 +55,22 @@ func (s *Service) GetDashboard(ctx context.Context) (*domain.Dashboard, error) {
 		return nil, err
 	}
 
+	currentSession, err := s.repo.GetLatestResumableSession(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	dashboard := &domain.Dashboard{
 		Profile:          profile,
 		Weaknesses:       weaknesses,
 		RecentSessions:   recent,
+		CurrentSession:   currentSession,
 		TodayFocus:       buildTodayFocus(profile, weaknesses),
 		RecommendedTrack: buildRecommendedTrack(profile, weaknesses),
 	}
 
 	if profile != nil && profile.ApplicationDeadline != nil {
-		days := int(time.Until(profile.ApplicationDeadline.UTC()).Hours() / 24)
+		days := daysUntilDeadline(*profile.ApplicationDeadline)
 		if days < 0 {
 			days = 0
 		}
@@ -382,6 +388,15 @@ func mergeWeaknessHits(base []domain.WeaknessHit, extra []domain.WeaknessHit) []
 	result := append([]domain.WeaknessHit{}, base...)
 	result = append(result, extra...)
 	return result
+}
+
+func daysUntilDeadline(deadline time.Time) int {
+	today := time.Now().UTC()
+	todayStart := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+	target := deadline.UTC()
+	targetStart := time.Date(target.Year(), target.Month(), target.Day(), 0, 0, 0, 0, time.UTC)
+
+	return int(targetStart.Sub(todayStart).Hours() / 24)
 }
 
 func newID(prefix string) string {
