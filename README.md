@@ -123,11 +123,23 @@ practicehelper/
     cp .env.example .env
     pnpm install
     cd sidecar && uv sync
-    cd ../server && GOCACHE=/tmp/go-build go test ./...
+    cd ../server && GOCACHE=/tmp/go-build go test -tags sqlite_fts5 ./...
 
 也可以直接跑：
 
     ./scripts/bootstrap.sh
+
+如果希望 sidecar 走真实 agent runtime，而不是启发式兜底，需要在 `.env` 里至少配置：
+
+    PRACTICEHELPER_SIDECAR_MODEL=你的模型名
+    PRACTICEHELPER_SIDECAR_OPENAI_BASE_URL=http://127.0.0.1:3000/v1
+    PRACTICEHELPER_SIDECAR_OPENAI_API_KEY=你的密钥
+
+不配这三项时，仓库分析仍可运行，但出题、评估、复盘会退回启发式逻辑。
+
+如果直接手动运行 Go 服务，请带上 FTS5 编译标签：
+
+    cd server && GOCACHE=/tmp/go-build go run -tags sqlite_fts5 ./cmd/api
 
 本地开发默认端口：
 

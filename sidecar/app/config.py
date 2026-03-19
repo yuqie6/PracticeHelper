@@ -10,6 +10,11 @@ class Settings:
     model: str
     openai_base_url: str
     openai_api_key: str
+    llm_timeout_seconds: float
+
+    @property
+    def llm_enabled(self) -> bool:
+        return bool(self.model and self.openai_base_url and self.openai_api_key)
 
 
 def load_settings() -> Settings:
@@ -18,4 +23,7 @@ def load_settings() -> Settings:
         model=os.getenv("PRACTICEHELPER_SIDECAR_MODEL", "").strip(),
         openai_base_url=os.getenv("PRACTICEHELPER_SIDECAR_OPENAI_BASE_URL", "").strip(),
         openai_api_key=os.getenv("PRACTICEHELPER_SIDECAR_OPENAI_API_KEY", "").strip(),
+        llm_timeout_seconds=float(
+            os.getenv("PRACTICEHELPER_SIDECAR_LLM_TIMEOUT_SECONDS", "45").strip()
+        ),
     )

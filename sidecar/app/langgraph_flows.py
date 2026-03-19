@@ -4,8 +4,8 @@ from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
+from app.agent_runtime import AgentRuntime
 from app.config import Settings
-from app.heuristics import analyze_repo, evaluate_answer, generate_question, generate_review
 from app.schemas import (
     AnalyzeRepoRequest,
     AnalyzeRepoResponse,
@@ -39,17 +39,18 @@ class GenerateReviewState(TypedDict):
 
 
 def build_flows(settings: Settings) -> dict[str, object]:
+    runtime = AgentRuntime(settings)
     return {
-        "analyze_repo": build_analyze_repo_graph(settings),
-        "generate_question": build_generate_question_graph(),
-        "evaluate_answer": build_evaluate_answer_graph(),
-        "generate_review": build_generate_review_graph(),
+        "analyze_repo": build_analyze_repo_graph(runtime),
+        "generate_question": build_generate_question_graph(runtime),
+        "evaluate_answer": build_evaluate_answer_graph(runtime),
+        "generate_review": build_generate_review_graph(runtime),
     }
 
 
-def build_analyze_repo_graph(settings: Settings):
+def build_analyze_repo_graph(runtime: AgentRuntime):
     def run(state: AnalyzeRepoState) -> AnalyzeRepoState:
-        result = analyze_repo(state["request"], settings)
+        result = runtime.analyze_repo(state["request"])
         return {"request": state["request"], "result": AnalyzeRepoResponse.model_validate(result)}
 
     graph = StateGraph(AnalyzeRepoState)
@@ -59,9 +60,9 @@ def build_analyze_repo_graph(settings: Settings):
     return graph.compile()
 
 
-def build_generate_question_graph():
+def build_generate_question_graph(runtime: AgentRuntime):
     def run(state: GenerateQuestionState) -> GenerateQuestionState:
-        result = generate_question(state["request"])
+        result = runtime.generate_question(state["request"])
         return {
             "request": state["request"],
             "result": GenerateQuestionResponse.model_validate(result),
@@ -74,9 +75,9 @@ def build_generate_question_graph():
     return graph.compile()
 
 
-def build_evaluate_answer_graph():
+def build_evaluate_answer_graph(runtime: AgentRuntime):
     def run(state: EvaluateAnswerState) -> EvaluateAnswerState:
-        result = evaluate_answer(state["request"])
+        result = runtime.evaluate_answer(state["request"])
         return {"request": state["request"], "result": EvaluationResult.model_validate(result)}
 
     graph = StateGraph(EvaluateAnswerState)
@@ -86,9 +87,9 @@ def build_evaluate_answer_graph():
     return graph.compile()
 
 
-def build_generate_review_graph():
+def build_generate_review_graph(runtime: AgentRuntime):
     def run(state: GenerateReviewState) -> GenerateReviewState:
-        result = generate_review(state["request"])
+        result = runtime.generate_review(state["request"])
         return {"request": state["request"], "result": ReviewCard.model_validate(result)}
 
     graph = StateGraph(GenerateReviewState)

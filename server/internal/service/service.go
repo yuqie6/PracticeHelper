@@ -75,7 +75,7 @@ func (s *Service) GetDashboard(ctx context.Context) (*domain.Dashboard, error) {
 }
 
 func (s *Service) ImportProject(ctx context.Context, request domain.ProjectImportRequest) (*domain.ProjectProfile, error) {
-	analysis, err := s.sidecar.AnalyzeRepo(ctx, domain.AnalyzeRepoRequest{RepoURL: request.RepoURL})
+	analysis, err := s.sidecar.AnalyzeRepo(ctx, domain.AnalyzeRepoRequest(request))
 	if err != nil {
 		return nil, err
 	}
