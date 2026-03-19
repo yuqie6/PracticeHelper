@@ -6,8 +6,9 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.agent_runtime import AgentRuntime
 from app.config import load_settings
 from app.langgraph_flows import build_flows
 from app.llm_client import ModelClientError
@@ -24,6 +25,7 @@ from app.schemas import (
 
 settings = load_settings()
 logger = logging.getLogger(__name__)
+runtime = AgentRuntime(settings)
 
 
 def configure_logging() -> None:
@@ -99,11 +101,43 @@ def generate_question_endpoint(request: GenerateQuestionRequest) -> GenerateQues
     return flows["generate_question"].invoke({"request": request})["result"]
 
 
+@app.post("/internal/generate_question/stream")
+def generate_question_stream_endpoint(request: GenerateQuestionRequest) -> StreamingResponse:
+    return StreamingResponse(
+        _ndjson_stream(runtime.stream_generate_question(request)),
+        media_type="application/x-ndjson",
+    )
+
+
 @app.post("/internal/evaluate_answer", response_model=EvaluationResult)
 def evaluate_answer_endpoint(request: EvaluateAnswerRequest) -> EvaluationResult:
     return flows["evaluate_answer"].invoke({"request": request})["result"]
 
 
+@app.post("/internal/evaluate_answer/stream")
+def evaluate_answer_stream_endpoint(request: EvaluateAnswerRequest) -> StreamingResponse:
+    return StreamingResponse(
+        _ndjson_stream(runtime.stream_evaluate_answer(request)),
+        media_type="application/x-ndjson",
+    )
+
+
 @app.post("/internal/generate_review", response_model=ReviewCard)
 def generate_review_endpoint(request: GenerateReviewRequest) -> ReviewCard:
     return flows["generate_review"].invoke({"request": request})["result"]
+
+
+@app.post("/internal/generate_review/stream")
+def generate_review_stream_endpoint(request: GenerateReviewRequest) -> StreamingResponse:
+    return StreamingResponse(
+        _ndjson_stream(runtime.stream_generate_review(request)),
+        media_type="application/x-ndjson",
+    )
+
+
+def _ndjson_stream(events):
+    try:
+        for event in events:
+            yield JSONResponse(content=event).body + b"\n"
+    except Exception as exc:
+        yield JSONResponse(content={"type": "error", "message": str(exc)}).body + b"\n"

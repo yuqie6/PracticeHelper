@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -221,6 +221,70 @@ class AgentRuntime:
         )
         return response
 
+    def stream_generate_question(
+        self, request: GenerateQuestionRequest
+    ) -> Iterator[dict[str, Any]]:
+        tools = [
+            RuntimeTool(
+                name="read_question_templates",
+                description="Read curated question templates for basics training.",
+                handler=lambda _: {
+                    "templates": [item.model_dump(mode="json") for item in request.templates],
+                },
+            ),
+            RuntimeTool(
+                name="read_project_brief",
+                description="Read the current project profile for project interview mode.",
+                handler=lambda _: {
+                    "project": request.project.model_dump(mode="json") if request.project else None,
+                },
+            ),
+            RuntimeTool(
+                name="read_context_chunks",
+                description="Read the retrieved repo chunks that can ground follow-up questions.",
+                handler=lambda _: {"chunks": _compact_chunks(request.context_chunks)},
+            ),
+            RuntimeTool(
+                name="read_weakness_memory",
+                description="Read the current weakness memory accumulated from previous sessions.",
+                handler=lambda _: {
+                    "weaknesses": [item.model_dump(mode="json") for item in request.weaknesses],
+                },
+            ),
+        ]
+        system_prompt = """
+你是 PracticeHelper 的真实面试训练 agent。
+
+目标：
+1. 先利用可用工具理解用户当前训练上下文。
+2. 再生成一条有训练价值的主问题，而不是泛泛而谈。
+3. 输出必须是严格 JSON，字段只能是：
+   - question: string
+   - expected_points: string[]
+
+要求：
+- basics 模式优先围绕主题、历史弱项和模板做一条可追问的问题。
+- project 模式必须围绕项目背景、trade-off、ownership 和真实结果。
+- expected_points 控制在 4 到 6 个，必须具体、可判定。
+- 不要输出 Markdown，不要解释，只输出 JSON。
+""".strip()
+        user_prompt = _build_user_prompt(
+            "请生成本轮训练的主问题。",
+            request,
+            response_shape="""
+{
+  "question": "string",
+  "expected_points": ["string"]
+}
+""".strip(),
+        )
+        yield from self._stream_single_shot_task(
+            response_model=GenerateQuestionResponse,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            tools=tools,
+        )
+
     def evaluate_answer(self, request: EvaluateAnswerRequest) -> EvaluationResult:
         started_at = time.perf_counter()
         logger.info(
@@ -298,6 +362,70 @@ class AgentRuntime:
         )
         return response
 
+    def stream_evaluate_answer(
+        self, request: EvaluateAnswerRequest
+    ) -> Iterator[dict[str, Any]]:
+        tools = [
+            RuntimeTool(
+                name="read_evaluation_context",
+                description=(
+                    "Read the question, expected points, answer, and project context for scoring."
+                ),
+                handler=lambda _: {
+                    "mode": request.mode,
+                    "topic": request.topic,
+                    "question": request.question,
+                    "expected_points": request.expected_points,
+                    "answer": request.answer,
+                    "project": request.project.model_dump(mode="json") if request.project else None,
+                    "context_chunks": _compact_chunks(request.context_chunks),
+                    "is_followup": request.is_followup,
+                },
+            ),
+        ]
+        system_prompt = """
+你是 PracticeHelper 的追问型面试官 agent。
+
+任务：
+1. 结合工具返回的上下文，对回答做结构化评估。
+2. 分清楚回答覆盖了什么、缺了什么、哪里虚、下一刀该追问哪里。
+3. 输出必须是严格 JSON，字段只能是：
+   - score: number (0-100)
+   - score_breakdown: object<string, number>
+   - strengths: string[]
+   - gaps: string[]
+   - followup_question: string
+   - followup_expected_points: string[]
+   - weakness_hits: [{"kind": string, "label": string, "severity": number}]
+
+要求：
+- strengths 和 gaps 要具体，不要写空话。
+- 非 followup 回答时必须给一条追问问题；followup 回答时 followup_question 置空。
+- weakness_hits 最多 3 条，severity 在 0 到 1.5 之间。
+- 不要输出 Markdown，不要解释，只输出 JSON。
+""".strip()
+        user_prompt = _build_user_prompt(
+            "请评估这次回答，并决定下一刀追问。",
+            request,
+            response_shape="""
+{
+  "score": 0,
+  "score_breakdown": {"维度": 0},
+  "strengths": ["string"],
+  "gaps": ["string"],
+  "followup_question": "string",
+  "followup_expected_points": ["string"],
+  "weakness_hits": [{"kind": "topic", "label": "redis", "severity": 0.6}]
+}
+""".strip(),
+        )
+        yield from self._stream_single_shot_task(
+            response_model=EvaluationResult,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            tools=tools,
+        )
+
     def generate_review(self, request: GenerateReviewRequest) -> ReviewCard:
         started_at = time.perf_counter()
         logger.info("generate_review started session_id=%s", request.session.id)
@@ -364,6 +492,67 @@ class AgentRuntime:
             (time.perf_counter() - started_at) * 1000,
         )
         return response
+
+    def stream_generate_review(
+        self, request: GenerateReviewRequest
+    ) -> Iterator[dict[str, Any]]:
+        tools = [
+            RuntimeTool(
+                name="read_session_summary",
+                description="Read the current session summary and project summary if available.",
+                handler=lambda _: {
+                    "session": request.session.model_dump(mode="json"),
+                    "project": request.project.model_dump(mode="json") if request.project else None,
+                },
+            ),
+            RuntimeTool(
+                name="read_turn_history",
+                description="Read all turns, including evaluations and follow-up evaluations.",
+                handler=lambda _: {
+                    "turns": [turn.model_dump(mode="json") for turn in request.turns],
+                },
+            ),
+        ]
+        system_prompt = """
+你是 PracticeHelper 的复盘 agent。
+
+任务：
+1. 阅读整轮训练历史，输出一张真正可执行的 review card。
+2. 重点总结：整体判断、亮点、漏洞、建议主题、下一轮重点。
+3. 输出必须是严格 JSON，字段只能是：
+   - overall: string
+   - highlights: string[]
+   - gaps: string[]
+   - suggested_topics: string[]
+   - next_training_focus: string[]
+   - score_breakdown: object<string, number>
+
+要求：
+- overall 要像一个严厉但有帮助的教练总结。
+- highlights 和 gaps 都要尽量去重且具体。
+- next_training_focus 要能直接拿去开始下一轮训练。
+- 不要输出 Markdown，不要解释，只输出 JSON。
+""".strip()
+        user_prompt = _build_user_prompt(
+            "请根据整轮训练历史生成最终复盘卡。",
+            request,
+            response_shape="""
+{
+  "overall": "string",
+  "highlights": ["string"],
+  "gaps": ["string"],
+  "suggested_topics": ["string"],
+  "next_training_focus": ["string"],
+  "score_breakdown": {"维度": 0}
+}
+""".strip(),
+        )
+        yield from self._stream_single_shot_task(
+            response_model=ReviewCard,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            tools=tools,
+        )
 
     def _run_task(
         self,
@@ -485,6 +674,60 @@ class AgentRuntime:
             raise ModelClientError("model returned empty content in single-shot mode")
         return _validate_json_response(result.content, response_model)
 
+    def _stream_single_shot_task(
+        self,
+        *,
+        response_model: type[BaseModel],
+        system_prompt: str,
+        user_prompt: str,
+        tools: list[RuntimeTool],
+    ) -> Iterator[dict[str, Any]]:
+        model_client = self._require_model_client()
+
+        yield {"type": "phase", "phase": "prepare_context"}
+        context_dump: dict[str, Any] = {}
+        for tool in tools:
+            context_dump[tool.name] = tool.handler({})
+            yield {"type": "context", "name": tool.name}
+            summary = _tool_summary(tool.name)
+            if summary:
+                yield {"type": "reasoning", "text": summary}
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": (
+                    f"{user_prompt}\n\n"
+                    "下面是你已经可以直接使用的上下文，请在此基础上直接输出最终 JSON：\n"
+                    f"{json.dumps(context_dump, ensure_ascii=False, indent=2)}"
+                ),
+            },
+        ]
+
+        yield {"type": "phase", "phase": "call_model"}
+        chunks: list[str] = []
+        try:
+            for chunk in model_client.create_completion_stream(messages=messages):
+                if chunk.reasoning:
+                    yield {"type": "reasoning", "text": chunk.reasoning}
+                if chunk.content:
+                    chunks.append(chunk.content)
+                    yield {"type": "content", "text": chunk.content}
+        except ModelClientError:
+            result = model_client.create_completion(messages=messages)
+            if result.content:
+                chunks.append(result.content)
+                yield {"type": "content", "text": result.content}
+
+        yield {"type": "phase", "phase": "parse_result"}
+        text = "".join(chunks).strip()
+        if not text:
+            raise ModelClientError("model returned empty content in streaming mode")
+
+        result_model = _validate_json_response(text, response_model)
+        yield {"type": "result", "data": result_model.model_dump(mode="json")}
+
     def _require_model_client(self) -> OpenAICompatibleModelClient:
         if self._model_client is None:
             raise ModelClientError(
@@ -577,3 +820,18 @@ def _parse_tool_arguments(tool_call: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise ValueError(f"tool arguments must be an object: {raw}")
     return parsed
+
+
+def _tool_summary(tool_name: str) -> str:
+    summaries = {
+        "read_question_templates": "已读取基础题模板，正在挑选更适合当前训练目标的问题。",
+        "read_project_brief": "已读取项目摘要与亮点，正在组织更贴近真实项目的问题。",
+        "read_context_chunks": "已读取源码与文档片段，正在结合具体上下文生成内容。",
+        "read_weakness_memory": "已读取历史薄弱点，正在优先围绕弱项组织训练内容。",
+        "read_evaluation_context": "已读取题目、答案与上下文，正在对照关键点评估回答。",
+        "read_session_summary": "已读取整轮训练摘要，正在整理复盘主线。",
+        "read_turn_history": "已读取所有问答记录，正在归纳亮点、漏洞和下一步建议。",
+        "read_repo_overview": "已读取仓库概览，正在判断项目主线与技术栈。",
+        "read_repo_chunks": "已读取关键源码片段，正在提炼项目亮点与难点。",
+    }
+    return summaries.get(tool_name, "")

@@ -198,6 +198,15 @@ type SubmitAnswerRequest struct {
 	Answer string `json:"answer" binding:"required"`
 }
 
+type StreamEvent struct {
+	Type    string `json:"type"`
+	Phase   string `json:"phase,omitempty"`
+	Name    string `json:"name,omitempty"`
+	Text    string `json:"text,omitempty"`
+	Message string `json:"message,omitempty"`
+	Data    any    `json:"data,omitempty"`
+}
+
 type AnalyzeRepoRequest struct {
 	RepoURL string `json:"repo_url"`
 }

@@ -184,6 +184,87 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 	return s.repo.GetSession(ctx, session.ID)
 }
 
+func (s *Service) CreateSessionStream(
+	ctx context.Context,
+	request domain.CreateSessionRequest,
+	emit func(domain.StreamEvent) error,
+) (*domain.TrainingSession, error) {
+	if request.Mode != domain.ModeBasics && request.Mode != domain.ModeProject {
+		return nil, ErrInvalidMode
+	}
+
+	startedAt := time.Now().UTC()
+	session := &domain.TrainingSession{
+		ID:         newID("sess"),
+		Mode:       request.Mode,
+		Topic:      strings.TrimSpace(strings.ToLower(request.Topic)),
+		ProjectID:  request.ProjectID,
+		Intensity:  request.Intensity,
+		Status:     domain.StatusWaitingAnswer,
+		TotalScore: 0,
+		StartedAt:  &startedAt,
+	}
+
+	weaknesses, err := s.repo.ListWeaknesses(ctx, 5)
+	if err != nil {
+		return nil, err
+	}
+
+	generateRequest := domain.GenerateQuestionRequest{
+		Mode:       request.Mode,
+		Topic:      session.Topic,
+		Intensity:  request.Intensity,
+		Weaknesses: weaknesses,
+	}
+
+	switch request.Mode {
+	case domain.ModeBasics:
+		templates, err := s.repo.ListQuestionTemplatesByTopic(ctx, session.Topic)
+		if err != nil {
+			return nil, err
+		}
+		generateRequest.Templates = templates
+	case domain.ModeProject:
+		project, err := s.repo.GetProject(ctx, request.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		if project == nil {
+			return nil, ErrProjectNotFound
+		}
+		session.Project = project
+		generateRequest.Project = project
+		query := strings.Join(append(project.FollowupPoints, project.Summary), " ")
+		chunks, err := s.repo.SearchProjectChunks(ctx, project.ID, query, 6)
+		if err != nil {
+			return nil, err
+		}
+		generateRequest.ContextChunks = chunks
+	default:
+		return nil, ErrInvalidMode
+	}
+
+	question, err := s.sidecar.GenerateQuestionStream(ctx, generateRequest, emit)
+	if err != nil {
+		return nil, err
+	}
+
+	turn := &domain.TrainingTurn{
+		ID:             newID("turn"),
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       question.Question,
+		ExpectedPoints: question.ExpectedPoints,
+	}
+
+	if err := s.repo.CreateSession(ctx, session, turn); err != nil {
+		return nil, err
+	}
+
+	return s.repo.GetSession(ctx, session.ID)
+}
+
 func (s *Service) SubmitAnswer(ctx context.Context, sessionID string, request domain.SubmitAnswerRequest) (*domain.TrainingSession, error) {
 	session, err := s.repo.GetSession(ctx, sessionID)
 	if err != nil {
@@ -289,6 +370,165 @@ func (s *Service) SubmitAnswer(ctx context.Context, sessionID string, request do
 			Project: updatedSession.Project,
 			Turns:   updatedSession.Turns,
 		})
+		if err != nil {
+			return nil, err
+		}
+
+		review.ID = newID("review")
+		review.SessionID = updatedSession.ID
+		if err := s.repo.CreateReview(ctx, review); err != nil {
+			return nil, err
+		}
+
+		endedAt := time.Now().UTC()
+		updatedSession.ReviewID = review.ID
+		updatedSession.Status = domain.StatusCompleted
+		updatedSession.EndedAt = &endedAt
+		if err := s.repo.SaveSession(ctx, updatedSession); err != nil {
+			return nil, err
+		}
+
+		if evaluation.Score >= 75 {
+			_ = s.coolDownSessionWeakness(ctx, updatedSession, evaluation.WeaknessHits)
+		}
+	default:
+		return nil, fmt.Errorf("session in status %s cannot accept answers", session.Status)
+	}
+
+	return s.repo.GetSession(ctx, session.ID)
+}
+
+func (s *Service) SubmitAnswerStream(
+	ctx context.Context,
+	sessionID string,
+	request domain.SubmitAnswerRequest,
+	emit func(domain.StreamEvent) error,
+) (*domain.TrainingSession, error) {
+	session, err := s.repo.GetSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if session == nil {
+		return nil, ErrSessionNotFound
+	}
+	if len(session.Turns) == 0 {
+		return nil, fmt.Errorf("session %s has no turns", sessionID)
+	}
+
+	turn := session.Turns[len(session.Turns)-1]
+	previousStatus := session.Status
+
+	switch session.Status {
+	case domain.StatusWaitingAnswer, domain.StatusActive:
+		contextChunks, err := s.lookupSessionContext(ctx, session)
+		if err != nil {
+			return nil, err
+		}
+
+		session.Status = domain.StatusEvaluating
+		if err := s.repo.SaveSession(ctx, session); err != nil {
+			return nil, err
+		}
+
+		evaluation, err := s.sidecar.EvaluateAnswerStream(ctx, domain.EvaluateAnswerRequest{
+			Mode:           session.Mode,
+			Topic:          session.Topic,
+			Project:        session.Project,
+			Question:       turn.Question,
+			ExpectedPoints: turn.ExpectedPoints,
+			Answer:         request.Answer,
+			ContextChunks:  contextChunks,
+			IsFollowup:     false,
+		}, emit)
+		if err != nil {
+			session.Status = previousStatus
+			_ = s.repo.SaveSession(ctx, session)
+			return nil, err
+		}
+
+		turn.Answer = request.Answer
+		turn.Evaluation = evaluation
+		turn.FollowupQuestion = evaluation.FollowupQuestion
+		turn.FollowupExpectedPoint = evaluation.FollowupPoints
+		turn.WeaknessHits = mergeWeaknessHits(turn.WeaknessHits, evaluation.WeaknessHits)
+
+		if err := s.repo.SaveTurn(ctx, &turn); err != nil {
+			session.Status = previousStatus
+			_ = s.repo.SaveSession(ctx, session)
+			return nil, err
+		}
+		if err := s.repo.UpsertWeaknesses(ctx, session.ID, evaluation.WeaknessHits); err != nil {
+			session.Status = previousStatus
+			_ = s.repo.SaveSession(ctx, session)
+			return nil, err
+		}
+
+		session.Status = domain.StatusFollowup
+		session.TotalScore = evaluation.Score
+		if err := s.repo.SaveSession(ctx, session); err != nil {
+			return nil, err
+		}
+
+		if evaluation.Score >= 75 {
+			_ = s.coolDownSessionWeakness(ctx, session, evaluation.WeaknessHits)
+		}
+	case domain.StatusFollowup:
+		contextChunks, err := s.lookupSessionContext(ctx, session)
+		if err != nil {
+			return nil, err
+		}
+
+		session.Status = domain.StatusEvaluating
+		if err := s.repo.SaveSession(ctx, session); err != nil {
+			return nil, err
+		}
+
+		evaluation, err := s.sidecar.EvaluateAnswerStream(ctx, domain.EvaluateAnswerRequest{
+			Mode:           session.Mode,
+			Topic:          session.Topic,
+			Project:        session.Project,
+			Question:       turn.FollowupQuestion,
+			ExpectedPoints: turn.FollowupExpectedPoint,
+			Answer:         request.Answer,
+			ContextChunks:  contextChunks,
+			IsFollowup:     true,
+		}, emit)
+		if err != nil {
+			session.Status = previousStatus
+			_ = s.repo.SaveSession(ctx, session)
+			return nil, err
+		}
+
+		turn.FollowupAnswer = request.Answer
+		turn.FollowupEvaluation = evaluation
+		turn.WeaknessHits = mergeWeaknessHits(turn.WeaknessHits, evaluation.WeaknessHits)
+
+		if err := s.repo.SaveTurn(ctx, &turn); err != nil {
+			session.Status = previousStatus
+			_ = s.repo.SaveSession(ctx, session)
+			return nil, err
+		}
+		if err := s.repo.UpsertWeaknesses(ctx, session.ID, evaluation.WeaknessHits); err != nil {
+			session.Status = previousStatus
+			_ = s.repo.SaveSession(ctx, session)
+			return nil, err
+		}
+
+		session.Status = domain.StatusReviewPending
+		session.TotalScore = math.Round(((session.TotalScore+evaluation.Score)/2)*10) / 10
+		if err := s.repo.SaveSession(ctx, session); err != nil {
+			return nil, err
+		}
+
+		updatedSession, err := s.repo.GetSession(ctx, session.ID)
+		if err != nil {
+			return nil, err
+		}
+		review, err := s.sidecar.GenerateReviewStream(ctx, domain.GenerateReviewRequest{
+			Session: updatedSession,
+			Project: updatedSession.Project,
+			Turns:   updatedSession.Turns,
+		}, emit)
 		if err != nil {
 			return nil, err
 		}

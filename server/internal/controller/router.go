@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -42,8 +43,10 @@ func NewRouter(svc *service.Service) *gin.Engine {
 		api.PATCH("/projects/:id", handler.updateProject)
 
 		api.POST("/sessions", handler.createSession)
+		api.POST("/sessions/stream", handler.createSessionStream)
 		api.GET("/sessions/:id", handler.getSession)
 		api.POST("/sessions/:id/answer", handler.submitAnswer)
+		api.POST("/sessions/:id/answer/stream", handler.submitAnswerStream)
 
 		api.GET("/reviews/:id", handler.getReview)
 		api.GET("/weaknesses", handler.listWeaknesses)
@@ -165,6 +168,18 @@ func (h *Handler) createSession(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"data": data})
 }
 
+func (h *Handler) createSessionStream(c *gin.Context) {
+	var request domain.CreateSessionRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	streamJSON(c, http.StatusCreated, func(emit func(domain.StreamEvent) error) (any, error) {
+		return h.service.CreateSessionStream(c.Request.Context(), request, emit)
+	})
+}
+
 func (h *Handler) getSession(c *gin.Context) {
 	data, err := h.service.GetSession(c.Request.Context(), c.Param("id"))
 	if err != nil {
@@ -197,6 +212,18 @@ func (h *Handler) submitAnswer(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) submitAnswerStream(c *gin.Context) {
+	var request domain.SubmitAnswerRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	streamJSON(c, http.StatusOK, func(emit func(domain.StreamEvent) error) (any, error) {
+		return h.service.SubmitAnswerStream(c.Request.Context(), c.Param("id"), request, emit)
+	})
 }
 
 func (h *Handler) getReview(c *gin.Context) {
@@ -274,4 +301,38 @@ func writeError(c *gin.Context, status int, err error) {
 			"message": err.Error(),
 		},
 	})
+}
+
+func streamJSON(
+	c *gin.Context,
+	status int,
+	run func(emit func(domain.StreamEvent) error) (any, error),
+) {
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		writeError(c, http.StatusInternalServerError, errors.New("streaming is not supported"))
+		return
+	}
+
+	c.Status(status)
+	c.Header("Content-Type", "application/x-ndjson")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("X-Accel-Buffering", "no")
+
+	encoder := json.NewEncoder(c.Writer)
+	emit := func(event domain.StreamEvent) error {
+		if err := encoder.Encode(event); err != nil {
+			return err
+		}
+		flusher.Flush()
+		return nil
+	}
+
+	result, err := run(emit)
+	if err != nil {
+		_ = emit(domain.StreamEvent{Type: "error", Message: err.Error()})
+		return
+	}
+
+	_ = emit(domain.StreamEvent{Type: "result", Data: result})
 }
