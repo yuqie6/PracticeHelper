@@ -312,7 +312,7 @@ func (s *Store) CreateImportedProject(ctx context.Context, analysis *domain.Anal
 	if err != nil {
 		return nil, fmt.Errorf("begin create project: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO project_profiles (
@@ -370,7 +370,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]domain.ProjectProfile, erro
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	projects := make([]domain.ProjectProfile, 0)
 	for rows.Next() {
@@ -449,7 +449,7 @@ func (s *Store) SearchProjectChunks(ctx context.Context, projectID, query string
 	if err != nil {
 		return nil, fmt.Errorf("search project chunks: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	chunks := make([]domain.RepoChunk, 0)
 	for rows.Next() {
@@ -473,7 +473,7 @@ func (s *Store) ListQuestionTemplatesByTopic(ctx context.Context, topic string) 
 	if err != nil {
 		return nil, fmt.Errorf("list question templates: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	templates := make([]domain.QuestionTemplate, 0)
 	for rows.Next() {
@@ -492,7 +492,7 @@ func (s *Store) CreateSession(ctx context.Context, session *domain.TrainingSessi
 	if err != nil {
 		return fmt.Errorf("begin create session: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO training_sessions (id, mode, topic, project_id, intensity, status, total_score, started_at, ended_at, review_id, created_at, updated_at)
@@ -562,7 +562,7 @@ func (s *Store) ListTurns(ctx context.Context, sessionID string) ([]domain.Train
 	if err != nil {
 		return nil, fmt.Errorf("list turns: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	turns := make([]domain.TrainingTurn, 0)
 	for rows.Next() {
@@ -731,7 +731,7 @@ func (s *Store) ListWeaknesses(ctx context.Context, limit int) ([]domain.Weaknes
 	if err != nil {
 		return nil, fmt.Errorf("list weaknesses: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	items := make([]domain.WeaknessTag, 0)
 	for rows.Next() {
@@ -760,7 +760,7 @@ func (s *Store) ListRecentSessions(ctx context.Context, limit int) ([]domain.Tra
 	if err != nil {
 		return nil, fmt.Errorf("list recent sessions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	items := make([]domain.TrainingSessionSummary, 0)
 	for rows.Next() {
@@ -1086,7 +1086,7 @@ func newID(prefix string) string {
 
 func buildFTSQuery(raw string) string {
 	parts := strings.FieldsFunc(strings.ToLower(raw), func(r rune) bool {
-		return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r >= 'A' && r <= 'Z' || r > 127)
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9') && (r < 'A' || r > 'Z') && r <= 127
 	})
 	filtered := make([]string, 0, len(parts))
 	for _, part := range parts {

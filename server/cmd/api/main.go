@@ -22,7 +22,7 @@ func main() {
 		logger.Error("open store failed", "error", err)
 		os.Exit(1)
 	}
-	defer repository.Close()
+	defer func() { _ = repository.Close() }()
 
 	sidecarClient := sidecar.New(cfg.SidecarURL, cfg.SidecarTimeout)
 	svc := service.New(repository, sidecarClient)

@@ -79,7 +79,7 @@ func (c *Client) postJSON(ctx context.Context, path string, requestBody any, tar
 	if err != nil {
 		return fmt.Errorf("call sidecar: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	if response.StatusCode >= http.StatusBadRequest {
 		return fmt.Errorf("sidecar returned status %d", response.StatusCode)
