@@ -13,6 +13,7 @@ from app.schemas import (
     EvaluateAnswerRequest,
     GenerateQuestionRequest,
     ProjectProfile,
+    WeaknessHit,
 )
 
 
@@ -114,3 +115,19 @@ def test_analyze_repo_requires_llm_when_no_model_client_is_configured() -> None:
 
     with pytest.raises(ModelClientError):
         runtime.analyze_repo(AnalyzeRepoRequest(repo_url="https://github.com/example/repo"))
+
+
+@pytest.mark.parametrize(
+    ("raw_kind", "expected_kind"),
+    [
+        ("topic", "topic"),
+        ("followup-breakdown", "followup_breakdown"),
+        ("communication", "expression"),
+        ("depth", "depth"),
+        ("detail", "detail"),
+    ],
+)
+def test_weakness_hit_normalizes_supported_kinds(raw_kind: str, expected_kind: str) -> None:
+    hit = WeaknessHit(kind=raw_kind, label="coverage", severity=0.6)
+
+    assert hit.kind == expected_kind

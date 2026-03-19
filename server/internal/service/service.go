@@ -605,7 +605,7 @@ func (s *Service) coolDownSessionWeakness(ctx context.Context, session *domain.T
 
 func buildTodayFocus(profile *domain.UserProfile, weaknesses []domain.WeaknessTag) string {
 	if len(weaknesses) > 0 {
-		return fmt.Sprintf("今天优先补 %s：%s", weaknesses[0].Kind, weaknesses[0].Label)
+		return fmt.Sprintf("今天优先补 %s：%s", formatWeaknessKindLabel(weaknesses[0].Kind), weaknesses[0].Label)
 	}
 
 	if profile != nil && len(profile.PrimaryProjects) > 0 {
@@ -623,7 +623,13 @@ func buildRecommendedTrack(profile *domain.UserProfile, weaknesses []domain.Weak
 		case "project":
 			return fmt.Sprintf("%s 项目专项", weaknesses[0].Label)
 		case "expression":
-			return "项目表达专项"
+			return "表达方式专项"
+		case "followup_breakdown":
+			return "追问抗压专项"
+		case "depth":
+			return "展开深挖专项"
+		case "detail":
+			return "细节补强专项"
 		default:
 			return "追问抗压专项"
 		}
@@ -640,6 +646,25 @@ func mergeWeaknessHits(base []domain.WeaknessHit, extra []domain.WeaknessHit) []
 	result := append([]domain.WeaknessHit{}, base...)
 	result = append(result, extra...)
 	return result
+}
+
+func formatWeaknessKindLabel(kind string) string {
+	switch kind {
+	case "topic":
+		return "知识点"
+	case "project":
+		return "项目表达"
+	case "expression":
+		return "表达方式"
+	case "followup_breakdown":
+		return "追问应对"
+	case "depth":
+		return "展开深度"
+	case "detail":
+		return "细节支撑"
+	default:
+		return kind
+	}
 }
 
 func daysUntilDeadline(deadline time.Time) int {

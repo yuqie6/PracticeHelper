@@ -330,6 +330,8 @@ class AgentRuntime:
 - strengths 和 gaps 要具体，不要写空话。
 - 非 followup 回答时必须给一条追问问题；followup 回答时 followup_question 置空。
 - weakness_hits 最多 3 条，severity 在 0 到 1.5 之间。
+- weakness_hits.kind 只能使用
+  topic / project / expression / followup_breakdown / depth / detail 之一。
 - 不要输出 Markdown，不要解释，只输出 JSON。
 """.strip()
         user_prompt = _build_user_prompt(
@@ -402,6 +404,8 @@ class AgentRuntime:
 - strengths 和 gaps 要具体，不要写空话。
 - 非 followup 回答时必须给一条追问问题；followup 回答时 followup_question 置空。
 - weakness_hits 最多 3 条，severity 在 0 到 1.5 之间。
+- weakness_hits.kind 只能使用
+  topic / project / expression / followup_breakdown / depth / detail 之一。
 - 不要输出 Markdown，不要解释，只输出 JSON。
 """.strip()
         user_prompt = _build_user_prompt(

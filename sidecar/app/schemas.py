@@ -2,7 +2,20 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+WeaknessKind = Literal["topic", "project", "expression", "followup_breakdown", "depth", "detail"]
+
+
+def _normalize_weakness_kind(value: str) -> str:
+    normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "communication": "expression",
+        "followup": "followup_breakdown",
+        "follow_up": "followup_breakdown",
+        "followupbreakdown": "followup_breakdown",
+    }
+    return aliases.get(normalized, normalized)
 
 
 class RepoChunk(BaseModel):
@@ -32,19 +45,29 @@ class ProjectProfile(BaseModel):
 
 
 class WeaknessHit(BaseModel):
-    kind: Literal["topic", "project", "expression", "followup_breakdown"]
+    kind: WeaknessKind
     label: str
     severity: float = Field(default=0.4, ge=0.0, le=1.5)
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def normalize_kind(cls, value: str) -> str:
+        return _normalize_weakness_kind(value)
 
 
 class WeaknessTag(BaseModel):
     id: str = ""
-    kind: str
+    kind: WeaknessKind
     label: str
     severity: float = Field(default=0.4, ge=0.0, le=1.5)
     frequency: int = 1
     last_seen_at: str = ""
     evidence_session_id: str = ""
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def normalize_kind(cls, value: str) -> str:
+        return _normalize_weakness_kind(value)
 
 
 class QuestionTemplate(BaseModel):
