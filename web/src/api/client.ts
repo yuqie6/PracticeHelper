@@ -255,6 +255,12 @@ export function listImportJobs(): Promise<ProjectImportJob[]> {
   return request('/api/import-jobs');
 }
 
+export function retryImportJob(jobId: string): Promise<ProjectImportJob> {
+  return request(`/api/import-jobs/${jobId}/retry`, {
+    method: 'POST',
+  });
+}
+
 export function listProjects(): Promise<ProjectProfile[]> {
   return request('/api/projects');
 }

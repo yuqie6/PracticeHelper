@@ -25,6 +25,13 @@
       :message="importError"
     />
 
+    <NoticePanel
+      v-if="retryError"
+      tone="error"
+      :title="t('projects.retryErrorTitle')"
+      :message="retryError"
+    />
+
     <div class="neo-panel space-y-3">
       <p class="neo-kicker bg-[var(--neo-blue)]">{{ t('projects.jobsTitle') }}</p>
       <div v-if="importJobs.length" class="space-y-3">
@@ -60,6 +67,15 @@
             @click="selectProject(job.project_id)"
           >
             {{ t('projects.openProject') }}
+          </button>
+          <button
+            v-if="job.status === 'failed'"
+            type="button"
+            class="neo-button-red"
+            :disabled="isRetrying"
+            @click="retryJob(job.id)"
+          >
+            {{ isRetrying ? t('common.starting') : t('projects.retryAction') }}
           </button>
         </article>
       </div>
@@ -154,6 +170,7 @@ import {
   importProject,
   listImportJobs,
   listProjects,
+  retryImportJob,
   updateProject,
   type ProjectImportJob,
   type ProjectProfile,
@@ -169,6 +186,7 @@ const queryClient = useQueryClient();
 const repoUrl = ref('');
 const selectedProjectId = ref('');
 const importError = ref('');
+const retryError = ref('');
 const saveError = ref('');
 const { t } = useI18n();
 
@@ -256,6 +274,17 @@ const importMutation = useMutation({
   },
 });
 
+const retryMutation = useMutation({
+  mutationFn: retryImportJob,
+  onSuccess: async () => {
+    retryError.value = '';
+    await queryClient.invalidateQueries({ queryKey: ['import-jobs'] });
+  },
+  onError: (error) => {
+    retryError.value = error instanceof Error ? error.message : t('common.requestFailed');
+  },
+});
+
 const updateMutation = useMutation({
   mutationFn: ({ projectId, payload }: { projectId: string; payload: Partial<ProjectProfile> }) =>
     updateProject(projectId, payload),
@@ -269,6 +298,7 @@ const updateMutation = useMutation({
 });
 
 const isImporting = computed(() => importMutation.isPending.value);
+const isRetrying = computed(() => retryMutation.isPending.value);
 const isUpdating = computed(() => updateMutation.isPending.value);
 
 function splitLines(value: string): string[] {
@@ -287,6 +317,11 @@ function selectProject(projectId: string) {
 function submitImport() {
   importError.value = '';
   mutationGuard(repoUrl.value, () => importMutation.mutate(repoUrl.value));
+}
+
+function retryJob(jobId: string) {
+  retryError.value = '';
+  retryMutation.mutate(jobId);
 }
 
 function submitUpdate() {

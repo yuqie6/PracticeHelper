@@ -4,6 +4,7 @@ export const messages = {
       name: 'PracticeHelper',
       title: '面试训练助手',
       language: '语言',
+      importNotice: '后台正在导入项目：{stage}',
       locales: {
         zhCN: '中文',
         en: 'English',
@@ -172,6 +173,8 @@ export const messages = {
       importPlaceholder: 'https://github.com/yourname/your-project',
       importAction: '导入仓库',
       importErrorTitle: '导入失败',
+      retryAction: '重试导入',
+      retryErrorTitle: '重试失败',
       jobsTitle: '后台导入任务',
       jobsEmpty: '还没有导入任务。提交仓库后，这里会显示后台进度。',
       jobRepo: '仓库地址',
@@ -305,6 +308,7 @@ export const messages = {
       name: 'PracticeHelper',
       title: 'Interview Practice Assistant',
       language: 'Language',
+      importNotice: 'Background import running: {stage}',
       locales: {
         zhCN: 'Chinese',
         en: 'English',
@@ -475,6 +479,8 @@ export const messages = {
       importPlaceholder: 'https://github.com/yourname/your-project',
       importAction: 'Import repository',
       importErrorTitle: 'Import failed',
+      retryAction: 'Retry import',
+      retryErrorTitle: 'Retry failed',
       jobsTitle: 'Background import jobs',
       jobsEmpty: 'No import jobs yet. Submit a repository to see progress here.',
       jobRepo: 'Repository',
