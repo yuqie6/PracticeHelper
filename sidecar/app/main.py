@@ -57,26 +57,22 @@ async def log_requests(request: Request, call_next):
         response = await call_next(request)
     except Exception:
         logger.exception(
-            "sidecar request failed",
-            extra={
-                "request_id": request_id,
-                "method": request.method,
-                "path": request.url.path,
-            },
+            "sidecar request failed request_id=%s method=%s path=%s",
+            request_id,
+            request.method,
+            request.url.path,
         )
         raise
 
     duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
     response.headers["X-Request-ID"] = request_id
     logger.info(
-        "sidecar request completed",
-        extra={
-            "request_id": request_id,
-            "method": request.method,
-            "path": request.url.path,
-            "status_code": response.status_code,
-            "duration_ms": duration_ms,
-        },
+        "sidecar request completed request_id=%s method=%s path=%s status=%s duration_ms=%.2f",
+        request_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
     )
     return response
 
