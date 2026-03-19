@@ -6,22 +6,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.config import Settings
-from app.heuristics import (
-    analyze_repo,
-)
-from app.heuristics import (
-    evaluate_answer as heuristic_evaluate_answer,
-)
-from app.heuristics import (
-    generate_question as heuristic_generate_question,
-)
-from app.heuristics import (
-    generate_review as heuristic_generate_review,
-)
 from app.llm_client import ModelClientError, OpenAICompatibleModelClient
+from app.repo_context import RepoAnalysisBundle, collect_repo_analysis_bundle
 from app.schemas import (
     AnalyzeRepoRequest,
     AnalyzeRepoResponse,
@@ -35,6 +24,15 @@ from app.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class AnalyzeRepoDraft(BaseModel):
+    summary: str
+    highlights: list[str] = Field(default_factory=list)
+    challenges: list[str] = Field(default_factory=list)
+    tradeoffs: list[str] = Field(default_factory=list)
+    ownership_points: list[str] = Field(default_factory=list)
+    followup_points: list[str] = Field(default_factory=list)
 
 
 def _empty_parameters() -> dict[str, Any]:
@@ -72,12 +70,78 @@ class AgentRuntime:
             self._model_client = OpenAICompatibleModelClient(settings)
 
     def analyze_repo(self, request: AnalyzeRepoRequest) -> AnalyzeRepoResponse:
-        return analyze_repo(request, self._settings)
+        self._require_model_client()
+        bundle = collect_repo_analysis_bundle(request, self._settings)
+        tools = [
+            RuntimeTool(
+                name="read_repo_overview",
+                description="Read the repository overview collected from the imported repository.",
+                handler=lambda _: _repo_overview_payload(bundle),
+            ),
+            RuntimeTool(
+                name="read_repo_chunks",
+                description="Read the top repo chunks ranked by importance.",
+                handler=lambda _: {
+                    "chunks": _compact_chunks(bundle.chunks, limit=8, max_chars=520)
+                },
+            ),
+        ]
+        system_prompt = """
+你是 PracticeHelper 的项目导入分析 agent。
+
+任务：
+1. 根据仓库概览和源码/文档片段，生成一份可用于项目面试训练的项目画像。
+2. 你的输出必须真实、克制、可追问，不能只写漂亮话。
+3. 输出必须是严格 JSON，字段只能是：
+   - summary: string
+   - highlights: string[]
+   - challenges: string[]
+   - tradeoffs: string[]
+   - ownership_points: string[]
+   - followup_points: string[]
+
+要求：
+- highlights / challenges / tradeoffs / ownership_points / followup_points 每项给 3 到 6 条。
+- 尽量从工具返回的具体文件和内容里提炼，不要泛化成空话。
+- 如果证据不够，就保守表达，不要脑补。
+- 不要输出 Markdown，不要解释，只输出 JSON。
+""".strip()
+        user_prompt = _build_user_prompt(
+            "请根据当前仓库材料生成项目画像。",
+            request,
+            response_shape="""
+{
+  "summary": "string",
+  "highlights": ["string"],
+  "challenges": ["string"],
+  "tradeoffs": ["string"],
+  "ownership_points": ["string"],
+  "followup_points": ["string"]
+}
+""".strip(),
+        )
+        draft = self._run_task(
+            response_model=AnalyzeRepoDraft,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            tools=tools,
+        )
+        return AnalyzeRepoResponse(
+            repo_url=bundle.repo_url,
+            name=bundle.name,
+            default_branch=bundle.default_branch,
+            import_commit=bundle.import_commit,
+            summary=draft.summary,
+            tech_stack=bundle.tech_stack,
+            highlights=draft.highlights,
+            challenges=draft.challenges,
+            tradeoffs=draft.tradeoffs,
+            ownership_points=draft.ownership_points,
+            followup_points=draft.followup_points,
+            chunks=bundle.chunks,
+        )
 
     def generate_question(self, request: GenerateQuestionRequest) -> GenerateQuestionResponse:
-        def fallback() -> GenerateQuestionResponse:
-            return heuristic_generate_question(request)
-
         tools = [
             RuntimeTool(
                 name="read_question_templates",
@@ -104,13 +168,6 @@ class AgentRuntime:
                 handler=lambda _: {
                     "weaknesses": [item.model_dump(mode="json") for item in request.weaknesses],
                 },
-            ),
-            RuntimeTool(
-                name="draft_with_heuristics",
-                description=(
-                    "Read the deterministic fallback draft before deciding the final question."
-                ),
-                handler=lambda _: {"draft": fallback().model_dump(mode="json")},
             ),
         ]
         system_prompt = """
@@ -144,13 +201,9 @@ class AgentRuntime:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=tools,
-            fallback=fallback,
         )
 
     def evaluate_answer(self, request: EvaluateAnswerRequest) -> EvaluationResult:
-        def fallback() -> EvaluationResult:
-            return heuristic_evaluate_answer(request)
-
         tools = [
             RuntimeTool(
                 name="read_evaluation_context",
@@ -167,11 +220,6 @@ class AgentRuntime:
                     "context_chunks": _compact_chunks(request.context_chunks),
                     "is_followup": request.is_followup,
                 },
-            ),
-            RuntimeTool(
-                name="score_with_heuristics",
-                description="Read the deterministic scoring draft before making a final judgment.",
-                handler=lambda _: {"draft": fallback().model_dump(mode="json")},
             ),
         ]
         system_prompt = """
@@ -215,13 +263,9 @@ class AgentRuntime:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=tools,
-            fallback=fallback,
         )
 
     def generate_review(self, request: GenerateReviewRequest) -> ReviewCard:
-        def fallback() -> ReviewCard:
-            return heuristic_generate_review(request)
-
         tools = [
             RuntimeTool(
                 name="read_session_summary",
@@ -237,13 +281,6 @@ class AgentRuntime:
                 handler=lambda _: {
                     "turns": [turn.model_dump(mode="json") for turn in request.turns],
                 },
-            ),
-            RuntimeTool(
-                name="draft_review_with_heuristics",
-                description=(
-                    "Read the deterministic fallback review before writing the final review card."
-                ),
-                handler=lambda _: {"draft": fallback().model_dump(mode="json")},
             ),
         ]
         system_prompt = """
@@ -285,7 +322,6 @@ class AgentRuntime:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=tools,
-            fallback=fallback,
         )
 
     def _run_task(
@@ -295,10 +331,8 @@ class AgentRuntime:
         system_prompt: str,
         user_prompt: str,
         tools: list[RuntimeTool],
-        fallback: Callable[[], BaseModel],
     ) -> BaseModel:
-        if self._model_client is None:
-            return fallback()
+        self._require_model_client()
 
         try:
             return self._run_tool_loop(
@@ -318,8 +352,8 @@ class AgentRuntime:
                 tools=tools,
             )
         except (ModelClientError, ValueError, json.JSONDecodeError) as exc:
-            logger.warning("agent single-shot failed, falling back to heuristics: %s", exc)
-            return fallback()
+            logger.warning("agent single-shot failed with no heuristic fallback: %s", exc)
+            raise
 
     def _run_tool_loop(
         self,
@@ -329,7 +363,7 @@ class AgentRuntime:
         user_prompt: str,
         tools: list[RuntimeTool],
     ) -> BaseModel:
-        assert self._model_client is not None
+        model_client = self._require_model_client()
 
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt},
@@ -338,7 +372,7 @@ class AgentRuntime:
         tool_map = {tool.name: tool for tool in tools}
 
         for _ in range(4):
-            result = self._model_client.create_completion(
+            result = model_client.create_completion(
                 messages=messages,
                 tools=[tool.spec() for tool in tools],
             )
@@ -384,7 +418,7 @@ class AgentRuntime:
         user_prompt: str,
         tools: list[RuntimeTool],
     ) -> BaseModel:
-        assert self._model_client is not None
+        model_client = self._require_model_client()
 
         context_dump = {tool.name: tool.handler({}) for tool in tools}
         messages = [
@@ -398,10 +432,18 @@ class AgentRuntime:
                 ),
             },
         ]
-        result = self._model_client.create_completion(messages=messages)
+        result = model_client.create_completion(messages=messages)
         if not result.content.strip():
             raise ModelClientError("model returned empty content in single-shot mode")
         return _validate_json_response(result.content, response_model)
+
+    def _require_model_client(self) -> OpenAICompatibleModelClient:
+        if self._model_client is None:
+            raise ModelClientError(
+                "LLM is required for sidecar core flows. Configure PRACTICEHELPER_SIDECAR_MODEL, "
+                "PRACTICEHELPER_SIDECAR_OPENAI_BASE_URL, and PRACTICEHELPER_SIDECAR_OPENAI_API_KEY."
+            )
+        return self._model_client
 
 
 def _compact_chunks(
@@ -419,6 +461,18 @@ def _compact_chunks(
             }
         )
     return compact
+
+
+def _repo_overview_payload(bundle: RepoAnalysisBundle) -> dict[str, Any]:
+    return {
+        "repo_url": bundle.repo_url,
+        "name": bundle.name,
+        "default_branch": bundle.default_branch,
+        "import_commit": bundle.import_commit,
+        "tech_stack": bundle.tech_stack,
+        "top_paths": bundle.top_paths[:8],
+        "chunk_count": len(bundle.chunks),
+    }
 
 
 def _build_user_prompt(instruction: str, request: BaseModel, *, response_shape: str) -> str:

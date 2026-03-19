@@ -1,12 +1,15 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.agent_runtime import AgentRuntime
 from app.config import Settings
-from app.llm_client import ChatCompletionResult
+from app.llm_client import ChatCompletionResult, ModelClientError
 from app.schemas import (
+    AnalyzeRepoRequest,
     EvaluateAnswerRequest,
     GenerateQuestionRequest,
     ProjectProfile,
@@ -75,7 +78,7 @@ def test_generate_question_uses_tool_loop_before_returning_json() -> None:
     assert "trade-off" in response.expected_points
 
 
-def test_runtime_falls_back_to_heuristics_when_llm_is_disabled() -> None:
+def test_runtime_raises_when_llm_is_disabled() -> None:
     runtime = AgentRuntime(
         Settings(
             github_token="",
@@ -86,15 +89,28 @@ def test_runtime_falls_back_to_heuristics_when_llm_is_disabled() -> None:
         )
     )
 
-    result = runtime.evaluate_answer(
-        EvaluateAnswerRequest(
-            mode="basics",
-            topic="redis",
-            question="Redis 为什么快？",
-            expected_points=["内存访问", "事件循环", "高效数据结构"],
-            answer="因为它在内存里。",
+    with pytest.raises(ModelClientError):
+        runtime.evaluate_answer(
+            EvaluateAnswerRequest(
+                mode="basics",
+                topic="redis",
+                question="Redis 为什么快？",
+                expected_points=["内存访问", "事件循环", "高效数据结构"],
+                answer="因为它在内存里。",
+            )
+        )
+
+
+def test_analyze_repo_requires_llm_when_no_model_client_is_configured() -> None:
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="",
+            openai_base_url="",
+            openai_api_key="",
+            llm_timeout_seconds=10,
         )
     )
 
-    assert result.score < 70
-    assert result.gaps
+    with pytest.raises(ModelClientError):
+        runtime.analyze_repo(AnalyzeRepoRequest(repo_url="https://github.com/example/repo"))
