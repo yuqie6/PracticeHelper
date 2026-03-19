@@ -84,6 +84,8 @@ class OpenAICompatibleModelClient:
     @property
     def _chat_completions_url(self) -> str:
         base = self._settings.openai_base_url.rstrip("/")
+        # 兼容三种常见 base URL 形态：完整 /chat/completions、/v1，以及裸 base URL。
+        # 这样 provider 配置可以尽量保持最小要求，而不用强制用户记住某一种固定写法。
         if base.endswith("/chat/completions"):
             return base
         if base.endswith("/v1"):
@@ -97,6 +99,8 @@ class OpenAICompatibleModelClient:
         if isinstance(content, str):
             return content
         if isinstance(content, list):
+            # 一些 OpenAI-compatible provider 返回传统字符串 content，
+            # 另一些会返回分段的 content list；这里只抽取 text/output_text，保持最小兼容面。
             parts: list[str] = []
             for item in content:
                 if isinstance(item, str):

@@ -69,6 +69,8 @@ def collect_repo_analysis_bundle(
     request: AnalyzeRepoRequest,
     settings: Settings,
 ) -> RepoAnalysisBundle:
+    # 仓库导入走的是“低成本一次性快照”而不是全量索引：
+    # 临时 clone、限制文件数和 chunk 数，优先保证导入时延与 token 成本可控。
     with tempfile.TemporaryDirectory(prefix="practicehelper-repo-") as temp_dir:
         repo_dir = clone_repo(request.repo_url, Path(temp_dir), settings.github_token)
         files = collect_text_files(repo_dir)
@@ -164,6 +166,8 @@ def split_text(text: str, chunk_size: int = 1400, overlap: int = 220) -> list[st
     if len(normalized) <= chunk_size:
         return [normalized]
 
+    # 保留 overlap 不是为了追求最大召回，而是尽量减少摘要或追问时
+    # 因为硬切分导致的上下文断裂，让相邻 chunk 至少共享一段过渡语义。
     parts: list[str] = []
     start = 0
     while start < len(normalized):

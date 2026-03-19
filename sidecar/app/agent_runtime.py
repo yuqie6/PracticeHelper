@@ -335,6 +335,8 @@ class AgentRuntime:
         self._require_model_client()
 
         try:
+            # 主路径优先保留 tool-calling：上下文更小，模型也会被限制在“先取证再回答”的节奏里。
+            # 只有当 provider 的工具调用或 JSON 输出不稳定时，才退化到 single-shot 兼容模式。
             return self._run_tool_loop(
                 response_model=response_model,
                 system_prompt=system_prompt,
@@ -377,6 +379,9 @@ class AgentRuntime:
                 tools=[tool.spec() for tool in tools],
             )
             if result.tool_calls:
+                # 这里显式回灌 assistant/tool 消息，是为了维持标准的
+                # assistant -> tool -> assistant 对话协议，让下一轮模型继续基于已取回的证据推理。
+                # 循环次数固定为 4，是为了防止不稳定 provider 陷入无限工具循环。
                 messages.append(
                     {
                         "role": "assistant",
@@ -420,6 +425,8 @@ class AgentRuntime:
     ) -> BaseModel:
         model_client = self._require_model_client()
 
+        # single-shot 是兼容兜底，不是首选路径。
+        # 它把所有工具结果一次性灌进 prompt，成功率通常更高，但会失去逐步取证能力并放大上下文体积。
         context_dump = {tool.name: tool.handler({}) for tool in tools}
         messages = [
             {"role": "system", "content": system_prompt},
@@ -500,6 +507,8 @@ def _extract_json_block(text: str) -> str:
         if len(lines) >= 3:
             stripped = "\n".join(lines[1:-1]).strip()
 
+    # 这里容忍模型输出 fenced code block 或在 JSON 外包一层解释文本，
+    # 但只接受单个 object，避免在多段内容里做模糊猜测式解析。
     try:
         json.loads(stripped)
         return stripped

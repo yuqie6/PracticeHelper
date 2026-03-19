@@ -40,6 +40,8 @@ class GenerateReviewState(TypedDict):
 
 def build_flows(settings: Settings) -> dict[str, object]:
     runtime = AgentRuntime(settings)
+    # 当前每条 flow 只有一个 run 节点，但这里仍统一包成 LangGraph，
+    # 是为了先把 FastAPI 入口固定成 graph.invoke 边界，后续再按需插入检索、审查或缓存节点。
     return {
         "analyze_repo": build_analyze_repo_graph(runtime),
         "generate_question": build_generate_question_graph(runtime),
