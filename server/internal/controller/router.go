@@ -43,6 +43,7 @@ func NewRouter(svc *service.Service) *gin.Engine {
 		api.PATCH("/projects/:id", handler.updateProject)
 		api.GET("/import-jobs", handler.listImportJobs)
 		api.GET("/import-jobs/:id", handler.getImportJob)
+		api.POST("/import-jobs/:id/retry", handler.retryImportJob)
 
 		api.POST("/sessions", handler.createSession)
 		api.POST("/sessions/stream", handler.createSessionStream)
@@ -167,6 +168,21 @@ func (h *Handler) getImportJob(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) retryImportJob(c *gin.Context) {
+	data, err := h.service.RetryProjectImportJob(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrImportJobNotFound):
+			writeError(c, http.StatusNotFound, err)
+		default:
+			writeError(c, http.StatusBadGateway, err)
+		}
+		return
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{"data": data})
 }
 
 func (h *Handler) createSession(c *gin.Context) {

@@ -128,4 +128,25 @@ func TestProjectImportJobLifecycle(t *testing.T) {
 	if saved.FinishedAt == nil {
 		t.Fatal("expected finished_at to be set")
 	}
+
+	if err := store.RetryProjectImportJob(ctx, job.ID, "retrying"); err != nil {
+		t.Fatalf("RetryProjectImportJob() error = %v", err)
+	}
+
+	retried, err := store.GetProjectImportJob(ctx, job.ID)
+	if err != nil {
+		t.Fatalf("GetProjectImportJob() after retry error = %v", err)
+	}
+	if retried == nil {
+		t.Fatal("expected retried job")
+	}
+	if retried.Status != domain.ProjectImportStatusQueued {
+		t.Fatalf("expected queued after retry, got %s", retried.Status)
+	}
+	if retried.ErrorMessage != "" {
+		t.Fatalf("expected cleared error message, got %s", retried.ErrorMessage)
+	}
+	if retried.FinishedAt != nil {
+		t.Fatal("expected finished_at to be cleared after retry")
+	}
 }

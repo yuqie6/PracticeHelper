@@ -15,9 +15,10 @@ import (
 )
 
 var (
-	ErrInvalidMode     = errors.New("invalid mode")
-	ErrProjectNotFound = errors.New("project not found")
-	ErrSessionNotFound = errors.New("session not found")
+	ErrInvalidMode       = errors.New("invalid mode")
+	ErrProjectNotFound   = errors.New("project not found")
+	ErrSessionNotFound   = errors.New("session not found")
+	ErrImportJobNotFound = errors.New("import job not found")
 )
 
 type Service struct {
@@ -120,6 +121,35 @@ func (s *Service) ListProjectImportJobs(ctx context.Context) ([]domain.ProjectIm
 
 func (s *Service) GetProjectImportJob(ctx context.Context, jobID string) (*domain.ProjectImportJob, error) {
 	return s.repo.GetProjectImportJob(ctx, jobID)
+}
+
+func (s *Service) RetryProjectImportJob(ctx context.Context, jobID string) (*domain.ProjectImportJob, error) {
+	job, err := s.repo.GetProjectImportJob(ctx, jobID)
+	if err != nil {
+		return nil, err
+	}
+	if job == nil {
+		return nil, ErrImportJobNotFound
+	}
+
+	if job.Status == domain.ProjectImportStatusCompleted || job.Status == domain.ProjectImportStatusRunning || job.Status == domain.ProjectImportStatusQueued {
+		return job, nil
+	}
+
+	if err := s.repo.RetryProjectImportJob(ctx, jobID, "任务已重新排队，等待后台再次导入。"); err != nil {
+		return nil, err
+	}
+
+	updatedJob, err := s.repo.GetProjectImportJob(ctx, jobID)
+	if err != nil {
+		return nil, err
+	}
+	if updatedJob == nil {
+		return nil, ErrImportJobNotFound
+	}
+
+	s.startImportJob(*updatedJob)
+	return updatedJob, nil
 }
 
 func (s *Service) startImportJob(job domain.ProjectImportJob) {

@@ -440,6 +440,26 @@ func (s *Store) UpdateProjectImportJobStatus(
 	return nil
 }
 
+func (s *Store) RetryProjectImportJob(ctx context.Context, jobID string, message string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE project_import_jobs
+		SET status = ?, stage = ?, message = ?, error_message = '', project_id = '',
+			started_at = '', finished_at = '', updated_at = ?
+		WHERE id = ?
+	`,
+		domain.ProjectImportStatusQueued,
+		domain.ProjectImportStageQueued,
+		message,
+		nowUTC(),
+		jobID,
+	)
+	if err != nil {
+		return fmt.Errorf("retry import job: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Store) ListProjectImportJobs(ctx context.Context, limit int) ([]domain.ProjectImportJob, error) {
 	if limit <= 0 {
 		limit = 20
