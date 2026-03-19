@@ -8,7 +8,16 @@
       </p>
     </header>
 
-    <div v-if="session && activePrompt" class="neo-grid lg:grid-cols-[1.1fr_0.9fr]">
+    <ProgressPanel
+      v-if="showProgressPanel"
+      :kicker="t('session.processingKicker')"
+      :title="progressTitle"
+      :description="progressDescription"
+      :steps="progressSteps"
+      :active-index="progressStepIndex"
+    />
+
+    <div v-else-if="session && activePrompt" class="neo-grid lg:grid-cols-[1.1fr_0.9fr]">
       <div class="neo-panel space-y-4">
         <p class="neo-kicker bg-[var(--neo-red)]">{{ t('session.currentQuestion') }}</p>
         <h3 class="text-2xl font-black">{{ activePrompt.question }}</h3>
@@ -66,13 +75,15 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
 import { getSession, submitAnswer } from '../api/client';
+import ProgressPanel from '../components/ProgressPanel.vue';
 import { formatStatusLabel } from '../lib/labels';
+import { useProgressSteps } from '../lib/useProgressSteps';
 
 const route = useRoute();
 const router = useRouter();
 const queryClient = useQueryClient();
 const answer = ref('');
-const { t } = useI18n();
+const { t, tm } = useI18n();
 
 const sessionId = computed(() => route.params.id as string);
 
@@ -130,6 +141,72 @@ const mutation = useMutation({
 });
 
 const isSubmitting = computed(() => mutation.isPending.value);
+const isBackgroundProcessing = computed(() =>
+  ['generating_question', 'evaluating', 'review_pending'].includes(session.value?.status ?? ''),
+);
+const showProgressPanel = computed(() => isSubmitting.value || isBackgroundProcessing.value);
+const progressMode = computed(() => {
+  const turns = session.value?.turns ?? [];
+  const latestTurn = turns[turns.length - 1];
+
+  if (session.value?.status === 'review_pending') {
+    return 'review';
+  }
+
+  if (session.value?.status === 'generating_question') {
+    return 'question';
+  }
+
+  if (session.value?.status === 'evaluating') {
+    return latestTurn?.followup_answer ? 'review' : 'answer';
+  }
+
+  if (isSubmitting.value) {
+    return session.value?.status === 'followup' ? 'review' : 'answer';
+  }
+
+  return 'question';
+});
+const progressTitle = computed(() => {
+  switch (progressMode.value) {
+    case 'review':
+      return t('session.processingReviewTitle');
+    case 'answer':
+      return t('session.processingEvaluatingTitle');
+    default:
+      return t('session.processingGeneratingQuestionTitle');
+  }
+});
+const progressDescription = computed(() => {
+  switch (progressMode.value) {
+    case 'review':
+      return t('session.processingReviewDescription');
+    case 'answer':
+      return t('session.processingEvaluatingDescription');
+    default:
+      return t('session.processingGeneratingQuestionDescription');
+  }
+});
+const progressSteps = computed(() => {
+  const key =
+    progressMode.value === 'review'
+      ? 'progress.evaluateFollowup.steps'
+      : progressMode.value === 'answer'
+        ? 'progress.evaluateMain.steps'
+        : 'progress.createSession.steps';
+
+  return tm(key) as string[];
+});
+const progressStepDefinitions = computed(() =>
+  progressSteps.value.map((label, index) => ({
+    label,
+    afterMs: index * 1200,
+  })),
+);
+const { activeIndex: progressStepIndex } = useProgressSteps(
+  showProgressPanel,
+  progressStepDefinitions,
+);
 
 watch(
   session,
