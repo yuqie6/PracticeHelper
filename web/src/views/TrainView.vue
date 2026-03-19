@@ -8,6 +8,23 @@
       </p>
     </header>
 
+    <div v-if="currentSession" class="neo-panel bg-[var(--neo-yellow)]">
+      <p class="neo-kicker bg-white">{{ t('home.currentSession.kicker') }}</p>
+      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h3 class="text-xl font-black uppercase tracking-[0.06em]">
+            {{ t('train.resumeTitle') }}
+          </h3>
+          <p class="mt-2 text-base font-semibold">
+            {{ t('train.resumeDescription', { name: formatSessionName(currentSession), status: formatStatusLabel(t, currentSession.status) }) }}
+          </p>
+        </div>
+        <RouterLink :to="buildSessionTarget(currentSession)" class="neo-button-dark">
+          {{ t('common.resume') }}
+        </RouterLink>
+      </div>
+    </div>
+
     <form class="neo-panel space-y-4" @submit.prevent="submit">
       <div class="neo-grid md:grid-cols-2">
         <label class="space-y-2">
@@ -57,10 +74,15 @@
 import { useMutation, useQuery } from '@tanstack/vue-query';
 import { computed, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRouter } from 'vue-router';
+import { RouterLink, useRouter } from 'vue-router';
 
-import { createSession, listProjects } from '../api/client';
-import { formatIntensityLabel, formatModeLabel, formatTopicLabel } from '../lib/labels';
+import { createSession, getDashboard, listProjects, type TrainingSessionSummary } from '../api/client';
+import {
+  formatIntensityLabel,
+  formatModeLabel,
+  formatStatusLabel,
+  formatTopicLabel,
+} from '../lib/labels';
 
 const router = useRouter();
 const { t } = useI18n();
@@ -76,6 +98,13 @@ const { data: projects } = useQuery({
   queryKey: ['projects'],
   queryFn: listProjects,
 });
+
+const { data: dashboard } = useQuery({
+  queryKey: ['dashboard'],
+  queryFn: getDashboard,
+});
+
+const currentSession = computed(() => dashboard.value?.current_session ?? null);
 
 const mutation = useMutation({
   mutationFn: createSession,
@@ -93,5 +122,25 @@ function submit() {
     project_id: form.mode === 'project' ? form.project_id : undefined,
     intensity: form.intensity,
   });
+}
+
+function formatSessionName(session: TrainingSessionSummary): string {
+  if (session.project_name) {
+    return session.project_name;
+  }
+
+  if (session.topic) {
+    return formatTopicLabel(t, session.topic);
+  }
+
+  return formatModeLabel(t, session.mode);
+}
+
+function buildSessionTarget(session: TrainingSessionSummary): string {
+  if (session.status === 'completed' && session.review_id) {
+    return `/reviews/${session.review_id}`;
+  }
+
+  return `/sessions/${session.id}`;
 }
 </script>
