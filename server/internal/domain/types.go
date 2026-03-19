@@ -13,6 +13,17 @@ const (
 	StatusFollowup      = "followup"
 	StatusReviewPending = "review_pending"
 	StatusCompleted     = "completed"
+
+	ProjectImportStatusQueued    = "queued"
+	ProjectImportStatusRunning   = "running"
+	ProjectImportStatusCompleted = "completed"
+	ProjectImportStatusFailed    = "failed"
+
+	ProjectImportStageQueued     = "queued"
+	ProjectImportStageAnalyzing  = "analyzing_repository"
+	ProjectImportStagePersisting = "persisting_project"
+	ProjectImportStageCompleted  = "completed"
+	ProjectImportStageFailed     = "failed"
 )
 
 type UserProfile struct {
@@ -69,6 +80,21 @@ type ProjectProfileInput struct {
 	Tradeoffs       []string `json:"tradeoffs"`
 	OwnershipPoints []string `json:"ownership_points"`
 	FollowupPoints  []string `json:"followup_points"`
+}
+
+type ProjectImportJob struct {
+	ID           string     `json:"id"`
+	RepoURL      string     `json:"repo_url"`
+	Status       string     `json:"status"`
+	Stage        string     `json:"stage"`
+	Message      string     `json:"message"`
+	ErrorMessage string     `json:"error_message,omitempty"`
+	ProjectID    string     `json:"project_id,omitempty"`
+	ProjectName  string     `json:"project_name,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	StartedAt    *time.Time `json:"started_at,omitempty"`
+	FinishedAt   *time.Time `json:"finished_at,omitempty"`
 }
 
 type RepoChunk struct {

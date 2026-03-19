@@ -83,6 +83,19 @@ func (s *Store) migrate() error {
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS project_import_jobs (
+			id TEXT PRIMARY KEY,
+			repo_url TEXT NOT NULL,
+			status TEXT NOT NULL,
+			stage TEXT NOT NULL,
+			message TEXT NOT NULL,
+			error_message TEXT NOT NULL DEFAULT '',
+			project_id TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			started_at TEXT NOT NULL DEFAULT '',
+			finished_at TEXT NOT NULL DEFAULT ''
+		);`,
 		`CREATE TABLE IF NOT EXISTS repo_chunks (
 			id TEXT PRIMARY KEY,
 			project_id TEXT NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
@@ -367,6 +380,162 @@ func (s *Store) CreateImportedProject(ctx context.Context, analysis *domain.Anal
 	return s.GetProject(ctx, projectID)
 }
 
+func (s *Store) CreateProjectImportJob(ctx context.Context, repoURL string) (*domain.ProjectImportJob, error) {
+	jobID := newID("import")
+	now := nowUTC()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO project_import_jobs (
+			id, repo_url, status, stage, message, error_message, project_id, created_at, updated_at, started_at, finished_at
+		) VALUES (?, ?, ?, ?, ?, '', '', ?, ?, '', '')
+	`,
+		jobID,
+		repoURL,
+		domain.ProjectImportStatusQueued,
+		domain.ProjectImportStageQueued,
+		"任务已创建，等待后台开始导入。",
+		now,
+		now,
+	); err != nil {
+		return nil, fmt.Errorf("create import job: %w", err)
+	}
+
+	return s.GetProjectImportJob(ctx, jobID)
+}
+
+func (s *Store) UpdateProjectImportJobStatus(
+	ctx context.Context,
+	jobID string,
+	status string,
+	stage string,
+	message string,
+	errorMessage string,
+	projectID string,
+	startedAt *time.Time,
+	finishedAt *time.Time,
+) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE project_import_jobs
+		SET status = ?, stage = ?, message = ?, error_message = ?, project_id = ?,
+			started_at = CASE WHEN ? != '' THEN ? ELSE started_at END,
+			finished_at = CASE WHEN ? != '' THEN ? ELSE finished_at END,
+			updated_at = ?
+		WHERE id = ?
+	`,
+		status,
+		stage,
+		message,
+		errorMessage,
+		projectID,
+		toNullableTimeString(startedAt),
+		toNullableTimeString(startedAt),
+		toNullableTimeString(finishedAt),
+		toNullableTimeString(finishedAt),
+		nowUTC(),
+		jobID,
+	)
+	if err != nil {
+		return fmt.Errorf("update import job: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Store) ListProjectImportJobs(ctx context.Context, limit int) ([]domain.ProjectImportJob, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT j.id, j.repo_url, j.status, j.stage, j.message, j.error_message, j.project_id,
+			COALESCE(p.name, ''), j.created_at, j.updated_at, j.started_at, j.finished_at
+		FROM project_import_jobs j
+		LEFT JOIN project_profiles p ON p.id = j.project_id
+		ORDER BY j.updated_at DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list import jobs: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	jobs := make([]domain.ProjectImportJob, 0)
+	for rows.Next() {
+		job, err := scanProjectImportJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, *job)
+	}
+
+	return jobs, nil
+}
+
+func (s *Store) GetProjectImportJob(ctx context.Context, jobID string) (*domain.ProjectImportJob, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT j.id, j.repo_url, j.status, j.stage, j.message, j.error_message, j.project_id,
+			COALESCE(p.name, ''), j.created_at, j.updated_at, j.started_at, j.finished_at
+		FROM project_import_jobs j
+		LEFT JOIN project_profiles p ON p.id = j.project_id
+		WHERE j.id = ?
+	`, jobID)
+	job, err := scanProjectImportJob(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return job, nil
+}
+
+func (s *Store) FindActiveProjectImportJobByRepoURL(ctx context.Context, repoURL string) (*domain.ProjectImportJob, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT j.id, j.repo_url, j.status, j.stage, j.message, j.error_message, j.project_id,
+			COALESCE(p.name, ''), j.created_at, j.updated_at, j.started_at, j.finished_at
+		FROM project_import_jobs j
+		LEFT JOIN project_profiles p ON p.id = j.project_id
+		WHERE j.repo_url = ? AND j.status IN (?, ?)
+		ORDER BY j.updated_at DESC
+		LIMIT 1
+	`, repoURL, domain.ProjectImportStatusQueued, domain.ProjectImportStatusRunning)
+	job, err := scanProjectImportJob(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return job, nil
+}
+
+func (s *Store) ListPendingProjectImportJobs(ctx context.Context) ([]domain.ProjectImportJob, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT j.id, j.repo_url, j.status, j.stage, j.message, j.error_message, j.project_id,
+			COALESCE(p.name, ''), j.created_at, j.updated_at, j.started_at, j.finished_at
+		FROM project_import_jobs j
+		LEFT JOIN project_profiles p ON p.id = j.project_id
+		WHERE j.status IN (?, ?)
+		ORDER BY j.created_at ASC
+	`, domain.ProjectImportStatusQueued, domain.ProjectImportStatusRunning)
+	if err != nil {
+		return nil, fmt.Errorf("list pending import jobs: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	jobs := make([]domain.ProjectImportJob, 0)
+	for rows.Next() {
+		job, err := scanProjectImportJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, *job)
+	}
+
+	return jobs, nil
+}
+
 func (s *Store) ListProjects(ctx context.Context) ([]domain.ProjectProfile, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, name, repo_url, default_branch, import_commit, summary, tech_stack_json, highlights_json, challenges_json, tradeoffs_json, ownership_points_json, followup_points_json, import_status, created_at, updated_at FROM project_profiles ORDER BY updated_at DESC`)
 	if err != nil {
@@ -388,6 +557,19 @@ func (s *Store) ListProjects(ctx context.Context) ([]domain.ProjectProfile, erro
 
 func (s *Store) GetProject(ctx context.Context, projectID string) (*domain.ProjectProfile, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT id, name, repo_url, default_branch, import_commit, summary, tech_stack_json, highlights_json, challenges_json, tradeoffs_json, ownership_points_json, followup_points_json, import_status, created_at, updated_at FROM project_profiles WHERE id = ?`, projectID)
+	project, err := scanProjectProfile(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return project, nil
+}
+
+func (s *Store) GetProjectByRepoURL(ctx context.Context, repoURL string) (*domain.ProjectProfile, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, name, repo_url, default_branch, import_commit, summary, tech_stack_json, highlights_json, challenges_json, tradeoffs_json, ownership_points_json, followup_points_json, import_status, created_at, updated_at FROM project_profiles WHERE repo_url = ?`, repoURL)
 	project, err := scanProjectProfile(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -918,6 +1100,28 @@ func scanProjectProfile(scanner interface{ Scan(dest ...any) error }) (*domain.P
 	}
 
 	return project, nil
+}
+
+func scanProjectImportJob(scanner interface{ Scan(dest ...any) error }) (*domain.ProjectImportJob, error) {
+	var id, repoURL, status, stage, message, errorMessage, projectID, projectName, createdAt, updatedAt, startedAt, finishedAt string
+	if err := scanner.Scan(&id, &repoURL, &status, &stage, &message, &errorMessage, &projectID, &projectName, &createdAt, &updatedAt, &startedAt, &finishedAt); err != nil {
+		return nil, err
+	}
+
+	return &domain.ProjectImportJob{
+		ID:           id,
+		RepoURL:      repoURL,
+		Status:       status,
+		Stage:        stage,
+		Message:      message,
+		ErrorMessage: errorMessage,
+		ProjectID:    projectID,
+		ProjectName:  projectName,
+		CreatedAt:    parseTime(createdAt),
+		UpdatedAt:    parseTime(updatedAt),
+		StartedAt:    parseNullableTime(startedAt),
+		FinishedAt:   parseNullableTime(finishedAt),
+	}, nil
 }
 
 func scanRepoChunk(scanner interface{ Scan(dest ...any) error }) (*domain.RepoChunk, error) {

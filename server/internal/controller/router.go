@@ -41,6 +41,8 @@ func NewRouter(svc *service.Service) *gin.Engine {
 		api.GET("/projects", handler.listProjects)
 		api.GET("/projects/:id", handler.getProject)
 		api.PATCH("/projects/:id", handler.updateProject)
+		api.GET("/import-jobs", handler.listImportJobs)
+		api.GET("/import-jobs/:id", handler.getImportJob)
 
 		api.POST("/sessions", handler.createSession)
 		api.POST("/sessions/stream", handler.createSessionStream)
@@ -105,7 +107,7 @@ func (h *Handler) importProject(c *gin.Context) {
 		}
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"data": data})
+	c.JSON(http.StatusAccepted, gin.H{"data": data})
 }
 
 func (h *Handler) listProjects(c *gin.Context) {
@@ -140,6 +142,28 @@ func (h *Handler) updateProject(c *gin.Context) {
 	data, err := h.service.UpdateProject(c.Request.Context(), c.Param("id"), request)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) listImportJobs(c *gin.Context) {
+	data, err := h.service.ListProjectImportJobs(c.Request.Context())
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) getImportJob(c *gin.Context) {
+	data, err := h.service.GetProjectImportJob(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	if data == nil {
+		writeError(c, http.StatusNotFound, errors.New("import job not found"))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": data})
