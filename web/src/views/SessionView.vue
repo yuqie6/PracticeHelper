@@ -56,12 +56,24 @@
         <p class="neo-kicker bg-[var(--neo-red)]">{{ t('session.currentQuestion') }}</p>
         <h3 class="text-2xl font-black">{{ activePrompt.question }}</h3>
 
-        <form class="space-y-4" @submit.prevent="submit">
-          <textarea v-model="answer" class="neo-textarea" :placeholder="placeholderText" />
-          <button type="submit" class="neo-button-dark" :disabled="isSubmitting">
+        <form v-if="canAnswerCurrentSession" class="space-y-4" @submit.prevent="submit">
+          <textarea
+            v-model="answer"
+            class="neo-textarea"
+            :placeholder="placeholderText"
+            :disabled="isSubmitting || isBackgroundProcessing"
+          />
+          <button
+            type="submit"
+            class="neo-button-dark"
+            :disabled="isSubmitting || isBackgroundProcessing"
+          >
             {{ isSubmitting ? t('common.submitting') : t('common.submit') }}
           </button>
         </form>
+        <p v-else class="neo-note">
+          {{ t('session.answerLockedWhileProcessing') }}
+        </p>
       </div>
 
       <div class="neo-panel space-y-4">
@@ -100,6 +112,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
 import {
+  ApiError,
   getSession,
   retrySessionReview,
   submitAnswerStream,
@@ -129,6 +142,9 @@ const { data } = useQuery({
 
 const session = computed(() => data.value ?? null);
 const lastTurn = computed(() => session.value?.turns?.[session.value.turns.length - 1]);
+const canAnswerCurrentSession = computed(() =>
+  ['waiting_answer', 'active', 'followup'].includes(session.value?.status ?? ''),
+);
 const currentStatusLabel = computed(() => {
   if (!session.value?.status) {
     return t('common.loading');
@@ -177,8 +193,12 @@ const mutation = useMutation({
     await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     await queryClient.invalidateQueries({ queryKey: ['weaknesses'] });
   },
-  onError: (error) => {
-    submitError.value = error instanceof Error ? error.message : t('common.requestFailed');
+  onError: async (error) => {
+    submitError.value = resolveSessionErrorMessage(error);
+    if (shouldRefreshSession(error)) {
+      await queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    }
   },
 });
 
@@ -188,8 +208,12 @@ const retryReviewMutation = useMutation({
     queryClient.setQueryData(['session', sessionId], updated);
     await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   },
-  onError: (error) => {
-    submitError.value = error instanceof Error ? error.message : t('common.requestFailed');
+  onError: async (error) => {
+    submitError.value = resolveSessionErrorMessage(error);
+    if (shouldRefreshSession(error)) {
+      await queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    }
   },
 });
 
@@ -198,7 +222,9 @@ const isRetryingReview = computed(() => retryReviewMutation.isPending.value);
 const isBackgroundProcessing = computed(() =>
   ['generating_question', 'evaluating'].includes(session.value?.status ?? ''),
 );
-const showProgressPanel = computed(() => isSubmitting.value || isRetryingReview.value || isBackgroundProcessing.value);
+const showProgressPanel = computed(
+  () => isSubmitting.value || isRetryingReview.value || isBackgroundProcessing.value,
+);
 const showReviewRecovery = computed(
   () => session.value?.status === 'review_pending' && !isRetryingReview.value && !isSubmitting.value,
 );
@@ -207,7 +233,7 @@ const progressMode = computed(() => {
   const latestTurn = turns[turns.length - 1];
 
   if (session.value?.status === 'review_pending' || isRetryingReview.value) {
-      return 'review';
+    return 'review';
   }
 
   if (session.value?.status === 'generating_question') {
@@ -278,7 +304,7 @@ watch(
 );
 
 function submit() {
-  if (!answer.value.trim()) {
+  if (!answer.value.trim() || !canAnswerCurrentSession.value || isBackgroundProcessing.value) {
     return;
   }
   mutation.mutate(answer.value);
@@ -291,5 +317,39 @@ function retryReview() {
 
 function handleStreamEvent(event: StreamEvent) {
   streamSections.value = appendStreamEvent(streamSections.value, event);
+}
+
+function shouldRefreshSession(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    [
+      'session_busy',
+      'session_review_pending',
+      'session_completed',
+      'session_not_recoverable',
+      'session_answer_conflict',
+    ].includes(error.code ?? '')
+  );
+}
+
+function resolveSessionErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    switch (error.code) {
+      case 'session_busy':
+        return t('session.conflictBusy');
+      case 'session_review_pending':
+        return t('session.conflictReviewPending');
+      case 'session_completed':
+        return t('session.conflictCompleted');
+      case 'session_not_recoverable':
+        return t('session.retryReviewNotRecoverable');
+      case 'session_answer_conflict':
+        return t('session.conflictInvalidStatus');
+      default:
+        return error.message;
+    }
+  }
+
+  return error instanceof Error ? error.message : t('common.requestFailed');
 }
 </script>

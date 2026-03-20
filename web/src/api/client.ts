@@ -2,6 +2,25 @@ export interface ApiEnvelope<T> {
   data: T;
 }
 
+interface ApiErrorPayload {
+  error?: {
+    code?: string;
+    message?: string;
+  };
+}
+
+export class ApiError extends Error {
+  code?: string;
+  status?: number;
+
+  constructor(message: string, options?: { code?: string; status?: number }) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = options?.code;
+    this.status = options?.status;
+  }
+}
+
 export interface UserProfile {
   id: number;
   target_role: string;
@@ -127,6 +146,7 @@ export interface Dashboard {
 
 export interface StreamEvent {
   type: 'phase' | 'context' | 'reasoning' | 'content' | 'result' | 'error';
+  code?: string;
   phase?: string;
   name?: string;
   text?: string;
@@ -147,10 +167,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as
-      | { error?: { message?: string } }
-      | null;
-    throw new Error(payload?.error?.message ?? '请求失败');
+    const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null;
+    throw new ApiError(payload?.error?.message ?? '请求失败', {
+      code: payload?.error?.code,
+      status: response.status,
+    });
   }
 
   const payload = (await response.json()) as ApiEnvelope<T>;
@@ -171,10 +192,11 @@ async function requestStream<T>(
   });
 
   if (!response.ok || !response.body) {
-    const payload = (await response.json().catch(() => null)) as
-      | { error?: { message?: string } }
-      | null;
-    throw new Error(payload?.error?.message ?? '请求失败');
+    const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null;
+    throw new ApiError(payload?.error?.message ?? '请求失败', {
+      code: payload?.error?.code,
+      status: response.status,
+    });
   }
 
   const reader = response.body.getReader();
@@ -202,7 +224,10 @@ async function requestStream<T>(
       onEvent(event);
 
       if (event.type === 'error') {
-        throw new Error(event.message ?? '流式请求失败');
+        throw new ApiError(event.message ?? '流式请求失败', {
+          code: event.code,
+          status: response.status,
+        });
       }
 
       if (event.type === 'result') {
@@ -215,7 +240,10 @@ async function requestStream<T>(
     const event = JSON.parse(buffer.trim()) as StreamEvent;
     onEvent(event);
     if (event.type === 'error') {
-      throw new Error(event.message ?? '流式请求失败');
+      throw new ApiError(event.message ?? '流式请求失败', {
+        code: event.code,
+        status: response.status,
+      });
     }
     if (event.type === 'result') {
       result = event.data as T;
