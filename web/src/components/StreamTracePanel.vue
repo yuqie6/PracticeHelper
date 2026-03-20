@@ -1,8 +1,10 @@
 <template>
-  <div class="neo-panel bg-white space-y-4">
+  <div class="neo-panel space-y-4 bg-white">
     <div>
       <p class="neo-kicker bg-[var(--neo-blue)]">{{ kicker }}</p>
-      <h3 class="text-xl font-black uppercase tracking-[0.06em]">{{ title }}</h3>
+      <h3 class="text-xl font-black uppercase tracking-[0.06em]">
+        {{ title }}
+      </h3>
       <p class="mt-2 text-base font-semibold">{{ description }}</p>
     </div>
 
@@ -65,10 +67,23 @@
         <template v-else-if="getEvaluationPayload(section)">
           <div class="space-y-3">
             <p class="text-lg font-black">
-              {{ t('session.streamFields.score', { score: getEvaluationPayload(section)?.score }) }}
+              {{
+                t('session.streamFields.score', {
+                  score: getEvaluationPayload(section)?.score,
+                })
+              }}
+            </p>
+            <p
+              v-if="getEvaluationPayload(section)?.headline"
+              class="border-2 border-black bg-white px-3 py-3 text-sm font-semibold md:border-4"
+            >
+              {{ getEvaluationPayload(section)?.headline }}
             </p>
             <div
-              v-if="Object.keys(getEvaluationPayload(section)?.scoreBreakdown ?? {}).length"
+              v-if="
+                Object.keys(getEvaluationPayload(section)?.scoreBreakdown ?? {})
+                  .length
+              "
               class="space-y-2"
             >
               <p class="text-sm font-black uppercase tracking-[0.08em]">
@@ -76,7 +91,8 @@
               </p>
               <ul class="space-y-2">
                 <li
-                  v-for="(score, label) in getEvaluationPayload(section)?.scoreBreakdown"
+                  v-for="(score, label) in getEvaluationPayload(section)
+                    ?.scoreBreakdown"
                   :key="`${section.id}-score-${label}`"
                   class="flex items-center justify-between border-2 border-black bg-white px-3 py-2 text-sm font-semibold md:border-4"
                 >
@@ -85,7 +101,10 @@
                 </li>
               </ul>
             </div>
-            <div v-if="getEvaluationPayload(section)?.strengths.length" class="space-y-2">
+            <div
+              v-if="getEvaluationPayload(section)?.strengths.length"
+              class="space-y-2"
+            >
               <p class="text-sm font-black uppercase tracking-[0.08em]">
                 {{ t('session.strengths') }}
               </p>
@@ -99,7 +118,10 @@
                 </li>
               </ul>
             </div>
-            <div v-if="getEvaluationPayload(section)?.gaps.length" class="space-y-2">
+            <div
+              v-if="getEvaluationPayload(section)?.gaps.length"
+              class="space-y-2"
+            >
               <p class="text-sm font-black uppercase tracking-[0.08em]">
                 {{ t('session.gaps') }}
               </p>
@@ -114,21 +136,52 @@
               </ul>
             </div>
             <div
+              v-if="getEvaluationPayload(section)?.suggestion"
+              class="space-y-2"
+            >
+              <p class="text-sm font-black uppercase tracking-[0.08em]">
+                {{ t('session.suggestionTitle') }}
+              </p>
+              <p
+                class="border-2 border-black bg-white px-3 py-3 text-sm font-semibold md:border-4"
+              >
+                {{ getEvaluationPayload(section)?.suggestion }}
+              </p>
+            </div>
+            <div
+              v-if="getEvaluationPayload(section)?.followupIntent"
+              class="space-y-2"
+            >
+              <p class="text-sm font-black uppercase tracking-[0.08em]">
+                {{ t('session.followupIntentTitle') }}
+              </p>
+              <p
+                class="border-2 border-black bg-white px-3 py-3 text-sm font-semibold md:border-4"
+              >
+                {{ getEvaluationPayload(section)?.followupIntent }}
+              </p>
+            </div>
+            <div
               v-if="getEvaluationPayload(section)?.followupQuestion"
               class="space-y-2"
             >
               <p class="text-sm font-black uppercase tracking-[0.08em]">
                 {{ t('session.streamFields.followupQuestion') }}
               </p>
-              <p class="border-2 border-black bg-white px-3 py-3 text-sm font-semibold md:border-4">
+              <p
+                class="border-2 border-black bg-white px-3 py-3 text-sm font-semibold md:border-4"
+              >
                 {{ getEvaluationPayload(section)?.followupQuestion }}
               </p>
               <ul
-                v-if="getEvaluationPayload(section)?.followupExpectedPoints.length"
+                v-if="
+                  getEvaluationPayload(section)?.followupExpectedPoints.length
+                "
                 class="space-y-2"
               >
                 <li
-                  v-for="item in getEvaluationPayload(section)?.followupExpectedPoints"
+                  v-for="item in getEvaluationPayload(section)
+                    ?.followupExpectedPoints"
                   :key="`${section.id}-followup-${item}`"
                   class="border-2 border-black bg-white px-3 py-2 text-sm font-semibold md:border-4"
                 >
@@ -144,8 +197,27 @@
             <p class="text-base font-semibold leading-7">
               {{ getReviewPayload(section)?.overall }}
             </p>
+            <div v-if="getReviewPayload(section)?.topFix" class="space-y-2">
+              <p class="text-sm font-black uppercase tracking-[0.08em]">
+                {{ t('review.topFixTitle') }}
+              </p>
+              <p
+                class="border-2 border-black bg-white px-3 py-3 text-sm font-semibold md:border-4"
+              >
+                {{ getReviewPayload(section)?.topFix }}
+              </p>
+              <p
+                v-if="getReviewPayload(section)?.topFixReason"
+                class="border-2 border-black bg-white px-3 py-3 text-sm font-semibold md:border-4"
+              >
+                {{ getReviewPayload(section)?.topFixReason }}
+              </p>
+            </div>
             <div
-              v-if="Object.keys(getReviewPayload(section)?.scoreBreakdown ?? {}).length"
+              v-if="
+                Object.keys(getReviewPayload(section)?.scoreBreakdown ?? {})
+                  .length
+              "
               class="space-y-2"
             >
               <p class="text-sm font-black uppercase tracking-[0.08em]">
@@ -153,7 +225,8 @@
               </p>
               <ul class="space-y-2">
                 <li
-                  v-for="(score, label) in getReviewPayload(section)?.scoreBreakdown"
+                  v-for="(score, label) in getReviewPayload(section)
+                    ?.scoreBreakdown"
                   :key="`${section.id}-review-score-${label}`"
                   class="flex items-center justify-between border-2 border-black bg-white px-3 py-2 text-sm font-semibold md:border-4"
                 >
@@ -162,7 +235,10 @@
                 </li>
               </ul>
             </div>
-            <div v-if="getReviewPayload(section)?.highlights.length" class="space-y-2">
+            <div
+              v-if="getReviewPayload(section)?.highlights.length"
+              class="space-y-2"
+            >
               <p class="text-sm font-black uppercase tracking-[0.08em]">
                 {{ t('review.highlights') }}
               </p>
@@ -176,7 +252,10 @@
                 </li>
               </ul>
             </div>
-            <div v-if="getReviewPayload(section)?.gaps.length" class="space-y-2">
+            <div
+              v-if="getReviewPayload(section)?.gaps.length"
+              class="space-y-2"
+            >
               <p class="text-sm font-black uppercase tracking-[0.08em]">
                 {{ t('review.gaps') }}
               </p>
@@ -206,6 +285,19 @@
                   {{ item }}
                 </li>
               </ul>
+            </div>
+            <div
+              v-if="getReviewPayload(section)?.recommendedNext"
+              class="space-y-2"
+            >
+              <p class="text-sm font-black uppercase tracking-[0.08em]">
+                {{ t('review.recommendedNextTitle') }}
+              </p>
+              <p
+                class="border-2 border-black bg-white px-3 py-3 text-sm font-semibold md:border-4"
+              >
+                {{ getReviewPayload(section)?.recommendedNext?.reason }}
+              </p>
             </div>
           </div>
         </template>
@@ -239,17 +331,23 @@ const props = defineProps<{
 
 const { t } = useI18n();
 
-const parsedPayloadMap = computed(() =>
-  Object.fromEntries(
-    props.sections.map((section) => [section.id, parseStreamPayload(section.rawContent)]),
-  ) as Record<string, ParsedStreamPayload | null>,
+const parsedPayloadMap = computed(
+  () =>
+    Object.fromEntries(
+      props.sections.map((section) => [
+        section.id,
+        parseStreamPayload(section.rawContent),
+      ]),
+    ) as Record<string, ParsedStreamPayload | null>,
 );
 
 function getParsedPayload(section: StreamSection): ParsedStreamPayload | null {
   return parsedPayloadMap.value[section.id] ?? null;
 }
 
-function getQuestionPayload(section: StreamSection): Extract<ParsedStreamPayload, { kind: 'question' }> | null {
+function getQuestionPayload(
+  section: StreamSection,
+): Extract<ParsedStreamPayload, { kind: 'question' }> | null {
   const payload = getParsedPayload(section);
   return payload?.kind === 'question' ? payload : null;
 }
@@ -261,7 +359,9 @@ function getEvaluationPayload(
   return payload?.kind === 'evaluation' ? payload : null;
 }
 
-function getReviewPayload(section: StreamSection): Extract<ParsedStreamPayload, { kind: 'review' }> | null {
+function getReviewPayload(
+  section: StreamSection,
+): Extract<ParsedStreamPayload, { kind: 'review' }> | null {
   const payload = getParsedPayload(section);
   return payload?.kind === 'review' ? payload : null;
 }

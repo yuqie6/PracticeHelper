@@ -51,7 +51,13 @@ func (s *Service) finalizeReviewStream(
 		return nil, err
 	}
 
-	return s.persistReview(ctx, updatedSession, review)
+	savedSession, err := s.persistReview(ctx, updatedSession, review)
+	if err != nil {
+		return nil, err
+	}
+
+	emitStatus(emit, "review_saved")
+	return savedSession, nil
 }
 
 func (s *Service) persistReview(

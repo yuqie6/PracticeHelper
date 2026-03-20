@@ -201,22 +201,37 @@ func scanTrainingTurn(scanner interface{ Scan(dest ...any) error }) (*domain.Tra
 }
 
 func scanReviewCard(scanner interface{ Scan(dest ...any) error }) (*domain.ReviewCard, error) {
-	var id, sessionID, overall, highlightsJSON, gapsJSON, suggestedTopicsJSON, nextTrainingFocusJSON, scoreBreakdownJSON, createdAt string
-	if err := scanner.Scan(&id, &sessionID, &overall, &highlightsJSON, &gapsJSON, &suggestedTopicsJSON, &nextTrainingFocusJSON, &scoreBreakdownJSON, &createdAt); err != nil {
+	var (
+		id, sessionID, overall, topFix, topFixReason, highlightsJSON, gapsJSON string
+		suggestedTopicsJSON, nextTrainingFocusJSON, recommendedNextJSON        string
+		scoreBreakdownJSON, createdAt                                          string
+	)
+	if err := scanner.Scan(&id, &sessionID, &overall, &topFix, &topFixReason, &highlightsJSON, &gapsJSON, &suggestedTopicsJSON, &nextTrainingFocusJSON, &recommendedNextJSON, &scoreBreakdownJSON, &createdAt); err != nil {
 		return nil, err
 	}
 
 	breakdown := map[string]float64{}
 	_ = json.Unmarshal([]byte(scoreBreakdownJSON), &breakdown)
 
+	var recommendedNext *domain.NextSession
+	if strings.TrimSpace(recommendedNextJSON) != "" && recommendedNextJSON != "null" {
+		item := &domain.NextSession{}
+		if err := json.Unmarshal([]byte(recommendedNextJSON), item); err == nil {
+			recommendedNext = item
+		}
+	}
+
 	return &domain.ReviewCard{
 		ID:                id,
 		SessionID:         sessionID,
 		Overall:           overall,
+		TopFix:            topFix,
+		TopFixReason:      topFixReason,
 		Highlights:        parseStringList(highlightsJSON),
 		Gaps:              parseStringList(gapsJSON),
 		SuggestedTopics:   parseStringList(suggestedTopicsJSON),
 		NextTrainingFocus: parseStringList(nextTrainingFocusJSON),
+		RecommendedNext:   recommendedNext,
 		ScoreBreakdown:    breakdown,
 		CreatedAt:         parseTime(createdAt),
 	}, nil

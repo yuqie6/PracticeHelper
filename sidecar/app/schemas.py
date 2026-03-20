@@ -130,8 +130,11 @@ class EvaluateAnswerRequest(BaseModel):
 class EvaluationResult(BaseModel):
     score: float = Field(ge=0.0, le=100.0)
     score_breakdown: dict[str, float] = Field(default_factory=dict)
+    headline: str = ""
     strengths: list[str] = Field(default_factory=list)
     gaps: list[str] = Field(default_factory=list)
+    suggestion: str = ""
+    followup_intent: str = ""
     followup_question: str = ""
     followup_expected_points: list[str] = Field(default_factory=list)
     weakness_hits: list[WeaknessHit] = Field(default_factory=list)
@@ -165,12 +168,22 @@ class GenerateReviewRequest(BaseModel):
     turns: list[TrainingTurn] = Field(default_factory=list)
 
 
+class NextSession(BaseModel):
+    mode: Literal["basics", "project"]
+    topic: str = ""
+    project_id: str = ""
+    reason: str = ""
+
+
 class ReviewCard(BaseModel):
     id: str = ""
     session_id: str = ""
     overall: str
+    top_fix: str = ""
+    top_fix_reason: str = ""
     highlights: list[str] = Field(default_factory=list)
     gaps: list[str] = Field(default_factory=list)
     suggested_topics: list[str] = Field(default_factory=list)
     next_training_focus: list[str] = Field(default_factory=list)
+    recommended_next: NextSession | None = None
     score_breakdown: dict[str, float] = Field(default_factory=dict)

@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 
+	"practicehelper/server/internal/domain"
 	"practicehelper/server/internal/repo"
 	"practicehelper/server/internal/sidecar"
 )
@@ -32,4 +33,11 @@ func New(repository *repo.Store, sc *sidecar.Client) *Service {
 	}
 	svc.resumePendingImportJobs()
 	return svc
+}
+
+func emitStatus(emit func(domain.StreamEvent) error, name string) {
+	if emit == nil || name == "" {
+		return
+	}
+	_ = emit(domain.StreamEvent{Type: "status", Name: name})
 }

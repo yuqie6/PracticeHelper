@@ -9,16 +9,26 @@
 
     <div v-if="currentSession" class="neo-panel bg-[var(--neo-yellow)]">
       <p class="neo-kicker bg-white">{{ t('home.currentSession.kicker') }}</p>
-      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div
+        class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
+      >
         <div>
           <h3 class="text-xl font-black uppercase tracking-[0.06em]">
             {{ t('train.resumeTitle') }}
           </h3>
           <p class="mt-2 text-base font-semibold">
-            {{ t('train.resumeDescription', { name: formatSessionName(currentSession), status: formatStatusLabel(t, currentSession.status) }) }}
+            {{
+              t('train.resumeDescription', {
+                name: formatSessionName(currentSession),
+                status: formatStatusLabel(t, currentSession.status),
+              })
+            }}
           </p>
         </div>
-        <RouterLink :to="buildSessionTarget(currentSession)" class="neo-button-dark">
+        <RouterLink
+          :to="buildSessionTarget(currentSession)"
+          class="neo-button-dark"
+        >
           {{ t('common.resume') }}
         </RouterLink>
       </div>
@@ -62,9 +72,15 @@
         <label class="space-y-2">
           <span class="neo-subheading">{{ t('train.fields.intensity') }}</span>
           <select v-model="form.intensity" class="neo-select">
-            <option value="light">{{ formatIntensityLabel(t, 'light') }}</option>
-            <option value="standard">{{ formatIntensityLabel(t, 'standard') }}</option>
-            <option value="pressure">{{ formatIntensityLabel(t, 'pressure') }}</option>
+            <option value="light">
+              {{ formatIntensityLabel(t, 'light') }}
+            </option>
+            <option value="standard">
+              {{ formatIntensityLabel(t, 'standard') }}
+            </option>
+            <option value="pressure">
+              {{ formatIntensityLabel(t, 'pressure') }}
+            </option>
           </select>
         </label>
       </div>
@@ -82,7 +98,11 @@
         <span class="neo-subheading">{{ t('train.fields.project') }}</span>
         <select v-model="form.project_id" class="neo-select">
           <option disabled value="">{{ t('train.chooseProject') }}</option>
-          <option v-for="project in projects ?? []" :key="project.id" :value="project.id">
+          <option
+            v-for="project in projects ?? []"
+            :key="project.id"
+            :value="project.id"
+          >
             {{ project.name }}
           </option>
         </select>
@@ -97,9 +117,9 @@
 
 <script setup lang="ts">
 import { useMutation, useQuery } from '@tanstack/vue-query';
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { RouterLink, useRouter } from 'vue-router';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
 
 import {
   createSessionStream,
@@ -121,6 +141,7 @@ import { appendStreamEvent, type StreamSection } from '../lib/streaming';
 import { useProgressSteps } from '../lib/useProgressSteps';
 
 const router = useRouter();
+const route = useRoute();
 const { t, tm } = useI18n();
 
 const form = reactive({
@@ -130,6 +151,7 @@ const form = reactive({
   intensity: 'standard',
 });
 const streamSections = ref<StreamSection[]>([]);
+const streamEvents = ref<StreamEvent[]>([]);
 const startError = ref('');
 
 const { data: projects } = useQuery({
@@ -152,6 +174,7 @@ const mutation = useMutation({
     intensity: string;
   }) => {
     streamSections.value = [];
+    streamEvents.value = [];
     startError.value = '';
     return createSessionStream(payload, handleStreamEvent);
   },
@@ -159,20 +182,57 @@ const mutation = useMutation({
     await router.push(`/sessions/${session.id}`);
   },
   onError: (error) => {
-    startError.value = error instanceof Error ? error.message : t('common.requestFailed');
+    startError.value =
+      error instanceof Error ? error.message : t('common.requestFailed');
   },
 });
 
 const isStarting = computed(() => mutation.isPending.value);
-const createSessionSteps = computed(() => tm('progress.createSession.steps') as string[]);
+const createSessionSteps = computed(
+  () => tm('progress.createSession.steps') as string[],
+);
 const createSessionProgressSteps = computed(() => [
-  { afterMs: 0, label: createSessionSteps.value[0] },
-  { afterMs: 1200, label: createSessionSteps.value[1] },
-  { afterMs: 2600, label: createSessionSteps.value[2] },
+  {
+    label: createSessionSteps.value[0] ?? '',
+    signals: [{ type: 'phase' as const, value: 'prepare_context' }],
+  },
+  {
+    label: createSessionSteps.value[1] ?? '',
+    signals: [{ type: 'phase' as const, value: 'call_model' }],
+  },
+  {
+    label: createSessionSteps.value[2] ?? '',
+    signals: [{ type: 'phase' as const, value: 'parse_result' }],
+  },
 ]);
 const { activeIndex: createSessionStepIndex } = useProgressSteps(
   isStarting,
   createSessionProgressSteps,
+  streamEvents,
+);
+
+watch(
+  () => route.query,
+  () => {
+    const mode = route.query.mode;
+    const topic = route.query.topic;
+    const projectId = route.query.project_id;
+
+    if (mode === 'basics' || mode === 'project') {
+      form.mode = mode;
+    }
+    if (typeof topic === 'string' && topic) {
+      form.topic = topic;
+    }
+    // 推荐下一轮可能只指定 project 模式，不指定 project_id。
+    // 这里要主动清空 project_id，避免误用页面里残留的旧项目选择。
+    if (typeof projectId === 'string') {
+      form.project_id = projectId;
+    } else if (form.mode === 'project' || mode === 'basics') {
+      form.project_id = '';
+    }
+  },
+  { immediate: true },
 );
 
 function submit() {
@@ -185,6 +245,7 @@ function submit() {
 }
 
 function handleStreamEvent(event: StreamEvent) {
+  streamEvents.value = [...streamEvents.value, event];
   streamSections.value = appendStreamEvent(streamSections.value, event);
 }
 

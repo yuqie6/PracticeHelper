@@ -157,8 +157,11 @@ type TrainingTurn struct {
 type EvaluationResult struct {
 	Score            float64            `json:"score"`
 	ScoreBreakdown   map[string]float64 `json:"score_breakdown"`
+	Headline         string             `json:"headline,omitempty"`
 	Strengths        []string           `json:"strengths"`
 	Gaps             []string           `json:"gaps"`
+	Suggestion       string             `json:"suggestion,omitempty"`
+	FollowupIntent   string             `json:"followup_intent,omitempty"`
 	FollowupQuestion string             `json:"followup_question,omitempty"`
 	FollowupPoints   []string           `json:"followup_expected_points,omitempty"`
 	WeaknessHits     []WeaknessHit      `json:"weakness_hits"`
@@ -184,12 +187,22 @@ type ReviewCard struct {
 	ID                string             `json:"id"`
 	SessionID         string             `json:"session_id"`
 	Overall           string             `json:"overall"`
+	TopFix            string             `json:"top_fix,omitempty"`
+	TopFixReason      string             `json:"top_fix_reason,omitempty"`
 	Highlights        []string           `json:"highlights"`
 	Gaps              []string           `json:"gaps"`
 	SuggestedTopics   []string           `json:"suggested_topics"`
 	NextTrainingFocus []string           `json:"next_training_focus"`
+	RecommendedNext   *NextSession       `json:"recommended_next,omitempty"`
 	ScoreBreakdown    map[string]float64 `json:"score_breakdown"`
 	CreatedAt         time.Time          `json:"created_at"`
+}
+
+type NextSession struct {
+	Mode      string `json:"mode"`
+	Topic     string `json:"topic,omitempty"`
+	ProjectID string `json:"project_id,omitempty"`
+	Reason    string `json:"reason,omitempty"`
 }
 
 type TrainingSessionSummary struct {

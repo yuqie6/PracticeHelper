@@ -206,6 +206,91 @@ func TestTransitionSessionStatusRequiresCurrentStatusMatch(t *testing.T) {
 	}
 }
 
+func TestCreateReviewUpdatesExistingRowIDAndRecommendedNext(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	session := &domain.TrainingSession{
+		ID:        "sess_review_roundtrip",
+		Mode:      domain.ModeBasics,
+		Topic:     "go",
+		Intensity: "standard",
+		Status:    domain.StatusReviewPending,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_review_roundtrip",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Go 的 goroutine 为什么轻量？",
+		ExpectedPoints: []string{"调度", "栈"},
+		Answer:         "因为调度和栈更轻",
+		FollowupAnswer: "因为上下文切换成本更低",
+	}
+	if err := store.CreateSession(ctx, session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	first := &domain.ReviewCard{
+		ID:                "review_first",
+		SessionID:         session.ID,
+		Overall:           "first",
+		Highlights:        []string{"结构清楚"},
+		Gaps:              []string{"缺细节"},
+		SuggestedTopics:   []string{"redis"},
+		NextTrainingFocus: []string{"补案例"},
+		ScoreBreakdown:    map[string]float64{"表达": 70},
+	}
+	if err := store.CreateReview(ctx, first); err != nil {
+		t.Fatalf("CreateReview() first error = %v", err)
+	}
+
+	second := &domain.ReviewCard{
+		ID:                "review_second",
+		SessionID:         first.SessionID,
+		Overall:           "second",
+		TopFix:            "先把 trade-off 讲清楚",
+		TopFixReason:      "这是项目题说服力的核心缺口",
+		Highlights:        []string{"能先给结论"},
+		Gaps:              []string{"缺具体代价"},
+		SuggestedTopics:   []string{"kafka"},
+		NextTrainingFocus: []string{"补设计取舍"},
+		RecommendedNext: &domain.NextSession{
+			Mode:   domain.ModeBasics,
+			Topic:  "kafka",
+			Reason: "先补缓存一致性与消息幂等表述",
+		},
+		ScoreBreakdown: map[string]float64{"表达": 82},
+	}
+	if err := store.CreateReview(ctx, second); err != nil {
+		t.Fatalf("CreateReview() second error = %v", err)
+	}
+
+	saved, err := store.GetReview(ctx, second.ID)
+	if err != nil {
+		t.Fatalf("GetReview() error = %v", err)
+	}
+	if saved == nil {
+		t.Fatal("expected saved review")
+	}
+	if saved.ID != second.ID {
+		t.Fatalf("expected review id %q, got %q", second.ID, saved.ID)
+	}
+	if saved.TopFix != second.TopFix {
+		t.Fatalf("expected top fix %q, got %q", second.TopFix, saved.TopFix)
+	}
+	if saved.RecommendedNext == nil {
+		t.Fatal("expected recommended next session to be persisted")
+	}
+	if saved.RecommendedNext.Topic != "kafka" {
+		t.Fatalf("expected recommended topic kafka, got %q", saved.RecommendedNext.Topic)
+	}
+}
+
 func openTestStore(t *testing.T) (*Store, error) {
 	t.Helper()
 

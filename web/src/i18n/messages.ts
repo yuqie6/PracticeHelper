@@ -295,10 +295,22 @@ export const messages = {
         '回答已经保存，但复盘生成失败了。页面会切到可恢复状态，你可以直接重试复盘。',
       answerLockedWhileProcessing:
         '系统正在处理中，当前输入区已锁定，避免重复提交。',
+      submittedAnswerTitle: '已收到你的回答',
+      submittedAnswerDescription:
+        '系统正在处理这段内容，当前先锁定展示，避免重复提交。',
+      followupIntentTitle: '这条追问在确认什么',
+      suggestionTitle: '下一次怎么答会更好',
+      suggestionFallback:
+        '系统已经识别到你的主要缺口，下一轮会继续围绕这个点追问。',
+      feedbackHeadlineFallback:
+        '系统已经完成初步判断，下面是本轮最关键的反馈。',
+      scoreBreakdownTitle: '分项得分',
       reviewPendingTitle: '复盘还没收口',
       reviewPendingDescription:
         '上一轮回答已经保存，但复盘生成没有完成。你可以直接重试复盘，不需要重新回答。',
       retryReviewAction: '重试生成复盘',
+      reviewWrapUpTitle: '本轮问答已完成',
+      reviewWrapUpDescription: '系统正在整理复盘卡，马上带你进入总结页面。',
       streamPending: '模型已经开始返回内容，但还在整理成结构化结果，请稍候。',
       streamSectionCounter: '过程片段 {index}',
       streamKinds: {
@@ -336,12 +348,12 @@ export const messages = {
       evaluateMain: {
         title: '正在评估主问题回答',
         description: '系统会先分析回答，再生成追问。',
-        steps: ['保存你的回答', '调用模型评估答案', '生成追问与反馈'],
+        steps: ['已收到回答', '正在评估回答', '追问与反馈已生成'],
       },
       evaluateFollowup: {
         title: '正在生成本轮复盘',
         description: '系统会先完成追问评估，再整理复盘卡。',
-        steps: ['保存追问回答', '完成最终评估', '生成复盘卡'],
+        steps: ['已收到追问回答', '已完成最终评估', '复盘卡已生成'],
       },
     },
     review: {
@@ -355,11 +367,17 @@ export const messages = {
       loadErrorTitle: '复盘加载失败',
       emptyTitle: '这轮复盘还没准备好',
       emptyDescription: '可能还在生成中，或者这轮训练还没有成功收口。',
+      topFixTitle: '最该优先修正',
+      topFixFallbackReason: '先把这个问题修正掉，后面的训练收益会明显更高。',
       scoreBreakdown: '分项得分',
       highlights: '回答亮点',
       gaps: '需要补强',
       nextFocus: '下一轮重点',
+      recommendedNextTitle: '推荐下一轮',
+      recommendedNextBasics: '建议先做一轮 {topic} 基础训练',
+      recommendedNextMode: '建议直接开始一轮 {mode}',
       continueAction: '继续下一轮',
+      startRecommendedAction: '立即开始推荐下一轮',
     },
   },
   en: {
@@ -680,10 +698,23 @@ export const messages = {
         'Your answer is already saved, but review generation failed. The page will switch to a recoverable state so you can retry the review directly.',
       answerLockedWhileProcessing:
         'The system is still processing, so the answer box is locked to avoid duplicate submissions.',
+      submittedAnswerTitle: 'Answer received',
+      submittedAnswerDescription:
+        'The system is processing this answer, so it is shown as read-only for now.',
+      followupIntentTitle: 'What this follow-up is checking',
+      suggestionTitle: 'How to answer better next time',
+      suggestionFallback:
+        'The system has identified the main gap and will keep pushing on it in the next round.',
+      feedbackHeadlineFallback:
+        'The system has finished the first-pass judgment. Here is the most important feedback.',
+      scoreBreakdownTitle: 'Score breakdown',
       reviewPendingTitle: 'Review is not finished yet',
       reviewPendingDescription:
         'Your answer is already saved, but review generation did not finish. You can retry the review directly without answering again.',
       retryReviewAction: 'Retry review generation',
+      reviewWrapUpTitle: 'This round is complete',
+      reviewWrapUpDescription:
+        'The system is organizing your review card and will take you there in a moment.',
       streamPending:
         'The model is already returning content, but the structured result is still being assembled.',
       streamSectionCounter: 'Stream block {index}',
@@ -729,9 +760,9 @@ export const messages = {
         description:
           'The system evaluates the answer first and then prepares the follow-up.',
         steps: [
-          'Save your answer',
-          'Call the model',
-          'Prepare the follow-up and feedback',
+          'Answer received',
+          'Evaluating answer',
+          'Follow-up and feedback ready',
         ],
       },
       evaluateFollowup: {
@@ -739,9 +770,9 @@ export const messages = {
         description:
           'The system completes the follow-up evaluation and then prepares the review card.',
         steps: [
-          'Save the follow-up answer',
-          'Complete the final evaluation',
-          'Generate the review card',
+          'Follow-up answer received',
+          'Final evaluation completed',
+          'Review card ready',
         ],
       },
     },
@@ -758,11 +789,18 @@ export const messages = {
       emptyTitle: 'This review is not ready yet',
       emptyDescription:
         'It may still be generating, or the session did not finish successfully.',
+      topFixTitle: 'Top fix',
+      topFixFallbackReason:
+        'Fix this first. It will improve the payoff of the next training round the most.',
       scoreBreakdown: 'Score breakdown',
       highlights: 'Highlights',
       gaps: 'Needs improvement',
       nextFocus: 'Next focus',
+      recommendedNextTitle: 'Recommended next round',
+      recommendedNextBasics: 'Start with a {topic} fundamentals round',
+      recommendedNextMode: 'Start a {mode} round next',
       continueAction: 'Continue training',
+      startRecommendedAction: 'Start recommended round',
     },
   },
 } as const;

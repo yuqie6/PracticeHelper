@@ -18,18 +18,29 @@ export type ParsedStreamPayload =
       kind: 'evaluation';
       score: number;
       scoreBreakdown: Record<string, number>;
+      headline: string;
       strengths: string[];
       gaps: string[];
+      suggestion: string;
+      followupIntent: string;
       followupQuestion: string;
       followupExpectedPoints: string[];
     }
   | {
       kind: 'review';
       overall: string;
+      topFix: string;
+      topFixReason: string;
       highlights: string[];
       gaps: string[];
       suggestedTopics: string[];
       nextTrainingFocus: string[];
+      recommendedNext: {
+        mode: string;
+        topic: string;
+        projectId: string;
+        reason: string;
+      } | null;
       scoreBreakdown: Record<string, number>;
     };
 
@@ -81,7 +92,9 @@ export function appendStreamEvent(
   return next;
 }
 
-export function parseStreamPayload(rawContent: string): ParsedStreamPayload | null {
+export function parseStreamPayload(
+  rawContent: string,
+): ParsedStreamPayload | null {
   const candidate = extractJsonBlock(rawContent);
   if (!candidate) {
     return null;
@@ -113,8 +126,11 @@ export function parseStreamPayload(rawContent: string): ParsedStreamPayload | nu
       kind: 'evaluation',
       score: record.score,
       scoreBreakdown: asNumberRecord(record.score_breakdown),
+      headline: asString(record.headline),
       strengths: asStringArray(record.strengths),
       gaps: asStringArray(record.gaps),
+      suggestion: asString(record.suggestion),
+      followupIntent: asString(record.followup_intent),
       followupQuestion: asString(record.followup_question),
       followupExpectedPoints: asStringArray(record.followup_expected_points),
     };
@@ -124,10 +140,13 @@ export function parseStreamPayload(rawContent: string): ParsedStreamPayload | nu
     return {
       kind: 'review',
       overall: record.overall,
+      topFix: asString(record.top_fix),
+      topFixReason: asString(record.top_fix_reason),
       highlights: asStringArray(record.highlights),
       gaps: asStringArray(record.gaps),
       suggestedTopics: asStringArray(record.suggested_topics),
       nextTrainingFocus: asStringArray(record.next_training_focus),
+      recommendedNext: asNextSession(record.recommended_next),
       scoreBreakdown: asNumberRecord(record.score_breakdown),
     };
   }
@@ -147,7 +166,10 @@ function createStreamSection(): StreamSection {
 
 function hasSectionActivity(section: StreamSection): boolean {
   return Boolean(
-    section.phase || section.contexts.length || section.reasoning.length || section.rawContent.trim(),
+    section.phase ||
+    section.contexts.length ||
+    section.reasoning.length ||
+    section.rawContent.trim(),
   );
 }
 
@@ -185,7 +207,9 @@ function asString(value: unknown): string {
 }
 
 function asStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
 }
 
 function asNumberRecord(value: unknown): Record<string, number> {
@@ -194,6 +218,32 @@ function asNumberRecord(value: unknown): Record<string, number> {
   }
 
   return Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+    Object.entries(value).filter(
+      (entry): entry is [string, number] => typeof entry[1] === 'number',
+    ),
   );
+}
+
+function asNextSession(value: unknown): {
+  mode: string;
+  topic: string;
+  projectId: string;
+  reason: string;
+} | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const mode = asString(record.mode);
+  if (!mode) {
+    return null;
+  }
+
+  return {
+    mode,
+    topic: asString(record.topic),
+    projectId: asString(record.project_id),
+    reason: asString(record.reason),
+  };
 }

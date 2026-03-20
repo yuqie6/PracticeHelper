@@ -1,58 +1,50 @@
-import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue';
+import { computed, type Ref } from 'vue';
+
+import type { StreamEvent } from '../api/client';
 
 export interface ProgressStep {
-  afterMs: number;
   label: string;
+  signals: Array<
+    { type: 'phase'; value: string } | { type: 'status'; value: string }
+  >;
 }
 
-export function useProgressSteps(active: Ref<boolean>, steps: Ref<ProgressStep[]>) {
-  const startedAt = ref<number | null>(null);
-  const now = ref(Date.now());
-  let timer: number | null = null;
-
-  const stop = () => {
-    if (timer != null) {
-      window.clearInterval(timer);
-      timer = null;
-    }
-  };
-
-  watch(
-    active,
-    (value) => {
-      if (!value) {
-        startedAt.value = null;
-        stop();
-        return;
+export function resolveProgressIndex(
+  events: StreamEvent[],
+  steps: ProgressStep[],
+): number {
+  let index = 0;
+  for (const event of events) {
+    for (const [stepIndex, step] of steps.entries()) {
+      if (step.signals.some((signal) => matchesSignal(event, signal))) {
+        index = Math.max(index, stepIndex);
       }
+    }
+  }
+  return index;
+}
 
-      startedAt.value = Date.now();
-      now.value = startedAt.value;
-      stop();
-      timer = window.setInterval(() => {
-        now.value = Date.now();
-      }, 800);
-    },
-    { immediate: true },
-  );
-
-  onBeforeUnmount(stop);
-
+export function useProgressSteps(
+  active: Ref<boolean>,
+  steps: Ref<ProgressStep[]>,
+  events: Ref<StreamEvent[]>,
+) {
   const activeIndex = computed(() => {
-    if (!active.value || startedAt.value == null) {
+    if (!active.value || steps.value.length === 0) {
       return 0;
     }
-
-    const elapsed = now.value - startedAt.value;
-    let index = 0;
-    for (const [stepIndex, step] of steps.value.entries()) {
-      if (elapsed >= step.afterMs) {
-        index = stepIndex;
-      }
-    }
-
-    return index;
+    return resolveProgressIndex(events.value, steps.value);
   });
 
   return { activeIndex };
+}
+
+function matchesSignal(
+  event: StreamEvent,
+  signal: { type: 'phase' | 'status'; value: string },
+): boolean {
+  if (signal.type === 'phase') {
+    return event.type === 'phase' && event.phase === signal.value;
+  }
+  return event.type === 'status' && event.name === signal.value;
 }

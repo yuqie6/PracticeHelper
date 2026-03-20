@@ -81,8 +81,11 @@ export interface WeaknessTag {
 export interface TrainingEvaluation {
   score: number;
   score_breakdown: Record<string, number>;
+  headline?: string;
   strengths: string[];
   gaps: string[];
+  suggestion?: string;
+  followup_intent?: string;
   followup_question?: string;
   followup_expected_points?: string[];
 }
@@ -127,10 +130,18 @@ export interface ReviewCard {
   id: string;
   session_id: string;
   overall: string;
+  top_fix?: string;
+  top_fix_reason?: string;
   highlights: string[];
   gaps: string[];
   suggested_topics: string[];
   next_training_focus: string[];
+  recommended_next?: {
+    mode: 'basics' | 'project';
+    topic?: string;
+    project_id?: string;
+    reason?: string;
+  } | null;
   score_breakdown: Record<string, number>;
 }
 
@@ -145,7 +156,14 @@ export interface Dashboard {
 }
 
 export interface StreamEvent {
-  type: 'phase' | 'context' | 'reasoning' | 'content' | 'result' | 'error';
+  type:
+    | 'phase'
+    | 'context'
+    | 'reasoning'
+    | 'content'
+    | 'status'
+    | 'result'
+    | 'error';
   code?: string;
   phase?: string;
   name?: string;
@@ -167,7 +185,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null;
+    const payload = (await response
+      .json()
+      .catch(() => null)) as ApiErrorPayload | null;
     throw new ApiError(payload?.error?.message ?? '请求失败', {
       code: payload?.error?.code,
       status: response.status,
@@ -192,7 +212,9 @@ async function requestStream<T>(
   });
 
   if (!response.ok || !response.body) {
-    const payload = (await response.json().catch(() => null)) as ApiErrorPayload | null;
+    const payload = (await response
+      .json()
+      .catch(() => null)) as ApiErrorPayload | null;
     throw new ApiError(payload?.error?.message ?? '请求失败', {
       code: payload?.error?.code,
       status: response.status,
@@ -265,7 +287,9 @@ export function getProfile(): Promise<UserProfile | null> {
   return request('/api/profile');
 }
 
-export function saveProfile(payload: Partial<UserProfile>): Promise<UserProfile> {
+export function saveProfile(
+  payload: Partial<UserProfile>,
+): Promise<UserProfile> {
   return request('/api/profile', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -293,7 +317,10 @@ export function listProjects(): Promise<ProjectProfile[]> {
   return request('/api/projects');
 }
 
-export function updateProject(projectId: string, payload: Partial<ProjectProfile>): Promise<ProjectProfile> {
+export function updateProject(
+  projectId: string,
+  payload: Partial<ProjectProfile>,
+): Promise<ProjectProfile> {
   return request(`/api/projects/${projectId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
@@ -321,17 +348,24 @@ export function createSessionStream(
   },
   onEvent: (event: StreamEvent) => void,
 ): Promise<TrainingSession> {
-  return requestStream('/api/sessions/stream', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  }, onEvent);
+  return requestStream(
+    '/api/sessions/stream',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+    onEvent,
+  );
 }
 
 export function getSession(sessionId: string): Promise<TrainingSession> {
   return request(`/api/sessions/${sessionId}`);
 }
 
-export function submitAnswer(sessionId: string, answer: string): Promise<TrainingSession> {
+export function submitAnswer(
+  sessionId: string,
+  answer: string,
+): Promise<TrainingSession> {
   return request(`/api/sessions/${sessionId}/answer`, {
     method: 'POST',
     body: JSON.stringify({ answer }),
@@ -343,13 +377,19 @@ export function submitAnswerStream(
   answer: string,
   onEvent: (event: StreamEvent) => void,
 ): Promise<TrainingSession> {
-  return requestStream(`/api/sessions/${sessionId}/answer/stream`, {
-    method: 'POST',
-    body: JSON.stringify({ answer }),
-  }, onEvent);
+  return requestStream(
+    `/api/sessions/${sessionId}/answer/stream`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ answer }),
+    },
+    onEvent,
+  );
 }
 
-export function retrySessionReview(sessionId: string): Promise<TrainingSession> {
+export function retrySessionReview(
+  sessionId: string,
+): Promise<TrainingSession> {
   return request(`/api/sessions/${sessionId}/retry-review`, {
     method: 'POST',
   });

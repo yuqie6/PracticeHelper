@@ -34,7 +34,17 @@
     />
 
     <div
-      v-if="showReviewRecovery"
+      v-if="showReviewWrapUp"
+      class="neo-panel space-y-3 bg-[var(--neo-green)]"
+    >
+      <p class="neo-kicker bg-white">{{ t('session.reviewWrapUpTitle') }}</p>
+      <p class="text-sm font-semibold">
+        {{ t('session.reviewWrapUpDescription') }}
+      </p>
+    </div>
+
+    <div
+      v-else-if="showReviewRecovery"
       class="neo-panel space-y-3 bg-[var(--neo-yellow)]"
     >
       <p class="neo-kicker bg-white">{{ t('session.reviewPendingTitle') }}</p>
@@ -47,29 +57,66 @@
         :disabled="isRetryingReview"
         @click="retryReview"
       >
-        {{ isRetryingReview ? t('common.starting') : t('session.retryReviewAction') }}
+        {{
+          isRetryingReview
+            ? t('common.starting')
+            : t('session.retryReviewAction')
+        }}
       </button>
     </div>
 
-    <div v-else-if="session && activePrompt" class="neo-grid lg:grid-cols-[1.1fr_0.9fr]">
+    <div
+      v-else-if="session && activePrompt"
+      class="neo-grid lg:grid-cols-[1.1fr_0.9fr]"
+    >
       <div class="neo-panel space-y-4">
-        <p class="neo-kicker bg-[var(--neo-red)]">{{ t('session.currentQuestion') }}</p>
+        <p class="neo-kicker bg-[var(--neo-red)]">
+          {{ t('session.currentQuestion') }}
+        </p>
+        <div
+          v-if="followupIntent"
+          class="space-y-2 border-2 border-black bg-white px-4 py-4 md:border-4"
+        >
+          <p class="neo-subheading">{{ t('session.followupIntentTitle') }}</p>
+          <p class="text-sm font-semibold leading-6">{{ followupIntent }}</p>
+        </div>
         <h3 class="text-2xl font-black">{{ activePrompt.question }}</h3>
 
-        <form v-if="canAnswerCurrentSession" class="space-y-4" @submit.prevent="submit">
-          <textarea
-            v-model="answer"
-            class="neo-textarea"
-            :placeholder="placeholderText"
-            :disabled="isSubmitting || isBackgroundProcessing"
-          />
-          <button
-            type="submit"
-            class="neo-button-dark"
-            :disabled="isSubmitting || isBackgroundProcessing"
-          >
-            {{ isSubmitting ? t('common.submitting') : t('common.submit') }}
-          </button>
+        <form
+          v-if="canAnswerCurrentSession"
+          class="space-y-4"
+          @submit.prevent="submit"
+        >
+          <template v-if="showSubmittedAnswer">
+            <div
+              class="space-y-2 border-2 border-black bg-white px-4 py-4 md:border-4"
+            >
+              <p class="neo-subheading">
+                {{ t('session.submittedAnswerTitle') }}
+              </p>
+              <p class="whitespace-pre-wrap text-sm font-semibold leading-6">
+                {{ submittedAnswer }}
+              </p>
+              <p class="neo-note">
+                {{ t('session.submittedAnswerDescription') }}
+              </p>
+            </div>
+          </template>
+          <template v-else>
+            <textarea
+              v-model="draftAnswer"
+              class="neo-textarea"
+              :placeholder="placeholderText"
+              :disabled="isSubmitting || isBackgroundProcessing"
+            />
+            <button
+              type="submit"
+              class="neo-button-dark"
+              :disabled="isSubmitting || isBackgroundProcessing"
+            >
+              {{ isSubmitting ? t('common.submitting') : t('common.submit') }}
+            </button>
+          </template>
         </form>
         <p v-else class="neo-note">
           {{ t('session.answerLockedWhileProcessing') }}
@@ -77,27 +124,76 @@
       </div>
 
       <div class="neo-panel space-y-4">
-        <p class="neo-kicker bg-[var(--neo-green)]">{{ t('session.feedback') }}</p>
-        <template v-if="lastTurn?.evaluation">
+        <p class="neo-kicker bg-[var(--neo-green)]">
+          {{ t('session.feedback') }}
+        </p>
+        <template v-if="mainEvaluation">
           <p class="text-lg font-black">
-            {{ t('session.mainScore', { score: lastTurn.evaluation.score }) }}
+            {{ t('session.mainScore', { score: mainEvaluation.score }) }}
           </p>
-          <div class="space-y-2">
-            <p class="neo-subheading">{{ t('session.strengths') }}</p>
-            <ul class="space-y-2">
-              <li v-for="item in lastTurn.evaluation.strengths" :key="item" class="neo-note">
+          <p
+            class="border-2 border-black bg-white px-4 py-4 text-base font-semibold leading-7 md:border-4"
+          >
+            {{
+              mainEvaluation.headline || t('session.feedbackHeadlineFallback')
+            }}
+          </p>
+
+          <details v-if="mainEvaluation.strengths.length" class="space-y-2">
+            <summary class="neo-subheading cursor-pointer">
+              {{ t('session.strengths') }}
+            </summary>
+            <ul class="mt-3 space-y-2">
+              <li
+                v-for="item in mainEvaluation.strengths"
+                :key="item"
+                class="neo-note"
+              >
                 {{ item }}
               </li>
             </ul>
-          </div>
-          <div class="space-y-2">
-            <p class="neo-subheading">{{ t('session.gaps') }}</p>
-            <ul class="space-y-2">
-              <li v-for="item in lastTurn.evaluation.gaps" :key="item" class="neo-note">
+          </details>
+
+          <details v-if="mainEvaluation.gaps.length" class="space-y-2" open>
+            <summary class="neo-subheading cursor-pointer">
+              {{ t('session.gaps') }}
+            </summary>
+            <ul class="mt-3 space-y-2">
+              <li
+                v-for="item in mainEvaluation.gaps"
+                :key="item"
+                class="neo-note"
+              >
                 {{ item }}
               </li>
             </ul>
+          </details>
+
+          <div class="space-y-2">
+            <p class="neo-subheading">{{ t('session.suggestionTitle') }}</p>
+            <p class="neo-note">
+              {{ mainEvaluation.suggestion || t('session.suggestionFallback') }}
+            </p>
           </div>
+
+          <details
+            v-if="Object.keys(mainEvaluation.score_breakdown ?? {}).length"
+            class="space-y-2"
+          >
+            <summary class="neo-subheading cursor-pointer">
+              {{ t('session.scoreBreakdownTitle') }}
+            </summary>
+            <ul class="mt-3 space-y-2">
+              <li
+                v-for="(score, label) in mainEvaluation.score_breakdown"
+                :key="label"
+                class="flex items-center justify-between border-2 border-black bg-white px-3 py-2 text-sm font-semibold md:border-4"
+              >
+                <span>{{ label }}</span>
+                <span>{{ score }}</span>
+              </li>
+            </ul>
+          </details>
         </template>
         <p v-else class="neo-note">{{ t('session.feedbackEmpty') }}</p>
       </div>
@@ -107,7 +203,7 @@
 
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -128,10 +224,15 @@ import { useProgressSteps } from '../lib/useProgressSteps';
 const route = useRoute();
 const router = useRouter();
 const queryClient = useQueryClient();
-const answer = ref('');
+const draftAnswer = ref('');
+const submittedAnswer = ref('');
 const streamSections = ref<StreamSection[]>([]);
+const streamEvents = ref<StreamEvent[]>([]);
 const submitError = ref('');
+const isWrappingUpReview = ref(false);
 const { t, tm } = useI18n();
+let reviewRedirectTimer: number | null = null;
+let reviewRedirectTarget = '';
 
 const sessionId = computed(() => route.params.id as string);
 
@@ -141,9 +242,14 @@ const { data } = useQuery({
 });
 
 const session = computed(() => data.value ?? null);
-const lastTurn = computed(() => session.value?.turns?.[session.value.turns.length - 1]);
+const lastTurn = computed(
+  () => session.value?.turns?.[session.value.turns.length - 1],
+);
+const mainEvaluation = computed(() => lastTurn.value?.evaluation ?? null);
 const canAnswerCurrentSession = computed(() =>
-  ['waiting_answer', 'active', 'followup'].includes(session.value?.status ?? ''),
+  ['waiting_answer', 'active', 'followup'].includes(
+    session.value?.status ?? '',
+  ),
 );
 const currentStatusLabel = computed(() => {
   if (!session.value?.status) {
@@ -180,20 +286,36 @@ const placeholderText = computed(() =>
     ? t('session.placeholderFollowup')
     : t('session.placeholderInitial'),
 );
+const followupIntent = computed(() =>
+  session.value?.status === 'followup'
+    ? (mainEvaluation.value?.followup_intent ?? '')
+    : '',
+);
+const showSubmittedAnswer = computed(
+  () =>
+    Boolean(submittedAnswer.value) &&
+    (isSubmitting.value || isBackgroundProcessing.value),
+);
 
 const mutation = useMutation({
   mutationFn: (payload: string) => {
     streamSections.value = [];
+    streamEvents.value = [];
     submitError.value = '';
     return submitAnswerStream(sessionId.value, payload, handleStreamEvent);
   },
+  onMutate: (payload) => {
+    submittedAnswer.value = payload;
+  },
   onSuccess: async (updated) => {
     queryClient.setQueryData(['session', sessionId], updated);
-    answer.value = '';
+    draftAnswer.value = '';
+    submittedAnswer.value = '';
     await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     await queryClient.invalidateQueries({ queryKey: ['weaknesses'] });
   },
   onError: async (error) => {
+    submittedAnswer.value = '';
     submitError.value = resolveSessionErrorMessage(error);
     if (shouldRefreshSession(error)) {
       await queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
@@ -205,6 +327,10 @@ const mutation = useMutation({
 const retryReviewMutation = useMutation({
   mutationFn: () => retrySessionReview(sessionId.value),
   onSuccess: async (updated) => {
+    if (updated.status === 'completed' && updated.review_id) {
+      isWrappingUpReview.value = true;
+      scheduleReviewRedirect(updated.review_id);
+    }
     queryClient.setQueryData(['session', sessionId], updated);
     await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   },
@@ -222,11 +348,20 @@ const isRetryingReview = computed(() => retryReviewMutation.isPending.value);
 const isBackgroundProcessing = computed(() =>
   ['generating_question', 'evaluating'].includes(session.value?.status ?? ''),
 );
+const showReviewWrapUp = computed(() => isWrappingUpReview.value);
 const showProgressPanel = computed(
-  () => isSubmitting.value || isRetryingReview.value || isBackgroundProcessing.value,
+  () =>
+    !showReviewWrapUp.value &&
+    (isSubmitting.value ||
+      isRetryingReview.value ||
+      isBackgroundProcessing.value),
 );
 const showReviewRecovery = computed(
-  () => session.value?.status === 'review_pending' && !isRetryingReview.value && !isSubmitting.value,
+  () =>
+    !showReviewWrapUp.value &&
+    session.value?.status === 'review_pending' &&
+    !isRetryingReview.value &&
+    !isSubmitting.value,
 );
 const progressMode = computed(() => {
   const turns = session.value?.turns ?? [];
@@ -281,33 +416,41 @@ const progressSteps = computed(() => {
   return tm(key) as string[];
 });
 const progressStepDefinitions = computed(() =>
-  progressSteps.value.map((label, index) => ({
-    label,
-    afterMs: index * 1200,
-  })),
+  buildProgressStepDefinitions(progressMode.value, progressSteps.value),
 );
 const { activeIndex: progressStepIndex } = useProgressSteps(
   showProgressPanel,
   progressStepDefinitions,
+  streamEvents,
 );
 
 watch(
   session,
   async (value) => {
-    // 训练页只承载“可继续回答”的中间态；一旦 session 已完成且 review 已落库，
-    // 无论是首次加载已完成会话，还是本页刚提交完答案，都应该立即回到 review 页面。
     if (value?.status === 'completed' && value.review_id) {
+      if (isWrappingUpReview.value) {
+        scheduleReviewRedirect(value.review_id);
+        return;
+      }
       await router.push(`/reviews/${value.review_id}`);
     }
   },
   { immediate: true },
 );
 
+onBeforeUnmount(() => {
+  clearReviewRedirectTimer();
+});
+
 function submit() {
-  if (!answer.value.trim() || !canAnswerCurrentSession.value || isBackgroundProcessing.value) {
+  if (
+    !draftAnswer.value.trim() ||
+    !canAnswerCurrentSession.value ||
+    isBackgroundProcessing.value
+  ) {
     return;
   }
-  mutation.mutate(answer.value);
+  mutation.mutate(draftAnswer.value);
 }
 
 function retryReview() {
@@ -316,7 +459,11 @@ function retryReview() {
 }
 
 function handleStreamEvent(event: StreamEvent) {
+  streamEvents.value = [...streamEvents.value, event];
   streamSections.value = appendStreamEvent(streamSections.value, event);
+  if (event.type === 'status' && event.name === 'review_saved') {
+    isWrappingUpReview.value = true;
+  }
 }
 
 function shouldRefreshSession(error: unknown): boolean {
@@ -354,5 +501,86 @@ function resolveSessionErrorMessage(error: unknown): string {
   }
 
   return error instanceof Error ? error.message : t('common.requestFailed');
+}
+
+function scheduleReviewRedirect(reviewId: string) {
+  if (!reviewId || reviewRedirectTarget === reviewId) {
+    return;
+  }
+
+  clearReviewRedirectTimer();
+  reviewRedirectTarget = reviewId;
+  reviewRedirectTimer = window.setTimeout(() => {
+    reviewRedirectTimer = null;
+    void router.push(`/reviews/${reviewId}`);
+  }, 1500);
+}
+
+function clearReviewRedirectTimer() {
+  if (reviewRedirectTimer != null) {
+    window.clearTimeout(reviewRedirectTimer);
+    reviewRedirectTimer = null;
+  }
+  reviewRedirectTarget = '';
+}
+
+function buildProgressStepDefinitions(
+  mode: 'question' | 'answer' | 'review',
+  labels: string[],
+) {
+  if (mode === 'review') {
+    return [
+      {
+        label: labels[0] ?? '',
+        signals: [{ type: 'status' as const, value: 'answer_received' }],
+      },
+      {
+        label: labels[1] ?? '',
+        signals: [{ type: 'status' as const, value: 'feedback_ready' }],
+      },
+      {
+        label: labels[2] ?? '',
+        signals: [
+          { type: 'status' as const, value: 'review_started' },
+          { type: 'status' as const, value: 'review_saved' },
+        ],
+      },
+    ];
+  }
+
+  if (mode === 'answer') {
+    return [
+      {
+        label: labels[0] ?? '',
+        signals: [{ type: 'status' as const, value: 'answer_received' }],
+      },
+      {
+        label: labels[1] ?? '',
+        signals: [{ type: 'status' as const, value: 'evaluation_started' }],
+      },
+      {
+        label: labels[2] ?? '',
+        signals: [
+          { type: 'status' as const, value: 'feedback_ready' },
+          { type: 'status' as const, value: 'followup_ready' },
+        ],
+      },
+    ];
+  }
+
+  return [
+    {
+      label: labels[0] ?? '',
+      signals: [{ type: 'phase' as const, value: 'prepare_context' }],
+    },
+    {
+      label: labels[1] ?? '',
+      signals: [{ type: 'phase' as const, value: 'call_model' }],
+    },
+    {
+      label: labels[2] ?? '',
+      signals: [{ type: 'phase' as const, value: 'parse_result' }],
+    },
+  ];
 }
 </script>

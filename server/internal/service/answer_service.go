@@ -174,6 +174,7 @@ func (s *Service) SubmitAnswerStream(
 		if err := s.claimSessionForAnswer(ctx, session, previousStatus); err != nil {
 			return nil, err
 		}
+		emitStatus(emit, "answer_received")
 
 		contextChunks, err := s.lookupSessionContext(ctx, session)
 		if err != nil {
@@ -185,6 +186,8 @@ func (s *Service) SubmitAnswerStream(
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
 			return nil, err
 		}
+
+		emitStatus(emit, "evaluation_started")
 
 		evaluation, err := s.sidecar.EvaluateAnswerStream(ctx, domain.EvaluateAnswerRequest{
 			Mode:           session.Mode,
@@ -201,6 +204,7 @@ func (s *Service) SubmitAnswerStream(
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
 			return nil, err
 		}
+		emitStatus(emit, "feedback_ready")
 
 		turn.Answer = request.Answer
 		turn.Evaluation = evaluation
@@ -222,6 +226,7 @@ func (s *Service) SubmitAnswerStream(
 		if err := s.repo.SaveSession(ctx, session); err != nil {
 			return nil, err
 		}
+		emitStatus(emit, "followup_ready")
 
 		if evaluation.Score >= 75 {
 			_ = s.coolDownSessionWeakness(ctx, session, evaluation.WeaknessHits)
@@ -231,6 +236,7 @@ func (s *Service) SubmitAnswerStream(
 		if err := s.claimSessionForAnswer(ctx, session, previousStatus); err != nil {
 			return nil, err
 		}
+		emitStatus(emit, "answer_received")
 
 		contextChunks, err := s.lookupSessionContext(ctx, session)
 		if err != nil {
@@ -242,6 +248,7 @@ func (s *Service) SubmitAnswerStream(
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
 			return nil, err
 		}
+		emitStatus(emit, "evaluation_started")
 
 		evaluation, err := s.sidecar.EvaluateAnswerStream(ctx, domain.EvaluateAnswerRequest{
 			Mode:           session.Mode,
@@ -258,6 +265,7 @@ func (s *Service) SubmitAnswerStream(
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
 			return nil, err
 		}
+		emitStatus(emit, "feedback_ready")
 
 		turn.FollowupAnswer = request.Answer
 		turn.FollowupEvaluation = evaluation
@@ -277,6 +285,7 @@ func (s *Service) SubmitAnswerStream(
 		if err := s.repo.SaveSession(ctx, session); err != nil {
 			return nil, err
 		}
+		emitStatus(emit, "review_started")
 
 		updatedSession, err := s.finalizeReviewStream(ctx, session.ID, emit)
 		if err != nil {

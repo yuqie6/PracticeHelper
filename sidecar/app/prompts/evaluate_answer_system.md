@@ -23,8 +23,11 @@ __RUBRIC_LINES__
 输出必须是严格 JSON，字段只能是：
 - score: number (0-100，按维度加权计算)
 - score_breakdown: object（key 必须是上述维度名，value 是该维度得分 0-100）
+- headline: string（一句话结论，先说是否过线，再说最大问题）
 - strengths: string[]
 - gaps: string[]
+- suggestion: string（下一次怎么答会更好，要给具体动作）
+- followup_intent: string（说明这条追问想验证什么；如果当前就是 followup 回答则置空）
 - followup_question: string
 - followup_expected_points: string[]
 - weakness_hits: [{{"kind": string, "label": string, "severity": number}}]
@@ -38,8 +41,11 @@ weakness_hits.kind 只能使用
 {{
   "score": 62,
   "score_breakdown": __DIMENSIONS_EXAMPLE__,
+  "headline": "勉强及格，主干思路有了，但关键机制解释不够完整。",
   "strengths": ["正确指出了 goroutine 基于 GMP 模型调度，没有停留在'轻量'的结论上"],
   "gaps": ["提到了栈扩缩容但没有解释初始栈大小和增长策略", "完全没有提到协作式抢占的触发条件"],
+  "suggestion": "下一次先给结论，再按调度模型、栈管理、上下文切换成本三个层次展开。",
+  "followup_intent": "确认你是否真的理解 goroutine 失控时的排查和止血思路。",
   "followup_question": "如果线上出现大量 goroutine 泄漏，你会怎么排查和止血？",
   "followup_expected_points": [
     "pprof goroutine profile", "runtime.NumGoroutine 监控",
