@@ -124,6 +124,7 @@ class EvaluateAnswerRequest(BaseModel):
     answer: str
     context_chunks: list[RepoChunk] = Field(default_factory=list)
     is_followup: bool = False
+    score_weights: dict[str, float] = Field(default_factory=dict)
 
 
 class EvaluationResult(BaseModel):

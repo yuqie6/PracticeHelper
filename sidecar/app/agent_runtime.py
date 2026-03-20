@@ -58,6 +58,206 @@ class RuntimeTool:
         }
 
 
+_DEFAULT_SCORE_WEIGHTS: dict[str, float] = {
+    "准确性": 30,
+    "完整性": 25,
+    "落地感": 15,
+    "表达清晰度": 15,
+    "抗追问能力": 15,
+}
+
+
+def _question_prompts(
+    request: GenerateQuestionRequest,
+) -> tuple[str, str, list[RuntimeTool]]:
+    system_prompt = """
+你是 PracticeHelper 的真实面试训练 agent。
+
+目标：
+1. 先利用可用工具理解用户当前训练上下文。
+2. 再生成一条有训练价值的主问题，而不是泛泛而谈。
+3. 输出必须是严格 JSON，字段只能是：
+   - question: string
+   - expected_points: string[]
+
+要求：
+- basics 模式优先围绕主题、历史弱项和模板做一条可追问的问题。
+- project 模式必须围绕项目背景、trade-off、ownership 和真实结果。
+- expected_points 控制在 4 到 6 个，必须具体、可判定。
+- 不要输出 Markdown，不要解释，只输出 JSON。
+""".strip()
+
+    user_prompt = (
+        f"请生成本轮训练的主问题。\n"
+        f"当前模式：{request.mode}，主题：{request.topic}\n\n"
+        '最终答案必须匹配：{{"question": "string", "expected_points": ["string"]}}'
+    )
+
+    tools = [
+        RuntimeTool(
+            name="read_question_templates",
+            description="Read curated question templates for basics training.",
+            handler=lambda _: {
+                "templates": [item.model_dump(mode="json") for item in request.templates],
+            },
+        ),
+        RuntimeTool(
+            name="read_project_brief",
+            description="Read the current project profile for project interview mode.",
+            handler=lambda _: {
+                "project": request.project.model_dump(mode="json") if request.project else None,
+            },
+        ),
+        RuntimeTool(
+            name="read_context_chunks",
+            description="Read the retrieved repo chunks that can ground follow-up questions.",
+            handler=lambda _: {"chunks": _compact_chunks(request.context_chunks)},
+        ),
+        RuntimeTool(
+            name="read_weakness_memory",
+            description="Read the current weakness memory accumulated from previous sessions.",
+            handler=lambda _: {
+                "weaknesses": [item.model_dump(mode="json") for item in request.weaknesses],
+            },
+        ),
+    ]
+    return system_prompt, user_prompt, tools
+
+
+def _evaluate_prompts(
+    request: EvaluateAnswerRequest,
+) -> tuple[str, str, list[RuntimeTool]]:
+    weights = request.score_weights or _DEFAULT_SCORE_WEIGHTS
+    rubric_lines = "\n".join(f"- {k} ({int(v)}%)" for k, v in weights.items())
+    dimensions_example = json.dumps(
+        {k: 0 for k in weights}, ensure_ascii=False,
+    )
+
+    system_prompt = f"""
+你是 PracticeHelper 的追问型面试官 agent。
+
+你的工作分两步：
+
+第一步 — 评估：
+结合工具返回的上下文，对照 expected_points 和下方评分标准，逐维度打分，列出 strengths 和 gaps。
+strengths 和 gaps 要具体到用户回答中的某句话或某个缺失点，不要写空话。
+
+评分维度与权重（总分 100）：
+{rubric_lines}
+
+分段参考：
+- 85+：可以直接过关，亮点突出
+- 70-84：基本过线，但有明显可补的缺口
+- 55-69：勉强及格，核心点有但不够深
+- 40-54：不及格，遗漏关键点或有事实错误
+- <40：严重不足，答非所问或基本空白
+
+第二步 — 追问：
+基于 gaps 中最值得深挖的点，设计一条追问。追问目标是验证用户是否真正理解，而不是换一道新题。
+非 followup 回答时必须给一条追问；followup 回答时 followup_question 置空。
+
+输出必须是严格 JSON，字段只能是：
+- score: number (0-100，按维度加权计算)
+- score_breakdown: object（key 必须是上述维度名，value 是该维度得分 0-100）
+- strengths: string[]
+- gaps: string[]
+- followup_question: string
+- followup_expected_points: string[]
+- weakness_hits: [{{"kind": string, "label": string, "severity": number}}]
+
+weakness_hits 最多 3 条，severity 在 0 到 1.5 之间。
+weakness_hits.kind 只能使用
+  topic / project / expression / followup_breakdown / depth / detail 之一。
+不要输出 Markdown，不要解释，只输出 JSON。
+
+示例输出：
+{{
+  "score": 62,
+  "score_breakdown": {dimensions_example},
+  "strengths": ["正确指出了 goroutine 基于 GMP 模型调度，没有停留在'轻量'的结论上"],
+  "gaps": ["提到了栈扩缩容但没有解释初始栈大小和增长策略", "完全没有提到协作式抢占的触发条件"],
+  "followup_question": "如果线上出现大量 goroutine 泄漏，你会怎么排查和止血？",
+  "followup_expected_points": [
+    "pprof goroutine profile", "runtime.NumGoroutine 监控",
+    "context 超时兜底", "泄漏根因分类"
+  ],
+  "weakness_hits": [{{"kind": "depth", "label": "goroutine调度", "severity": 0.8}}]
+}}""".strip()
+
+    followup_label = "是" if request.is_followup else "否"
+    user_prompt = (
+        f"请评估这次回答，并决定下一刀追问。\n"
+        f"当前模式：{request.mode}，主题：{request.topic}，"
+        f"是否为追问回答：{followup_label}"
+    )
+
+    tools = [
+        RuntimeTool(
+            name="read_evaluation_context",
+            description=(
+                "Read the question, expected points, answer, and project context for scoring."
+            ),
+            handler=lambda _: {
+                "mode": request.mode,
+                "topic": request.topic,
+                "question": request.question,
+                "expected_points": request.expected_points,
+                "answer": request.answer,
+                "project": request.project.model_dump(mode="json") if request.project else None,
+                "context_chunks": _compact_chunks(request.context_chunks),
+                "is_followup": request.is_followup,
+            },
+        ),
+    ]
+    return system_prompt, user_prompt, tools
+
+
+def _review_prompts(
+    request: GenerateReviewRequest,
+) -> tuple[str, str, list[RuntimeTool]]:
+    system_prompt = """
+你是 PracticeHelper 的复盘 agent。
+
+任务：
+1. 阅读整轮训练历史，输出一张真正可执行的 review card。
+2. 重点总结：整体判断、亮点、漏洞、建议主题、下一轮重点。
+3. 输出必须是严格 JSON，字段只能是：
+   - overall: string
+   - highlights: string[]
+   - gaps: string[]
+   - suggested_topics: string[]
+   - next_training_focus: string[]
+   - score_breakdown: object<string, number>
+
+要求：
+- overall 要像一个严厉但有帮助的教练总结。
+- highlights 和 gaps 都要尽量去重且具体。
+- next_training_focus 要能直接拿去开始下一轮训练。
+- 不要输出 Markdown，不要解释，只输出 JSON。
+""".strip()
+
+    user_prompt = "请根据整轮训练历史生成最终复盘卡。"
+
+    tools = [
+        RuntimeTool(
+            name="read_session_summary",
+            description="Read the current session summary and project summary if available.",
+            handler=lambda _: {
+                "session": request.session.model_dump(mode="json"),
+                "project": request.project.model_dump(mode="json") if request.project else None,
+            },
+        ),
+        RuntimeTool(
+            name="read_turn_history",
+            description="Read all turns, including evaluations and follow-up evaluations.",
+            handler=lambda _: {
+                "turns": [turn.model_dump(mode="json") for turn in request.turns],
+            },
+        ),
+    ]
+    return system_prompt, user_prompt, tools
+
+
 class AgentRuntime:
     def __init__(
         self,
@@ -109,20 +309,7 @@ class AgentRuntime:
 - 如果证据不够，就保守表达，不要脑补。
 - 不要输出 Markdown，不要解释，只输出 JSON。
 """.strip()
-        user_prompt = _build_user_prompt(
-            "请根据当前仓库材料生成项目画像。",
-            request,
-            response_shape="""
-{
-  "summary": "string",
-  "highlights": ["string"],
-  "challenges": ["string"],
-  "tradeoffs": ["string"],
-  "ownership_points": ["string"],
-  "followup_points": ["string"]
-}
-""".strip(),
-        )
+        user_prompt = "请根据当前仓库材料生成项目画像。"
         draft = self._run_task(
             response_model=AnalyzeRepoDraft,
             system_prompt=system_prompt,
@@ -153,60 +340,7 @@ class AgentRuntime:
     def generate_question(self, request: GenerateQuestionRequest) -> GenerateQuestionResponse:
         started_at = time.perf_counter()
         logger.info("generate_question started mode=%s topic=%s", request.mode, request.topic)
-        tools = [
-            RuntimeTool(
-                name="read_question_templates",
-                description="Read curated question templates for basics training.",
-                handler=lambda _: {
-                    "templates": [item.model_dump(mode="json") for item in request.templates],
-                },
-            ),
-            RuntimeTool(
-                name="read_project_brief",
-                description="Read the current project profile for project interview mode.",
-                handler=lambda _: {
-                    "project": request.project.model_dump(mode="json") if request.project else None,
-                },
-            ),
-            RuntimeTool(
-                name="read_context_chunks",
-                description="Read the retrieved repo chunks that can ground follow-up questions.",
-                handler=lambda _: {"chunks": _compact_chunks(request.context_chunks)},
-            ),
-            RuntimeTool(
-                name="read_weakness_memory",
-                description="Read the current weakness memory accumulated from previous sessions.",
-                handler=lambda _: {
-                    "weaknesses": [item.model_dump(mode="json") for item in request.weaknesses],
-                },
-            ),
-        ]
-        system_prompt = """
-你是 PracticeHelper 的真实面试训练 agent。
-
-目标：
-1. 先利用可用工具理解用户当前训练上下文。
-2. 再生成一条有训练价值的主问题，而不是泛泛而谈。
-3. 输出必须是严格 JSON，字段只能是：
-   - question: string
-   - expected_points: string[]
-
-要求：
-- basics 模式优先围绕主题、历史弱项和模板做一条可追问的问题。
-- project 模式必须围绕项目背景、trade-off、ownership 和真实结果。
-- expected_points 控制在 4 到 6 个，必须具体、可判定。
-- 不要输出 Markdown，不要解释，只输出 JSON。
-""".strip()
-        user_prompt = _build_user_prompt(
-            "请生成本轮训练的主问题。",
-            request,
-            response_shape="""
-{
-  "question": "string",
-  "expected_points": ["string"]
-}
-""".strip(),
-        )
+        system_prompt, user_prompt, tools = _question_prompts(request)
         response = self._run_task(
             response_model=GenerateQuestionResponse,
             system_prompt=system_prompt,
@@ -224,60 +358,7 @@ class AgentRuntime:
     def stream_generate_question(
         self, request: GenerateQuestionRequest
     ) -> Iterator[dict[str, Any]]:
-        tools = [
-            RuntimeTool(
-                name="read_question_templates",
-                description="Read curated question templates for basics training.",
-                handler=lambda _: {
-                    "templates": [item.model_dump(mode="json") for item in request.templates],
-                },
-            ),
-            RuntimeTool(
-                name="read_project_brief",
-                description="Read the current project profile for project interview mode.",
-                handler=lambda _: {
-                    "project": request.project.model_dump(mode="json") if request.project else None,
-                },
-            ),
-            RuntimeTool(
-                name="read_context_chunks",
-                description="Read the retrieved repo chunks that can ground follow-up questions.",
-                handler=lambda _: {"chunks": _compact_chunks(request.context_chunks)},
-            ),
-            RuntimeTool(
-                name="read_weakness_memory",
-                description="Read the current weakness memory accumulated from previous sessions.",
-                handler=lambda _: {
-                    "weaknesses": [item.model_dump(mode="json") for item in request.weaknesses],
-                },
-            ),
-        ]
-        system_prompt = """
-你是 PracticeHelper 的真实面试训练 agent。
-
-目标：
-1. 先利用可用工具理解用户当前训练上下文。
-2. 再生成一条有训练价值的主问题，而不是泛泛而谈。
-3. 输出必须是严格 JSON，字段只能是：
-   - question: string
-   - expected_points: string[]
-
-要求：
-- basics 模式优先围绕主题、历史弱项和模板做一条可追问的问题。
-- project 模式必须围绕项目背景、trade-off、ownership 和真实结果。
-- expected_points 控制在 4 到 6 个，必须具体、可判定。
-- 不要输出 Markdown，不要解释，只输出 JSON。
-""".strip()
-        user_prompt = _build_user_prompt(
-            "请生成本轮训练的主问题。",
-            request,
-            response_shape="""
-{
-  "question": "string",
-  "expected_points": ["string"]
-}
-""".strip(),
-        )
+        system_prompt, user_prompt, tools = _question_prompts(request)
         yield from self._stream_single_shot_task(
             response_model=GenerateQuestionResponse,
             system_prompt=system_prompt,
@@ -293,62 +374,7 @@ class AgentRuntime:
             request.topic,
             request.is_followup,
         )
-        tools = [
-            RuntimeTool(
-                name="read_evaluation_context",
-                description=(
-                    "Read the question, expected points, answer, and project context for scoring."
-                ),
-                handler=lambda _: {
-                    "mode": request.mode,
-                    "topic": request.topic,
-                    "question": request.question,
-                    "expected_points": request.expected_points,
-                    "answer": request.answer,
-                    "project": request.project.model_dump(mode="json") if request.project else None,
-                    "context_chunks": _compact_chunks(request.context_chunks),
-                    "is_followup": request.is_followup,
-                },
-            ),
-        ]
-        system_prompt = """
-你是 PracticeHelper 的追问型面试官 agent。
-
-任务：
-1. 结合工具返回的上下文，对回答做结构化评估。
-2. 分清楚回答覆盖了什么、缺了什么、哪里虚、下一刀该追问哪里。
-3. 输出必须是严格 JSON，字段只能是：
-   - score: number (0-100)
-   - score_breakdown: object<string, number>
-   - strengths: string[]
-   - gaps: string[]
-   - followup_question: string
-   - followup_expected_points: string[]
-   - weakness_hits: [{"kind": string, "label": string, "severity": number}]
-
-要求：
-- strengths 和 gaps 要具体，不要写空话。
-- 非 followup 回答时必须给一条追问问题；followup 回答时 followup_question 置空。
-- weakness_hits 最多 3 条，severity 在 0 到 1.5 之间。
-- weakness_hits.kind 只能使用
-  topic / project / expression / followup_breakdown / depth / detail 之一。
-- 不要输出 Markdown，不要解释，只输出 JSON。
-""".strip()
-        user_prompt = _build_user_prompt(
-            "请评估这次回答，并决定下一刀追问。",
-            request,
-            response_shape="""
-{
-  "score": 0,
-  "score_breakdown": {"维度": 0},
-  "strengths": ["string"],
-  "gaps": ["string"],
-  "followup_question": "string",
-  "followup_expected_points": ["string"],
-  "weakness_hits": [{"kind": "topic", "label": "redis", "severity": 0.6}]
-}
-""".strip(),
-        )
+        system_prompt, user_prompt, tools = _evaluate_prompts(request)
         response = self._run_task(
             response_model=EvaluationResult,
             system_prompt=system_prompt,
@@ -367,62 +393,7 @@ class AgentRuntime:
     def stream_evaluate_answer(
         self, request: EvaluateAnswerRequest
     ) -> Iterator[dict[str, Any]]:
-        tools = [
-            RuntimeTool(
-                name="read_evaluation_context",
-                description=(
-                    "Read the question, expected points, answer, and project context for scoring."
-                ),
-                handler=lambda _: {
-                    "mode": request.mode,
-                    "topic": request.topic,
-                    "question": request.question,
-                    "expected_points": request.expected_points,
-                    "answer": request.answer,
-                    "project": request.project.model_dump(mode="json") if request.project else None,
-                    "context_chunks": _compact_chunks(request.context_chunks),
-                    "is_followup": request.is_followup,
-                },
-            ),
-        ]
-        system_prompt = """
-你是 PracticeHelper 的追问型面试官 agent。
-
-任务：
-1. 结合工具返回的上下文，对回答做结构化评估。
-2. 分清楚回答覆盖了什么、缺了什么、哪里虚、下一刀该追问哪里。
-3. 输出必须是严格 JSON，字段只能是：
-   - score: number (0-100)
-   - score_breakdown: object<string, number>
-   - strengths: string[]
-   - gaps: string[]
-   - followup_question: string
-   - followup_expected_points: string[]
-   - weakness_hits: [{"kind": string, "label": string, "severity": number}]
-
-要求：
-- strengths 和 gaps 要具体，不要写空话。
-- 非 followup 回答时必须给一条追问问题；followup 回答时 followup_question 置空。
-- weakness_hits 最多 3 条，severity 在 0 到 1.5 之间。
-- weakness_hits.kind 只能使用
-  topic / project / expression / followup_breakdown / depth / detail 之一。
-- 不要输出 Markdown，不要解释，只输出 JSON。
-""".strip()
-        user_prompt = _build_user_prompt(
-            "请评估这次回答，并决定下一刀追问。",
-            request,
-            response_shape="""
-{
-  "score": 0,
-  "score_breakdown": {"维度": 0},
-  "strengths": ["string"],
-  "gaps": ["string"],
-  "followup_question": "string",
-  "followup_expected_points": ["string"],
-  "weakness_hits": [{"kind": "topic", "label": "redis", "severity": 0.6}]
-}
-""".strip(),
-        )
+        system_prompt, user_prompt, tools = _evaluate_prompts(request)
         yield from self._stream_single_shot_task(
             response_model=EvaluationResult,
             system_prompt=system_prompt,
@@ -433,57 +404,7 @@ class AgentRuntime:
     def generate_review(self, request: GenerateReviewRequest) -> ReviewCard:
         started_at = time.perf_counter()
         logger.info("generate_review started session_id=%s", request.session.id)
-        tools = [
-            RuntimeTool(
-                name="read_session_summary",
-                description="Read the current session summary and project summary if available.",
-                handler=lambda _: {
-                    "session": request.session.model_dump(mode="json"),
-                    "project": request.project.model_dump(mode="json") if request.project else None,
-                },
-            ),
-            RuntimeTool(
-                name="read_turn_history",
-                description="Read all turns, including evaluations and follow-up evaluations.",
-                handler=lambda _: {
-                    "turns": [turn.model_dump(mode="json") for turn in request.turns],
-                },
-            ),
-        ]
-        system_prompt = """
-你是 PracticeHelper 的复盘 agent。
-
-任务：
-1. 阅读整轮训练历史，输出一张真正可执行的 review card。
-2. 重点总结：整体判断、亮点、漏洞、建议主题、下一轮重点。
-3. 输出必须是严格 JSON，字段只能是：
-   - overall: string
-   - highlights: string[]
-   - gaps: string[]
-   - suggested_topics: string[]
-   - next_training_focus: string[]
-   - score_breakdown: object<string, number>
-
-要求：
-- overall 要像一个严厉但有帮助的教练总结。
-- highlights 和 gaps 都要尽量去重且具体。
-- next_training_focus 要能直接拿去开始下一轮训练。
-- 不要输出 Markdown，不要解释，只输出 JSON。
-""".strip()
-        user_prompt = _build_user_prompt(
-            "请根据整轮训练历史生成最终复盘卡。",
-            request,
-            response_shape="""
-{
-  "overall": "string",
-  "highlights": ["string"],
-  "gaps": ["string"],
-  "suggested_topics": ["string"],
-  "next_training_focus": ["string"],
-  "score_breakdown": {"维度": 0}
-}
-""".strip(),
-        )
+        system_prompt, user_prompt, tools = _review_prompts(request)
         response = self._run_task(
             response_model=ReviewCard,
             system_prompt=system_prompt,
@@ -500,57 +421,7 @@ class AgentRuntime:
     def stream_generate_review(
         self, request: GenerateReviewRequest
     ) -> Iterator[dict[str, Any]]:
-        tools = [
-            RuntimeTool(
-                name="read_session_summary",
-                description="Read the current session summary and project summary if available.",
-                handler=lambda _: {
-                    "session": request.session.model_dump(mode="json"),
-                    "project": request.project.model_dump(mode="json") if request.project else None,
-                },
-            ),
-            RuntimeTool(
-                name="read_turn_history",
-                description="Read all turns, including evaluations and follow-up evaluations.",
-                handler=lambda _: {
-                    "turns": [turn.model_dump(mode="json") for turn in request.turns],
-                },
-            ),
-        ]
-        system_prompt = """
-你是 PracticeHelper 的复盘 agent。
-
-任务：
-1. 阅读整轮训练历史，输出一张真正可执行的 review card。
-2. 重点总结：整体判断、亮点、漏洞、建议主题、下一轮重点。
-3. 输出必须是严格 JSON，字段只能是：
-   - overall: string
-   - highlights: string[]
-   - gaps: string[]
-   - suggested_topics: string[]
-   - next_training_focus: string[]
-   - score_breakdown: object<string, number>
-
-要求：
-- overall 要像一个严厉但有帮助的教练总结。
-- highlights 和 gaps 都要尽量去重且具体。
-- next_training_focus 要能直接拿去开始下一轮训练。
-- 不要输出 Markdown，不要解释，只输出 JSON。
-""".strip()
-        user_prompt = _build_user_prompt(
-            "请根据整轮训练历史生成最终复盘卡。",
-            request,
-            response_shape="""
-{
-  "overall": "string",
-  "highlights": ["string"],
-  "gaps": ["string"],
-  "suggested_topics": ["string"],
-  "next_training_focus": ["string"],
-  "score_breakdown": {"维度": 0}
-}
-""".strip(),
-        )
+        system_prompt, user_prompt, tools = _review_prompts(request)
         yield from self._stream_single_shot_task(
             response_model=ReviewCard,
             system_prompt=system_prompt,
@@ -768,16 +639,6 @@ def _repo_overview_payload(bundle: RepoAnalysisBundle) -> dict[str, Any]:
         "top_paths": bundle.top_paths[:8],
         "chunk_count": len(bundle.chunks),
     }
-
-
-def _build_user_prompt(instruction: str, request: BaseModel, *, response_shape: str) -> str:
-    return (
-        f"{instruction}\n\n"
-        "这是当前请求的结构化载荷：\n"
-        f"{json.dumps(request.model_dump(mode='json'), ensure_ascii=False, indent=2)}\n\n"
-        "最终答案必须匹配下面这个 JSON 形状：\n"
-        f"{response_shape}"
-    )
 
 
 def _validate_json_response[ResponseModelT: BaseModel](
