@@ -38,10 +38,10 @@ func TestBuildRecommendedTrackCoversNewWeaknessKinds(t *testing.T) {
 		kind string
 		want string
 	}{
-		{name: "expression", kind: "expression", want: "表达方式专项"},
-		{name: "followup", kind: "followup_breakdown", want: "追问抗压专项"},
-		{name: "depth", kind: "depth", want: "展开深挖专项"},
-		{name: "detail", kind: "detail", want: "细节补强专项"},
+		{name: "expression", kind: "expression", want: "围绕「x」做表达方式专项"},
+		{name: "followup", kind: "followup_breakdown", want: "围绕「x」做追问抗压专项"},
+		{name: "depth", kind: "depth", want: "围绕「x」做展开深挖专项"},
+		{name: "detail", kind: "detail", want: "围绕「x」做细节补强专项"},
 	}
 
 	for _, tc := range cases {
@@ -283,6 +283,213 @@ func TestSubmitAnswerPassesTemplateScoreWeightsToSidecar(t *testing.T) {
 	for key, value := range want {
 		if captured.ScoreWeights[key] != value {
 			t.Fatalf("unexpected score weight for %s: got %v want %v", key, captured.ScoreWeights[key], value)
+		}
+	}
+}
+
+func TestSubmitAnswerStreamEmitsStatusSequenceForMainAnswer(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := &domain.TrainingSession{
+		ID:        "sess_stream_main",
+		Mode:      domain.ModeBasics,
+		Topic:     "go",
+		Intensity: "standard",
+		Status:    domain.StatusWaitingAnswer,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_stream_main",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Go 的 channel 和 mutex 什么时候各用什么？",
+		ExpectedPoints: []string{"共享内存", "所有权转移"},
+	}
+	if err := store.CreateSession(context.Background(), session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/evaluate_answer/stream" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		encoder := json.NewEncoder(w)
+		if err := encoder.Encode(domain.StreamEvent{Type: "phase", Phase: "call_model"}); err != nil {
+			t.Fatalf("encode phase event: %v", err)
+		}
+		if err := encoder.Encode(domain.StreamEvent{
+			Type: "result",
+			Data: domain.EvaluationResult{
+				Score:            81,
+				ScoreBreakdown:   map[string]float64{"准确性": 80},
+				Strengths:        []string{"有结论"},
+				Gaps:             []string{"例子不够具体"},
+				FollowupQuestion: "那你在项目里什么时候会避免过度用 channel？",
+				FollowupPoints:   []string{"性能", "复杂度"},
+			},
+		}); err != nil {
+			t.Fatalf("encode result event: %v", err)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+
+	var events []domain.StreamEvent
+	updated, err := svc.SubmitAnswerStream(
+		context.Background(),
+		session.ID,
+		domain.SubmitAnswerRequest{Answer: "channel 更适合消息和所有权转移，mutex 更适合保护共享状态。"},
+		func(event domain.StreamEvent) error {
+			events = append(events, event)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("SubmitAnswerStream() error = %v", err)
+	}
+
+	if updated.Status != domain.StatusFollowup {
+		t.Fatalf("expected followup status, got %s", updated.Status)
+	}
+
+	assertStatusEventNames(t, events, []string{
+		"answer_received",
+		"evaluation_started",
+		"feedback_ready",
+		"answer_saved",
+		"followup_ready",
+	})
+}
+
+func TestSubmitAnswerStreamEmitsStatusSequenceForFollowupAnswer(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := &domain.TrainingSession{
+		ID:         "sess_stream_followup",
+		Mode:       domain.ModeBasics,
+		Topic:      "go",
+		Intensity:  "standard",
+		Status:     domain.StatusFollowup,
+		TotalScore: 72,
+	}
+	turn := &domain.TrainingTurn{
+		ID:                    "turn_stream_followup",
+		SessionID:             session.ID,
+		TurnIndex:             1,
+		Stage:                 "question",
+		Question:              "Go 的 channel 和 mutex 什么时候各用什么？",
+		ExpectedPoints:        []string{"共享内存", "所有权转移"},
+		Answer:                "主回答已经提交",
+		FollowupQuestion:      "那你在项目里什么时候会避免过度用 channel？",
+		FollowupExpectedPoint: []string{"性能", "复杂度"},
+	}
+	if err := store.CreateSession(context.Background(), session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		encoder := json.NewEncoder(w)
+
+		switch r.URL.Path {
+		case "/internal/evaluate_answer/stream":
+			if err := encoder.Encode(domain.StreamEvent{Type: "phase", Phase: "call_model"}); err != nil {
+				t.Fatalf("encode phase event: %v", err)
+			}
+			if err := encoder.Encode(domain.StreamEvent{
+				Type: "result",
+				Data: domain.EvaluationResult{
+					Score:          86,
+					ScoreBreakdown: map[string]float64{"准确性": 85},
+					Strengths:      []string{"解释到了取舍"},
+					Gaps:           []string{"可以补线上场景"},
+				},
+			}); err != nil {
+				t.Fatalf("encode evaluation result event: %v", err)
+			}
+		case "/internal/generate_review/stream":
+			if err := encoder.Encode(domain.StreamEvent{Type: "phase", Phase: "call_model"}); err != nil {
+				t.Fatalf("encode review phase event: %v", err)
+			}
+			if err := encoder.Encode(domain.StreamEvent{
+				Type: "result",
+				Data: domain.ReviewCard{
+					Overall:           "本轮回答整体过线，但例子还能更贴近真实线上场景。",
+					Highlights:        []string{"主线判断清楚"},
+					Gaps:              []string{"例子不够落地"},
+					SuggestedTopics:   []string{"并发控制"},
+					NextTrainingFocus: []string{"把取舍讲得更具体"},
+					ScoreBreakdown:    map[string]float64{"准确性": 84},
+				},
+			}); err != nil {
+				t.Fatalf("encode review result event: %v", err)
+			}
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+
+	var events []domain.StreamEvent
+	updated, err := svc.SubmitAnswerStream(
+		context.Background(),
+		session.ID,
+		domain.SubmitAnswerRequest{Answer: "我会在共享状态简单且性能敏感时优先 mutex，而不是为了 channel 而 channel。"},
+		func(event domain.StreamEvent) error {
+			events = append(events, event)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("SubmitAnswerStream() error = %v", err)
+	}
+
+	if updated.Status != domain.StatusCompleted {
+		t.Fatalf("expected completed status, got %s", updated.Status)
+	}
+	if updated.ReviewID == "" {
+		t.Fatal("expected review id to be saved")
+	}
+
+	assertStatusEventNames(t, events, []string{
+		"answer_received",
+		"evaluation_started",
+		"feedback_ready",
+		"answer_saved",
+		"review_started",
+		"review_saved",
+	})
+}
+
+func assertStatusEventNames(t *testing.T, events []domain.StreamEvent, want []string) {
+	t.Helper()
+
+	var got []string
+	for _, event := range events {
+		if event.Type == "status" {
+			got = append(got, event.Name)
+		}
+	}
+
+	if len(got) != len(want) {
+		t.Fatalf("unexpected status event count: got %v want %v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("unexpected status event sequence: got %v want %v", got, want)
 		}
 	}
 }

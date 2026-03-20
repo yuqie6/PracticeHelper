@@ -79,7 +79,7 @@ func (s *Service) SubmitAnswer(ctx context.Context, sessionID string, request do
 		}
 
 		if evaluation.Score >= 75 {
-			_ = s.coolDownSessionWeakness(ctx, session, evaluation.WeaknessHits)
+			_ = s.coolDownSessionWeakness(ctx, session, turn.Question, evaluation.WeaknessHits)
 		}
 	case domain.StatusFollowup:
 		previousStatus := session.Status
@@ -140,7 +140,12 @@ func (s *Service) SubmitAnswer(ctx context.Context, sessionID string, request do
 		}
 
 		if evaluation.Score >= 75 {
-			_ = s.coolDownSessionWeakness(ctx, updatedSession, evaluation.WeaknessHits)
+			_ = s.coolDownSessionWeakness(
+				ctx,
+				updatedSession,
+				turn.Question+" "+turn.FollowupQuestion,
+				evaluation.WeaknessHits,
+			)
 		}
 	default:
 		return nil, classifySubmitAnswerStatus(session.Status)
@@ -216,6 +221,7 @@ func (s *Service) SubmitAnswerStream(
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
 			return nil, err
 		}
+		emitStatus(emit, "answer_saved")
 		if err := s.repo.UpsertWeaknesses(ctx, session.ID, evaluation.WeaknessHits); err != nil {
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
 			return nil, err
@@ -229,7 +235,7 @@ func (s *Service) SubmitAnswerStream(
 		emitStatus(emit, "followup_ready")
 
 		if evaluation.Score >= 75 {
-			_ = s.coolDownSessionWeakness(ctx, session, evaluation.WeaknessHits)
+			_ = s.coolDownSessionWeakness(ctx, session, turn.Question, evaluation.WeaknessHits)
 		}
 	case domain.StatusFollowup:
 		previousStatus := session.Status
@@ -275,6 +281,7 @@ func (s *Service) SubmitAnswerStream(
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
 			return nil, err
 		}
+		emitStatus(emit, "answer_saved")
 		if err := s.repo.UpsertWeaknesses(ctx, session.ID, evaluation.WeaknessHits); err != nil {
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
 			return nil, err
@@ -293,7 +300,12 @@ func (s *Service) SubmitAnswerStream(
 		}
 
 		if evaluation.Score >= 75 {
-			_ = s.coolDownSessionWeakness(ctx, updatedSession, evaluation.WeaknessHits)
+			_ = s.coolDownSessionWeakness(
+				ctx,
+				updatedSession,
+				turn.Question+" "+turn.FollowupQuestion,
+				evaluation.WeaknessHits,
+			)
 		}
 	default:
 		return nil, classifySubmitAnswerStatus(session.Status)

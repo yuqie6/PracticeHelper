@@ -8,10 +8,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.agent_runtime import AgentRuntime
 from app.config import Settings
 from app.llm_client import ChatCompletionResult, ModelClientError
+from app.runtime_prompts import evaluate_prompt_bundle, question_prompt_bundle
 from app.schemas import (
     AnalyzeRepoRequest,
     EvaluateAnswerRequest,
     GenerateQuestionRequest,
+    QuestionTemplate,
     ProjectProfile,
     WeaknessHit,
 )
@@ -124,6 +126,64 @@ def test_generate_question_falls_back_to_single_shot_when_model_skips_tools() ->
     assert "read_project_brief" in client.calls[1]["messages"][1]["content"]
 
 
+def test_question_prompt_bundle_includes_all_basics_templates() -> None:
+    system_prompt, user_prompt, tools = question_prompt_bundle(
+        GenerateQuestionRequest(
+            mode="basics",
+            topic="go",
+            intensity="standard",
+            templates=[
+                QuestionTemplate(mode="basics", topic="go", prompt="问题1"),
+                QuestionTemplate(mode="basics", topic="go", prompt="问题2"),
+                QuestionTemplate(mode="basics", topic="go", prompt="问题3"),
+                QuestionTemplate(mode="basics", topic="go", prompt="问题4"),
+                QuestionTemplate(mode="basics", topic="go", prompt="问题5"),
+            ],
+        )
+    )
+
+    assert "主问题" in user_prompt
+    templates_payload = tools[0].handler({})
+    assert len(templates_payload["templates"]) == 5
+    assert templates_payload["templates"][0]["prompt"] == "问题1"
+
+
+def test_evaluate_prompt_bundle_requires_conservative_followup_when_evidence_is_thin() -> None:
+    system_prompt, user_prompt, tools = evaluate_prompt_bundle(
+        EvaluateAnswerRequest(
+            mode="basics",
+            topic="redis",
+            question="Redis 为什么快？",
+            expected_points=["内存访问", "事件循环"],
+            answer="因为它在内存里。",
+            is_followup=False,
+        )
+    )
+
+    assert "证据不足，要用保守表达追问" in system_prompt
+    assert "不要把未证实的经历、做法、线上事故或项目事实写成既定前提" in system_prompt
+    payload = tools[0].handler({})
+    assert payload["is_followup"] is False
+    assert "是否为追问回答：否" in user_prompt
+
+
+def test_evaluate_prompt_bundle_marks_followup_requests() -> None:
+    _, user_prompt, tools = evaluate_prompt_bundle(
+        EvaluateAnswerRequest(
+            mode="project",
+            topic="",
+            question="如果线上报警频繁，你会怎么止血？",
+            expected_points=["先止血", "再排查"],
+            answer="我会先降级，再看指标。",
+            is_followup=True,
+        )
+    )
+
+    payload = tools[0].handler({})
+    assert payload["is_followup"] is True
+    assert "是否为追问回答：是" in user_prompt
+
+
 def test_runtime_raises_when_llm_is_disabled() -> None:
     runtime = AgentRuntime(
         Settings(
@@ -166,6 +226,11 @@ def test_analyze_repo_requires_llm_when_no_model_client_is_configured() -> None:
     ("raw_kind", "expected_kind"),
     [
         ("topic", "topic"),
+        ("accuracy", "detail"),
+        ("correctness", "detail"),
+        ("completeness", "depth"),
+        ("coverage", "depth"),
+        ("clarity", "expression"),
         ("followup-breakdown", "followup_breakdown"),
         ("communication", "expression"),
         ("depth", "depth"),

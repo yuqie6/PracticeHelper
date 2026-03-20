@@ -10,6 +10,14 @@ WeaknessKind = Literal["topic", "project", "expression", "followup_breakdown", "
 def _normalize_weakness_kind(value: str) -> str:
     normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
     aliases = {
+        "accuracy": "detail",
+        "correctness": "detail",
+        "precision": "detail",
+        "completeness": "depth",
+        "coverage": "depth",
+        "breadth": "depth",
+        "clarity": "expression",
+        "structure": "expression",
         "communication": "expression",
         "followup": "followup_breakdown",
         "follow_up": "followup_breakdown",

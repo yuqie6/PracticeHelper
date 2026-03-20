@@ -308,6 +308,13 @@ const mutation = useMutation({
     submittedAnswer.value = payload;
   },
   onSuccess: async (updated) => {
+    if (
+      isWrappingUpReview.value &&
+      updated.status === 'completed' &&
+      updated.review_id
+    ) {
+      scheduleReviewRedirect(updated.review_id);
+    }
     queryClient.setQueryData(['session', sessionId], updated);
     draftAnswer.value = '';
     submittedAnswer.value = '';
@@ -463,6 +470,9 @@ function handleStreamEvent(event: StreamEvent) {
   streamSections.value = appendStreamEvent(streamSections.value, event);
   if (event.type === 'status' && event.name === 'review_saved') {
     isWrappingUpReview.value = true;
+    if (session.value?.review_id) {
+      scheduleReviewRedirect(session.value.review_id);
+    }
   }
 }
 

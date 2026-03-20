@@ -22,13 +22,27 @@ func (s *Service) lookupSessionContext(ctx context.Context, session *domain.Trai
 	return s.repo.SearchProjectChunks(ctx, session.Project.ID, query, 6)
 }
 
-func (s *Service) coolDownSessionWeakness(ctx context.Context, session *domain.TrainingSession, hits []domain.WeaknessHit) error {
+func (s *Service) coolDownSessionWeakness(
+	ctx context.Context,
+	session *domain.TrainingSession,
+	questionText string,
+	hits []domain.WeaknessHit,
+) error {
 	// 这里是“答得好就给弱点降温”的启发式修正，不追求精确评分模型。
 	// 命中的具体弱点和本轮主维度（topic/project）都会被轻微衰减；
 	// 即便降温失败，也不能反向影响训练主流程，所以这里统一忽略 repo 写入错误。
 	for _, hit := range hits {
 		_ = s.repo.RelieveWeakness(ctx, hit.Kind, hit.Label, 0.18)
 	}
+
+	// 如果当前题目文本已经明确对应某个历史弱项 label，说明这次高分回答对那个点有直接修复价值。
+	// 这里额外做一次按题面文本匹配的降温，避免“答对了同一题型，但旧标签完全不降”的僵硬体感。
+	_ = s.repo.RelieveWeaknessesMatchingText(
+		ctx,
+		[]string{"topic", "depth", "detail", "followup_breakdown"},
+		questionText,
+		0.28,
+	)
 
 	if session.Mode == domain.ModeBasics && session.Topic != "" {
 		_ = s.repo.RelieveWeakness(ctx, "topic", session.Topic, 0.15)
@@ -60,15 +74,15 @@ func buildRecommendedTrack(profile *domain.UserProfile, weaknesses []domain.Weak
 		case "project":
 			return fmt.Sprintf("%s 项目专项", weaknesses[0].Label)
 		case "expression":
-			return "表达方式专项"
+			return fmt.Sprintf("围绕「%s」做表达方式专项", weaknesses[0].Label)
 		case "followup_breakdown":
-			return "追问抗压专项"
+			return fmt.Sprintf("围绕「%s」做追问抗压专项", weaknesses[0].Label)
 		case "depth":
-			return "展开深挖专项"
+			return fmt.Sprintf("围绕「%s」做展开深挖专项", weaknesses[0].Label)
 		case "detail":
-			return "细节补强专项"
+			return fmt.Sprintf("围绕「%s」做细节补强专项", weaknesses[0].Label)
 		default:
-			return "追问抗压专项"
+			return fmt.Sprintf("围绕「%s」做针对性训练", weaknesses[0].Label)
 		}
 	}
 
