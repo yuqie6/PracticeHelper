@@ -269,14 +269,15 @@ type GenerateQuestionResponse struct {
 }
 
 type EvaluateAnswerRequest struct {
-	Mode           string          `json:"mode"`
-	Topic          string          `json:"topic,omitempty"`
-	Project        *ProjectProfile `json:"project,omitempty"`
-	Question       string          `json:"question"`
-	ExpectedPoints []string        `json:"expected_points"`
-	Answer         string          `json:"answer"`
-	ContextChunks  []RepoChunk     `json:"context_chunks,omitempty"`
-	IsFollowup     bool            `json:"is_followup"`
+	Mode           string             `json:"mode"`
+	Topic          string             `json:"topic,omitempty"`
+	Project        *ProjectProfile    `json:"project,omitempty"`
+	Question       string             `json:"question"`
+	ExpectedPoints []string           `json:"expected_points"`
+	Answer         string             `json:"answer"`
+	ContextChunks  []RepoChunk        `json:"context_chunks,omitempty"`
+	IsFollowup     bool               `json:"is_followup"`
+	ScoreWeights   map[string]float64 `json:"score_weights,omitempty"`
 }
 
 type GenerateReviewRequest struct {

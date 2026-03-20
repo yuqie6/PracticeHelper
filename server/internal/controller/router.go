@@ -252,6 +252,8 @@ func (h *Handler) submitAnswer(c *gin.Context) {
 			errors.Is(err, service.ErrSessionCompleted),
 			errors.Is(err, service.ErrSessionAnswerConflict):
 			writeError(c, http.StatusConflict, err)
+		case errors.Is(err, service.ErrReviewGenerationRetry):
+			writeError(c, http.StatusBadGateway, err)
 		default:
 			writeError(c, http.StatusBadGateway, err)
 		}
@@ -282,6 +284,8 @@ func (h *Handler) retrySessionReview(c *gin.Context) {
 			errors.Is(err, service.ErrSessionBusy),
 			errors.Is(err, service.ErrSessionCompleted):
 			writeError(c, http.StatusConflict, err)
+		case errors.Is(err, service.ErrReviewGenerationRetry):
+			writeError(c, http.StatusBadGateway, err)
 		default:
 			writeError(c, http.StatusBadGateway, err)
 		}
@@ -423,6 +427,8 @@ func errorCode(err error) string {
 		return "session_completed"
 	case errors.Is(err, service.ErrSessionAnswerConflict):
 		return "session_answer_conflict"
+	case errors.Is(err, service.ErrReviewGenerationRetry):
+		return "review_generation_retry"
 	case errors.Is(err, repo.ErrAlreadyImported):
 		return "project_already_imported"
 	default:

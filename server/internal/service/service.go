@@ -17,6 +17,7 @@ var (
 	ErrSessionReviewPending  = errors.New("session review is pending; retry review instead")
 	ErrSessionCompleted      = errors.New("session is already completed")
 	ErrSessionAnswerConflict = errors.New("session cannot accept answers in its current status")
+	ErrReviewGenerationRetry = errors.New("review generation failed but the session can be recovered by retrying review")
 )
 
 type Service struct {
