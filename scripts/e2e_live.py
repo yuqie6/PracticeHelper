@@ -48,6 +48,8 @@ def load_scenario(path: str) -> dict[str, Any]:
     for key in ("profile", "basics", "project"):
         if key not in payload or not isinstance(payload[key], dict):
             raise RuntimeError(f"scenario missing object field: {key}")
+    if "job_target" in payload and not isinstance(payload["job_target"], dict):
+        raise RuntimeError("scenario.job_target must be a JSON object when provided")
 
     return payload
 
@@ -208,6 +210,11 @@ def expect(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
+def expect_context_name(events: list[dict[str, Any]], name: str, label: str) -> None:
+    names = [str(event.get("name", "")) for event in events if event.get("type") == "context"]
+    expect(name in names, f"{label} missing context event {name}; got {names}")
+
+
 def as_string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -290,6 +297,140 @@ def verify_project_edit_cycle(base_url: str, project: dict[str, Any]) -> tuple[d
     }
 
 
+def create_and_prepare_job_target(base_url: str, payload: dict[str, Any]) -> dict[str, Any]:
+    status, created = post_data(
+        base_url,
+        "/api/job-targets",
+        {
+            "title": str(payload.get("title", "")).strip(),
+            "company_name": str(payload.get("company_name", "")).strip(),
+            "source_text": str(payload.get("source_text", "")).strip(),
+        },
+        timeout=30.0,
+    )
+    expect(status == 201, f"expected 201 from /api/job-targets, got {status}")
+    target_id = str(created.get("id", "")).strip()
+    expect(target_id != "", "job target creation returned empty id")
+
+    analyze_status, analysis = post_data(
+        base_url,
+        f"/api/job-targets/{urllib.parse.quote(target_id)}/analyze",
+        {},
+        timeout=240.0,
+    )
+    expect(analyze_status == 201, f"expected 201 from job target analyze, got {analyze_status}")
+    expect(analysis.get("status") == "succeeded", f"job target analysis did not succeed: {analysis}")
+
+    ready_target = get_data(base_url, f"/api/job-targets/{urllib.parse.quote(target_id)}", timeout=30.0)
+    expect(
+        ready_target.get("latest_analysis_status") == "succeeded",
+        f"job target did not reach succeeded state: {ready_target.get('latest_analysis_status')}",
+    )
+    latest_successful = ready_target.get("latest_successful_analysis")
+    expect(isinstance(latest_successful, dict), "job target missing latest_successful_analysis after success")
+    expect(
+        str(latest_successful.get("id", "")).strip() == str(analysis.get("id", "")).strip(),
+        "job target latest_successful_analysis id does not match analyze response",
+    )
+
+    activate_status, profile = post_data(
+        base_url,
+        f"/api/job-targets/{urllib.parse.quote(target_id)}/activate",
+        {},
+        timeout=30.0,
+    )
+    expect(activate_status == 200, f"expected 200 from activate job target, got {activate_status}")
+    expect(
+        str(profile.get("active_job_target_id", "")).strip() == target_id,
+        "profile active_job_target_id did not update after activation",
+    )
+
+    return {
+        "target": ready_target,
+        "analysis": analysis,
+        "profile": profile,
+    }
+
+
+def verify_bound_job_target(
+    session: dict[str, Any],
+    review: dict[str, Any],
+    prepared_job_target: dict[str, Any],
+    label: str,
+) -> None:
+    target = prepared_job_target["target"]
+    analysis = prepared_job_target["analysis"]
+    target_id = str(target["id"])
+    analysis_id = str(analysis["id"])
+
+    expect(str(session.get("job_target_id", "")).strip() == target_id, f"{label} session lost job_target_id")
+    expect(
+        str(session.get("job_target_analysis_id", "")).strip() == analysis_id,
+        f"{label} session lost job_target_analysis_id",
+    )
+    expect(str(review.get("job_target_id", "")).strip() == target_id, f"{label} review lost job_target_id")
+    expect(
+        str(review.get("job_target_analysis_id", "")).strip() == analysis_id,
+        f"{label} review lost job_target_analysis_id",
+    )
+
+    session_job_target = session.get("job_target")
+    expect(isinstance(session_job_target, dict), f"{label} session missing job_target ref")
+    expect(
+        str(session_job_target.get("title", "")).strip() == str(target.get("title", "")).strip(),
+        f"{label} session job_target title mismatch",
+    )
+    review_job_target = review.get("job_target")
+    expect(isinstance(review_job_target, dict), f"{label} review missing job_target ref")
+    expect(
+        str(review_job_target.get("title", "")).strip() == str(target.get("title", "")).strip(),
+        f"{label} review job_target title mismatch",
+    )
+
+
+def mark_job_target_stale(base_url: str, target: dict[str, Any], stale_source_text: str) -> dict[str, Any]:
+    _, updated = patch_data(
+        base_url,
+        f"/api/job-targets/{urllib.parse.quote(str(target['id']))}",
+        {
+            "title": str(target.get("title", "")).strip(),
+            "company_name": str(target.get("company_name", "")).strip(),
+            "source_text": stale_source_text.strip(),
+        },
+        timeout=30.0,
+    )
+    expect(updated.get("latest_analysis_status") == "stale", "job target did not become stale after source update")
+    latest_successful = updated.get("latest_successful_analysis")
+    expect(
+        isinstance(latest_successful, dict) and str(latest_successful.get("id", "")).strip() != "",
+        "stale job target should still expose latest successful analysis",
+    )
+    return updated
+
+
+def expect_create_session_conflict(base_url: str, payload: dict[str, Any], expected_code: str) -> dict[str, Any]:
+    request = urllib.request.Request(
+        urllib.parse.urljoin(base_url, "/api/sessions"),
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60.0) as response:
+            raise RuntimeError(
+                f"expected /api/sessions to fail with {expected_code}, got HTTP {response.status}"
+            )
+    except urllib.error.HTTPError as exc:
+        body = json.loads(exc.read().decode("utf-8"))
+        error = body.get("error") or {}
+        expect(exc.code == 409, f"expected HTTP 409, got {exc.code}")
+        expect(
+            str(error.get("code", "")).strip() == expected_code,
+            f"expected error code {expected_code}, got {error.get('code')}",
+        )
+        return body
+
+
 def extract_status_names(events: list[dict[str, Any]]) -> list[str]:
     return [str(event["name"]) for event in events if event.get("type") == "status" and event.get("name")]
 
@@ -358,6 +499,24 @@ def main() -> int:
     )
 
     dashboard_before = get_data(base_url, "/api/dashboard", timeout=30.0)
+    prepared_job_target = None
+    dashboard_with_ready_job_target = None
+    job_target_payload = scenario.get("job_target")
+    if isinstance(job_target_payload, dict):
+        prepared_job_target = create_and_prepare_job_target(base_url, job_target_payload)
+        dashboard_with_ready_job_target = get_data(base_url, "/api/dashboard", timeout=30.0)
+        active_job_target = dashboard_with_ready_job_target.get("active_job_target")
+        expect(isinstance(active_job_target, dict), "dashboard missing active_job_target after job target activation")
+        expect(
+            str(active_job_target.get("id", "")).strip()
+            == str(prepared_job_target["target"].get("id", "")).strip(),
+            "dashboard active_job_target id mismatch after job target activation",
+        )
+        expect(
+            dashboard_with_ready_job_target.get("recommendation_scope") == "job_target",
+            "dashboard recommendation_scope did not switch to job_target after successful JD activation",
+        )
+
     imported = import_project(
         base_url,
         repo_url,
@@ -367,14 +526,17 @@ def main() -> int:
     project, project_edit_verification = verify_project_edit_cycle(base_url, imported["project"])
 
     basics_payload = scenario["basics"]
+    basics_create_payload = {
+        "mode": "basics",
+        "topic": basics_payload["topic"],
+        "intensity": basics_payload["intensity"],
+    }
+    if prepared_job_target is not None:
+        basics_create_payload["job_target_id"] = prepared_job_target["target"]["id"]
     basics_session, basics_create_events = stream_json(
         base_url,
         "/api/sessions/stream",
-        {
-            "mode": "basics",
-            "topic": basics_payload["topic"],
-            "intensity": basics_payload["intensity"],
-        },
+        basics_create_payload,
         timeout=240.0,
     )
     basics_main, basics_main_events = stream_json(
@@ -402,16 +564,22 @@ def main() -> int:
     )
     expect(basics_final["status"] == "completed", f"basics session did not complete: {basics_final['status']}")
     expect(str(basics_final.get("review_id", "")).strip() != "", "basics session missing review_id")
+    if prepared_job_target is not None:
+        expect_context_name(basics_create_events, "read_job_target_analysis", "basics create")
+        verify_bound_job_target(basics_final, basics_review, prepared_job_target, "basics")
 
     project_payload = scenario["project"]
+    project_create_payload = {
+        "mode": "project",
+        "project_id": project["id"],
+        "intensity": project_payload["intensity"],
+    }
+    if prepared_job_target is not None:
+        project_create_payload["job_target_id"] = prepared_job_target["target"]["id"]
     project_session, project_create_events = stream_json(
         base_url,
         "/api/sessions/stream",
-        {
-            "mode": "project",
-            "project_id": project["id"],
-            "intensity": project_payload["intensity"],
-        },
+        project_create_payload,
         timeout=240.0,
     )
     project_main, project_main_events = stream_json(
@@ -439,12 +607,42 @@ def main() -> int:
     )
     expect(project_final["status"] == "completed", f"project session did not complete: {project_final['status']}")
     expect(str(project_final.get("review_id", "")).strip() != "", "project session missing review_id")
+    if prepared_job_target is not None:
+        expect_context_name(project_create_events, "read_job_target_analysis", "project create")
+        verify_bound_job_target(project_final, project_review, prepared_job_target, "project")
 
     dashboard_after = get_data(base_url, "/api/dashboard", timeout=30.0)
     dashboard_binding = verify_dashboard_binding(
         dashboard_after,
         [str(basics_final["id"]), str(project_final["id"])],
     )
+
+    stale_job_target = None
+    stale_block_error = None
+    dashboard_after_stale = None
+    if prepared_job_target is not None:
+        stale_source_text = str(job_target_payload.get("stale_source_text", "")).strip()
+        if stale_source_text:
+            stale_job_target = mark_job_target_stale(
+                base_url,
+                prepared_job_target["target"],
+                stale_source_text,
+            )
+            stale_block_error = expect_create_session_conflict(
+                base_url,
+                {
+                    "mode": "basics",
+                    "topic": basics_payload["topic"],
+                    "job_target_id": prepared_job_target["target"]["id"],
+                    "intensity": basics_payload["intensity"],
+                },
+                "job_target_not_ready",
+            )
+            dashboard_after_stale = get_data(base_url, "/api/dashboard", timeout=30.0)
+            expect(
+                dashboard_after_stale.get("recommendation_scope") == "generic",
+                "dashboard recommendation_scope should fall back to generic after JD becomes stale",
+            )
 
     summary = {
         "base_url": base_url,
@@ -453,6 +651,7 @@ def main() -> int:
         "dashboard_days_until_deadline": dashboard_before.get("days_until_deadline"),
         "import": imported,
         "project_edit_verification": project_edit_verification,
+        "dashboard_with_ready_job_target": dashboard_with_ready_job_target,
         "current_session_after_runs": dashboard_after.get("current_session"),
         "dashboard_binding": dashboard_binding,
         "basics": {
@@ -460,6 +659,8 @@ def main() -> int:
             "final_status": basics_final["status"],
             "review_id": basics_final["review_id"],
             "review_overall": basics_review["overall"],
+            "job_target_id": basics_final.get("job_target_id", ""),
+            "job_target_analysis_id": basics_final.get("job_target_analysis_id", ""),
             "status_sequence": {
                 "main": basics_main_statuses,
                 "followup": basics_followup_statuses,
@@ -477,6 +678,8 @@ def main() -> int:
             "final_status": project_final["status"],
             "review_id": project_final["review_id"],
             "review_overall": project_review["overall"],
+            "job_target_id": project_final.get("job_target_id", ""),
+            "job_target_analysis_id": project_final.get("job_target_analysis_id", ""),
             "status_sequence": {
                 "main": project_main_statuses,
                 "followup": project_followup_statuses,
@@ -488,6 +691,16 @@ def main() -> int:
             },
         },
     }
+    if prepared_job_target is not None:
+        summary["job_target"] = {
+            "target_id": prepared_job_target["target"]["id"],
+            "analysis_id": prepared_job_target["analysis"]["id"],
+            "title": prepared_job_target["target"]["title"],
+            "latest_status_after_prepare": prepared_job_target["target"]["latest_analysis_status"],
+            "stale_status_after_update": stale_job_target.get("latest_analysis_status") if stale_job_target else "",
+            "stale_block_error": stale_block_error.get("error") if stale_block_error else None,
+            "dashboard_after_stale": dashboard_after_stale,
+        }
 
     output = json.dumps(summary, ensure_ascii=False, indent=2)
     print(output)

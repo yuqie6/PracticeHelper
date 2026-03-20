@@ -8,6 +8,12 @@
     "primary_projects": ["PracticeHelper"],
     "self_reported_weaknesses": ["项目表达"]
   },
+  "job_target": {
+    "title": "Go 后端工程师 - 高并发基础设施",
+    "company_name": "示例公司",
+    "source_text": "负责高并发后端服务设计与开发，要求熟悉 Go、Redis、Kafka，能独立分析缓存一致性、消息可靠性和故障排查闭环。需要良好的项目表达能力，能把技术取舍讲清楚。",
+    "stale_source_text": "负责高并发后端服务设计与开发，要求熟悉 Go、Redis、Kafka，能独立分析缓存一致性、消息可靠性、故障排查闭环，并承担线上值班与稳定性演练。需要良好的项目表达能力，能把技术取舍讲清楚。"
+  },
   "basics": {
     "topic": "redis",
     "intensity": "standard",

@@ -175,17 +175,19 @@ cd server && ../.tools/bin/air -c .air.toml
 - [x] 可回放的真实端到端 smoke 脚本（`scripts/e2e_live.py` / `make e2e-live` / `scripts/e2e_live.sample.json`）
 - [x] 端到端验证（配置真实 LLM 后可用 `make e2e-live` 跑通完整流程）
 - [x] 训练体验做稳（答题反馈 V2、推荐质量与弱项衰减、题库扩充、追问保守表达）
-- [ ] 阶段 B：岗位视角训练（独立 JD 页面、多 JD 管理、分析历史、训练前选择 JD）
+- [ ] 阶段 B：岗位视角训练收口（独立 JD 页面、多 JD 管理、分析历史、训练前选择 JD、JD 绑定验证）
 
 ## 当前主线
 
 当前主线已经从“训练体验做稳”切到“岗位视角接入”：
 
 - 阶段 A 已完成，重点问题已经从“能不能用”转到“练的是不是目标岗位要的内容”
-- 下一步不再优先继续打磨 Phase 7 小边角，而是推进阶段 B 的最小闭环：
+- 下一步不再优先继续打磨 Phase 7 小边角，而是把阶段 B 收口到真正可依赖的产品级主链路：
   - 独立 JD 页面
   - 多 JD 管理与分析历史
   - 训练前手动选择 JD
-  - basics / project 的出题和评分都引用所选 JD
+  - basics / project 的出题、评分、复盘都固定绑定所选 JD 快照
+  - JD 不可用时给出明确状态和阻塞原因
+  - live E2E 覆盖 JD 绑定训练与 stale 阻塞验证
 
 详细方案见 [docs/JD_TRAINING_STAGE_B.md](docs/JD_TRAINING_STAGE_B.md)。

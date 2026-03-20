@@ -178,6 +178,7 @@ type TrainingSession struct {
 	JobTargetAnalysisID string          `json:"job_target_analysis_id,omitempty"`
 	Intensity           string          `json:"intensity"`
 	Status              string          `json:"status"`
+	MaxTurns            int             `json:"max_turns"`
 	TotalScore          float64         `json:"total_score"`
 	StartedAt           *time.Time      `json:"started_at,omitempty"`
 	EndedAt             *time.Time      `json:"ended_at,omitempty"`
@@ -292,6 +293,7 @@ type CreateSessionRequest struct {
 	JobTargetID           string `json:"job_target_id"`
 	IgnoreActiveJobTarget bool   `json:"ignore_active_job_target,omitempty"`
 	Intensity             string `json:"intensity" binding:"required"`
+	MaxTurns              int    `json:"max_turns,omitempty"`
 }
 
 type SubmitAnswerRequest struct {
@@ -365,7 +367,8 @@ type EvaluateAnswerRequest struct {
 	ExpectedPoints    []string                  `json:"expected_points"`
 	Answer            string                    `json:"answer"`
 	ContextChunks     []RepoChunk               `json:"context_chunks,omitempty"`
-	IsFollowup        bool                      `json:"is_followup"`
+	TurnIndex         int                       `json:"turn_index"`
+	MaxTurns          int                       `json:"max_turns"`
 	ScoreWeights      map[string]float64        `json:"score_weights,omitempty"`
 	JobTargetAnalysis *AnalyzeJobTargetResponse `json:"job_target_analysis,omitempty"`
 }
