@@ -79,6 +79,51 @@ def test_generate_question_uses_tool_loop_before_returning_json() -> None:
     assert "trade-off" in response.expected_points
 
 
+def test_generate_question_falls_back_to_single_shot_when_model_skips_tools() -> None:
+    client = FakeModelClient(
+        [
+            ChatCompletionResult(
+                content='{"question":"请讲讲项目里的 ownership。","expected_points":["ownership"]}',
+                tool_calls=[],
+            ),
+            ChatCompletionResult(
+                content=(
+                    '{"question":"请讲讲 Mirror 里你负责的 ownership。","expected_points":'
+                    '["模块边界","关键取舍","真实结果","后续改进"]}'
+                ),
+                tool_calls=[],
+            ),
+        ]
+    )
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=client,
+    )
+
+    response = runtime.generate_question(
+        GenerateQuestionRequest(
+            mode="project",
+            intensity="standard",
+            project=ProjectProfile(
+                name="Mirror",
+                summary="Agent workflow",
+                followup_points=["ownership"],
+            ),
+        )
+    )
+
+    assert response.question == "请讲讲 Mirror 里你负责的 ownership。"
+    assert len(client.calls) == 2
+    assert "下面是你已经可以直接使用的上下文" in client.calls[1]["messages"][1]["content"]
+    assert "read_project_brief" in client.calls[1]["messages"][1]["content"]
+
+
 def test_runtime_raises_when_llm_is_disabled() -> None:
     runtime = AgentRuntime(
         Settings(

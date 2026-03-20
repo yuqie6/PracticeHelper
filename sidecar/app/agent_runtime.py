@@ -477,6 +477,7 @@ class AgentRuntime:
             {"role": "user", "content": user_prompt},
         ]
         tool_map = {tool.name: tool for tool in tools}
+        used_any_tool = False
 
         for _ in range(4):
             result = model_client.create_completion(
@@ -511,9 +512,14 @@ class AgentRuntime:
                             "content": json.dumps(tool_result, ensure_ascii=False),
                         }
                     )
+                    used_any_tool = True
                 continue
 
             if result.content.strip():
+                if tools and not used_any_tool:
+                    raise ModelClientError(
+                        "model returned a final answer before reading any required tool context"
+                    )
                 return _validate_json_response(result.content, response_model)
 
             raise ModelClientError("model returned neither content nor tool calls")
