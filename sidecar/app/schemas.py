@@ -150,7 +150,8 @@ class EvaluateAnswerRequest(BaseModel):
     expected_points: list[str] = Field(default_factory=list)
     answer: str
     context_chunks: list[RepoChunk] = Field(default_factory=list)
-    is_followup: bool = False
+    turn_index: int = 1
+    max_turns: int = 2
     score_weights: dict[str, float] = Field(default_factory=dict)
     job_target_analysis: JobTargetAnalysisSnapshot | None = None
 
@@ -170,14 +171,11 @@ class EvaluationResult(BaseModel):
 
 class TrainingTurn(BaseModel):
     id: str = ""
+    turn_index: int = 1
     question: str
     expected_points: list[str] = Field(default_factory=list)
     answer: str = ""
     evaluation: EvaluationResult | None = None
-    followup_question: str = ""
-    followup_expected_points: list[str] = Field(default_factory=list)
-    followup_answer: str = ""
-    followup_evaluation: EvaluationResult | None = None
 
 
 class TrainingSession(BaseModel):

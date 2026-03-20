@@ -146,13 +146,17 @@ def evaluate_prompt_bundle(
             "DIMENSIONS_EXAMPLE": dimensions_example,
         },
     )
-    followup_label = "是" if request.is_followup else "否"
+    followup_label = "是" if request.turn_index > 1 else "否"
     jd_label = "有" if request.job_target_analysis else "无"
+    is_last_turn = request.turn_index >= request.max_turns
+    turn_label = f"{request.turn_index}/{request.max_turns}"
     user_prompt = (
         f"请评估这次回答，并决定下一刀追问。\n"
         f"当前模式：{request.mode}，主题：{request.topic}，"
-        f"是否为追问回答：{followup_label}，是否绑定岗位 JD：{jd_label}"
+        f"是否为追问回答：{followup_label}，当前轮次：{turn_label}，是否绑定岗位 JD：{jd_label}"
     )
+    if is_last_turn:
+        user_prompt += "\n注意：这是最后一轮，不需要生成追问，followup_question 和 followup_expected_points 置空。"
     tools = [
         RuntimeTool(
             name="read_evaluation_context",
@@ -167,7 +171,8 @@ def evaluate_prompt_bundle(
                 "answer": request.answer,
                 "project": request.project.model_dump(mode="json") if request.project else None,
                 "context_chunks": compact_chunks(request.context_chunks),
-                "is_followup": request.is_followup,
+                "turn_index": request.turn_index,
+                "max_turns": request.max_turns,
                 "job_target_analysis": (
                     request.job_target_analysis.model_dump(mode="json")
                     if request.job_target_analysis

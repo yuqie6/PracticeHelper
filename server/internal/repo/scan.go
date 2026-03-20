@@ -217,6 +217,7 @@ func scanTrainingSession(scanner interface{ Scan(dest ...any) error }) (*domain.
 		createdAt, updatedAt                                         string
 	)
 	var totalScore float64
+	var maxTurns int
 	if err := scanner.Scan(
 		&id,
 		&mode,
@@ -226,6 +227,7 @@ func scanTrainingSession(scanner interface{ Scan(dest ...any) error }) (*domain.
 		&jobTargetAnalysisID,
 		&intensity,
 		&status,
+		&maxTurns,
 		&totalScore,
 		&startedAt,
 		&endedAt,
@@ -245,6 +247,7 @@ func scanTrainingSession(scanner interface{ Scan(dest ...any) error }) (*domain.
 		JobTargetAnalysisID: jobTargetAnalysisID,
 		Intensity:           intensity,
 		Status:              status,
+		MaxTurns:            maxTurns,
 		TotalScore:          totalScore,
 		StartedAt:           parseNullableTime(startedAt),
 		EndedAt:             parseNullableTime(endedAt),
@@ -256,41 +259,33 @@ func scanTrainingSession(scanner interface{ Scan(dest ...any) error }) (*domain.
 
 func scanTrainingTurn(scanner interface{ Scan(dest ...any) error }) (*domain.TrainingTurn, error) {
 	var (
-		id, sessionID, stage, question, expectedPointsJSON, answer, evaluationJSON, followupQuestion       string
-		followupPointsJSON, followupAnswer, followupEvaluationJSON, weaknessHitsJSON, createdAt, updatedAt string
-		turnIndex                                                                                          int
+		id, sessionID, stage, question, expectedPointsJSON string
+		answer, evaluationJSON, weaknessHitsJSON           string
+		createdAt, updatedAt                               string
+		turnIndex                                          int
 	)
 
-	if err := scanner.Scan(&id, &sessionID, &turnIndex, &stage, &question, &expectedPointsJSON, &answer, &evaluationJSON, &followupQuestion, &followupPointsJSON, &followupAnswer, &followupEvaluationJSON, &weaknessHitsJSON, &createdAt, &updatedAt); err != nil {
+	if err := scanner.Scan(&id, &sessionID, &turnIndex, &stage, &question, &expectedPointsJSON, &answer, &evaluationJSON, &weaknessHitsJSON, &createdAt, &updatedAt); err != nil {
 		return nil, err
 	}
 
 	turn := &domain.TrainingTurn{
-		ID:                    id,
-		SessionID:             sessionID,
-		TurnIndex:             turnIndex,
-		Stage:                 stage,
-		Question:              question,
-		ExpectedPoints:        parseStringList(expectedPointsJSON),
-		Answer:                answer,
-		FollowupQuestion:      followupQuestion,
-		FollowupExpectedPoint: parseStringList(followupPointsJSON),
-		FollowupAnswer:        followupAnswer,
-		WeaknessHits:          parseWeaknessHits(weaknessHitsJSON),
-		CreatedAt:             parseTime(createdAt),
-		UpdatedAt:             parseTime(updatedAt),
+		ID:             id,
+		SessionID:      sessionID,
+		TurnIndex:      turnIndex,
+		Stage:          stage,
+		Question:       question,
+		ExpectedPoints: parseStringList(expectedPointsJSON),
+		Answer:         answer,
+		WeaknessHits:   parseWeaknessHits(weaknessHitsJSON),
+		CreatedAt:      parseTime(createdAt),
+		UpdatedAt:      parseTime(updatedAt),
 	}
 
 	if strings.TrimSpace(evaluationJSON) != "" && evaluationJSON != "null" && evaluationJSON != "{}" {
 		evaluation := &domain.EvaluationResult{}
 		_ = json.Unmarshal([]byte(evaluationJSON), evaluation)
 		turn.Evaluation = evaluation
-	}
-
-	if strings.TrimSpace(followupEvaluationJSON) != "" && followupEvaluationJSON != "null" && followupEvaluationJSON != "{}" {
-		evaluation := &domain.EvaluationResult{}
-		_ = json.Unmarshal([]byte(followupEvaluationJSON), evaluation)
-		turn.FollowupEvaluation = evaluation
 	}
 
 	return turn, nil

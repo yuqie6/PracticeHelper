@@ -94,6 +94,229 @@ func TestBootstrapBackfillsMissingQuestionTemplatesIntoExistingDatabase(t *testi
 	}
 }
 
+func TestBootstrapMigratesLegacyFollowupSessionStatusAndPendingTurn(t *testing.T) {
+	db, err := sqlite.Open(filepath.Join(t.TempDir(), "practicehelper.db"))
+	if err != nil {
+		t.Fatalf("sqlite.Open() error = %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if _, err := db.Exec(`
+		CREATE TABLE training_sessions (
+			id TEXT PRIMARY KEY,
+			mode TEXT NOT NULL,
+			topic TEXT NOT NULL DEFAULT '',
+			project_id TEXT NOT NULL DEFAULT '',
+			intensity TEXT NOT NULL,
+			status TEXT NOT NULL,
+			total_score REAL NOT NULL DEFAULT 0,
+			started_at TEXT NOT NULL DEFAULT '',
+			ended_at TEXT NOT NULL DEFAULT '',
+			review_id TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+		CREATE TABLE training_turns (
+			id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL,
+			turn_index INTEGER NOT NULL,
+			stage TEXT NOT NULL,
+			question TEXT NOT NULL,
+			expected_points_json TEXT NOT NULL,
+			answer TEXT NOT NULL DEFAULT '',
+			evaluation_json TEXT NOT NULL DEFAULT '{}',
+			followup_question TEXT NOT NULL DEFAULT '',
+			followup_expected_points_json TEXT NOT NULL DEFAULT '[]',
+			followup_answer TEXT NOT NULL DEFAULT '',
+			followup_evaluation_json TEXT NOT NULL DEFAULT '{}',
+			weakness_hits_json TEXT NOT NULL DEFAULT '[]',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+	`); err != nil {
+		t.Fatalf("create legacy schema: %v", err)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := db.Exec(`
+		INSERT INTO training_sessions (
+			id, mode, topic, project_id, intensity, status, total_score, started_at, ended_at, review_id, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "sess_legacy_followup", domain.ModeBasics, "go", "", "standard", "followup", 72.5, now, "", "", now, now); err != nil {
+		t.Fatalf("insert legacy session: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO training_turns (
+			id, session_id, turn_index, stage, question, expected_points_json, answer, evaluation_json,
+			followup_question, followup_expected_points_json, followup_answer, followup_evaluation_json,
+			weakness_hits_json, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		"turn_legacy_followup",
+		"sess_legacy_followup",
+		1,
+		"question",
+		"Go 的 channel 和 mutex 什么时候各用什么？",
+		`["共享内存","所有权转移"]`,
+		"主回答已经提交",
+		`{"score":72.5,"headline":"主回答基本过线。","strengths":["回答有主干"],"gaps":["还缺性能取舍"],"followup_intent":"继续确认性能与复杂度取舍。","followup_question":"如果你发现 channel 用多了，你会怎么收敛？","followup_expected_points":["性能","复杂度"]}`,
+		"如果你发现 channel 用多了，你会怎么收敛？",
+		`["性能","复杂度"]`,
+		"",
+		`{}`,
+		"[]",
+		now,
+		now,
+	); err != nil {
+		t.Fatalf("insert legacy turn: %v", err)
+	}
+
+	if err := sqlite.Bootstrap(db); err != nil {
+		t.Fatalf("Bootstrap() error = %v", err)
+	}
+
+	store := New(db)
+	session, err := store.GetSession(context.Background(), "sess_legacy_followup")
+	if err != nil {
+		t.Fatalf("GetSession() error = %v", err)
+	}
+	if session == nil {
+		t.Fatal("expected migrated session, got nil")
+	}
+	if session.Status != domain.StatusWaitingAnswer {
+		t.Fatalf("expected waiting_answer after migration, got %s", session.Status)
+	}
+	if session.MaxTurns != 2 {
+		t.Fatalf("expected default max_turns 2, got %d", session.MaxTurns)
+	}
+	if len(session.Turns) != 2 {
+		t.Fatalf("expected 2 turns after migration, got %d", len(session.Turns))
+	}
+	if session.Turns[1].TurnIndex != 2 {
+		t.Fatalf("expected migrated turn index 2, got %d", session.Turns[1].TurnIndex)
+	}
+	if session.Turns[1].Question != "如果你发现 channel 用多了，你会怎么收敛？" {
+		t.Fatalf("unexpected migrated followup question: %q", session.Turns[1].Question)
+	}
+	if session.Turns[1].Answer != "" {
+		t.Fatalf("expected pending migrated followup answer to stay empty, got %q", session.Turns[1].Answer)
+	}
+	if session.Turns[1].Evaluation != nil {
+		t.Fatalf("expected pending migrated followup evaluation to be nil, got %+v", session.Turns[1].Evaluation)
+	}
+
+	resumable, err := store.GetLatestResumableSession(context.Background())
+	if err != nil {
+		t.Fatalf("GetLatestResumableSession() error = %v", err)
+	}
+	if resumable == nil || resumable.ID != session.ID {
+		t.Fatalf("expected migrated session to be resumable, got %#v", resumable)
+	}
+}
+
+func TestBootstrapMigratesLegacyAnsweredFollowupIntoSecondTurn(t *testing.T) {
+	db, err := sqlite.Open(filepath.Join(t.TempDir(), "practicehelper.db"))
+	if err != nil {
+		t.Fatalf("sqlite.Open() error = %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if _, err := db.Exec(`
+		CREATE TABLE training_sessions (
+			id TEXT PRIMARY KEY,
+			mode TEXT NOT NULL,
+			topic TEXT NOT NULL DEFAULT '',
+			project_id TEXT NOT NULL DEFAULT '',
+			intensity TEXT NOT NULL,
+			status TEXT NOT NULL,
+			total_score REAL NOT NULL DEFAULT 0,
+			started_at TEXT NOT NULL DEFAULT '',
+			ended_at TEXT NOT NULL DEFAULT '',
+			review_id TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+		CREATE TABLE training_turns (
+			id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL,
+			turn_index INTEGER NOT NULL,
+			stage TEXT NOT NULL,
+			question TEXT NOT NULL,
+			expected_points_json TEXT NOT NULL,
+			answer TEXT NOT NULL DEFAULT '',
+			evaluation_json TEXT NOT NULL DEFAULT '{}',
+			followup_question TEXT NOT NULL DEFAULT '',
+			followup_expected_points_json TEXT NOT NULL DEFAULT '[]',
+			followup_answer TEXT NOT NULL DEFAULT '',
+			followup_evaluation_json TEXT NOT NULL DEFAULT '{}',
+			weakness_hits_json TEXT NOT NULL DEFAULT '[]',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+	`); err != nil {
+		t.Fatalf("create legacy schema: %v", err)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := db.Exec(`
+		INSERT INTO training_sessions (
+			id, mode, topic, project_id, intensity, status, total_score, started_at, ended_at, review_id, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, "sess_legacy_completed", domain.ModeBasics, "redis", "", "standard", domain.StatusCompleted, 68, now, now, "review_legacy", now, now); err != nil {
+		t.Fatalf("insert legacy session: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO training_turns (
+			id, session_id, turn_index, stage, question, expected_points_json, answer, evaluation_json,
+			followup_question, followup_expected_points_json, followup_answer, followup_evaluation_json,
+			weakness_hits_json, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		"turn_legacy_completed",
+		"sess_legacy_completed",
+		1,
+		"question",
+		"Redis 为什么快？",
+		`["内存访问","事件循环"]`,
+		"因为数据在内存里。",
+		`{"score":63,"headline":"主回答有方向，但细节不足。","strengths":["答到了内存"],"gaps":["没讲线程模型"],"followup_intent":"确认你是否理解单线程模型的边界。","followup_question":"单线程为什么还能扛住高并发？","followup_expected_points":["IO 多路复用","避免锁竞争"]}`,
+		"单线程为什么还能扛住高并发？",
+		`["IO 多路复用","避免锁竞争"]`,
+		"因为它把并发放在 IO 多路复用和事件循环上，减少了锁竞争。",
+		`{"score":81,"headline":"追问回答补上了关键机制。","strengths":["提到了 IO 多路复用"],"gaps":[],"suggestion":"补上单线程边界。","followup_intent":"","followup_question":"","followup_expected_points":[]}`,
+		"[]",
+		now,
+		now,
+	); err != nil {
+		t.Fatalf("insert legacy turn: %v", err)
+	}
+
+	if err := sqlite.Bootstrap(db); err != nil {
+		t.Fatalf("Bootstrap() error = %v", err)
+	}
+
+	store := New(db)
+	session, err := store.GetSession(context.Background(), "sess_legacy_completed")
+	if err != nil {
+		t.Fatalf("GetSession() error = %v", err)
+	}
+	if session == nil {
+		t.Fatal("expected migrated session, got nil")
+	}
+	if len(session.Turns) != 2 {
+		t.Fatalf("expected 2 turns after migration, got %d", len(session.Turns))
+	}
+	if session.Turns[1].Answer != "因为它把并发放在 IO 多路复用和事件循环上，减少了锁竞争。" {
+		t.Fatalf("unexpected migrated followup answer: %q", session.Turns[1].Answer)
+	}
+	if session.Turns[1].Evaluation == nil {
+		t.Fatal("expected migrated followup evaluation, got nil")
+	}
+	if session.Turns[1].Evaluation.Score != 81 {
+		t.Fatalf("expected migrated followup score 81, got %v", session.Turns[1].Evaluation.Score)
+	}
+}
+
 func TestSaveUserProfileParsesDateOnlyDeadline(t *testing.T) {
 	store, err := openTestStore(t)
 	if err != nil {
@@ -263,7 +486,7 @@ func TestTransitionSessionStatusRequiresCurrentStatusMatch(t *testing.T) {
 		ctx,
 		session.ID,
 		[]string{domain.StatusWaitingAnswer},
-		domain.StatusFollowup,
+		domain.StatusReviewPending,
 	)
 	if err != nil {
 		t.Fatalf("TransitionSessionStatus() second call error = %v", err)
@@ -296,7 +519,6 @@ func TestCreateReviewUpdatesExistingRowIDAndRecommendedNext(t *testing.T) {
 		Question:       "Go 的 goroutine 为什么轻量？",
 		ExpectedPoints: []string{"调度", "栈"},
 		Answer:         "因为调度和栈更轻",
-		FollowupAnswer: "因为上下文切换成本更低",
 	}
 	if err := store.CreateSession(ctx, session, turn); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
@@ -763,7 +985,6 @@ func TestGetReviewIncludesBoundJobTargetRef(t *testing.T) {
 		Question:       "Go 的 goroutine 为什么轻量？",
 		ExpectedPoints: []string{"调度", "栈"},
 		Answer:         "因为调度和栈更轻。",
-		FollowupAnswer: "因为上下文切换成本更低。",
 	}
 	if err := store.CreateSession(ctx, session, turn); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)

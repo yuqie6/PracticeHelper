@@ -486,7 +486,6 @@ func TestRetrySessionReviewKeepsReviewPendingWhenGenerationFails(t *testing.T) {
 		Question:       "Go 的 goroutine 为什么轻量？",
 		ExpectedPoints: []string{"调度", "栈"},
 		Answer:         "因为更轻量",
-		FollowupAnswer: "因为开销更低",
 	}
 	if err := store.CreateSession(context.Background(), session, turn); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
@@ -529,6 +528,7 @@ func TestSubmitAnswerPassesTemplateScoreWeightsToSidecar(t *testing.T) {
 		JobTargetID:         target.ID,
 		JobTargetAnalysisID: target.LatestAnalysisID,
 		Intensity:           "standard",
+		MaxTurns:            2,
 		Status:              domain.StatusWaitingAnswer,
 	}
 	turn := &domain.TrainingTurn{
@@ -625,7 +625,6 @@ func TestRetrySessionReviewPassesBoundJobTargetAnalysisToSidecar(t *testing.T) {
 		Question:       "Redis 为什么快？",
 		ExpectedPoints: []string{"内存访问", "事件循环"},
 		Answer:         "因为数据在内存，单线程模型减少锁竞争。",
-		FollowupAnswer: "另外高效数据结构和 IO 模型也很关键。",
 	}
 	if err := store.CreateSession(context.Background(), session, turn); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
@@ -683,6 +682,7 @@ func TestSubmitAnswerStreamEmitsStatusSequenceForMainAnswer(t *testing.T) {
 		Mode:      domain.ModeBasics,
 		Topic:     "go",
 		Intensity: "standard",
+		MaxTurns:  2,
 		Status:    domain.StatusWaitingAnswer,
 	}
 	turn := &domain.TrainingTurn{
@@ -739,8 +739,14 @@ func TestSubmitAnswerStreamEmitsStatusSequenceForMainAnswer(t *testing.T) {
 		t.Fatalf("SubmitAnswerStream() error = %v", err)
 	}
 
-	if updated.Status != domain.StatusFollowup {
-		t.Fatalf("expected followup status, got %s", updated.Status)
+	if updated.Status != domain.StatusWaitingAnswer {
+		t.Fatalf("expected waiting_answer status, got %s", updated.Status)
+	}
+	if len(updated.Turns) != 2 {
+		t.Fatalf("expected 2 turns, got %d", len(updated.Turns))
+	}
+	if updated.Turns[1].Question != "那你在项目里什么时候会避免过度用 channel？" {
+		t.Fatalf("expected followup question as turn 2, got %q", updated.Turns[1].Question)
 	}
 
 	assertStatusEventNames(t, events, []string{
@@ -752,7 +758,7 @@ func TestSubmitAnswerStreamEmitsStatusSequenceForMainAnswer(t *testing.T) {
 	})
 }
 
-func TestSubmitAnswerStreamEmitsStatusSequenceForFollowupAnswer(t *testing.T) {
+func TestSubmitAnswerStreamEmitsStatusSequenceForLastTurn(t *testing.T) {
 	store, err := openTestStore(t)
 	if err != nil {
 		t.Fatalf("openTestStore() error = %v", err)
@@ -760,26 +766,36 @@ func TestSubmitAnswerStreamEmitsStatusSequenceForFollowupAnswer(t *testing.T) {
 	defer func() { _ = store.Close() }()
 
 	session := &domain.TrainingSession{
-		ID:         "sess_stream_followup",
+		ID:         "sess_stream_last",
 		Mode:       domain.ModeBasics,
 		Topic:      "go",
 		Intensity:  "standard",
-		Status:     domain.StatusFollowup,
+		MaxTurns:   2,
+		Status:     domain.StatusWaitingAnswer,
 		TotalScore: 72,
 	}
-	turn := &domain.TrainingTurn{
-		ID:                    "turn_stream_followup",
-		SessionID:             session.ID,
-		TurnIndex:             1,
-		Stage:                 "question",
-		Question:              "Go 的 channel 和 mutex 什么时候各用什么？",
-		ExpectedPoints:        []string{"共享内存", "所有权转移"},
-		Answer:                "主回答已经提交",
-		FollowupQuestion:      "那你在项目里什么时候会避免过度用 channel？",
-		FollowupExpectedPoint: []string{"性能", "复杂度"},
+	turn1 := &domain.TrainingTurn{
+		ID:             "turn_stream_last_1",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Go 的 channel 和 mutex 什么时候各用什么？",
+		ExpectedPoints: []string{"共享内存", "所有权转移"},
+		Answer:         "主回答已经提交",
 	}
-	if err := store.CreateSession(context.Background(), session, turn); err != nil {
+	if err := store.CreateSession(context.Background(), session, turn1); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
+	}
+	turn2 := &domain.TrainingTurn{
+		ID:             "turn_stream_last_2",
+		SessionID:      session.ID,
+		TurnIndex:      2,
+		Stage:          "question",
+		Question:       "那你在项目里什么时候会避免过度用 channel？",
+		ExpectedPoints: []string{"性能", "复杂度"},
+	}
+	if err := store.InsertTurn(context.Background(), turn2); err != nil {
+		t.Fatalf("InsertTurn() error = %v", err)
 	}
 
 	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

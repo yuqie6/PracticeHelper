@@ -18,8 +18,8 @@ func (s *Store) CreateSession(ctx context.Context, session *domain.TrainingSessi
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO training_sessions (id, mode, topic, project_id, job_target_id, job_target_analysis_id, intensity, status, total_score, started_at, ended_at, review_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO training_sessions (id, mode, topic, project_id, job_target_id, job_target_analysis_id, intensity, status, max_turns, total_score, started_at, ended_at, review_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		session.ID,
 		session.Mode,
@@ -29,6 +29,7 @@ func (s *Store) CreateSession(ctx context.Context, session *domain.TrainingSessi
 		session.JobTargetAnalysisID,
 		session.Intensity,
 		session.Status,
+		session.MaxTurns,
 		session.TotalScore,
 		toNullableTimeString(session.StartedAt),
 		toNullableTimeString(session.EndedAt),
@@ -48,7 +49,7 @@ func (s *Store) CreateSession(ctx context.Context, session *domain.TrainingSessi
 
 func (s *Store) GetSession(ctx context.Context, sessionID string) (*domain.TrainingSession, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, mode, topic, project_id, job_target_id, job_target_analysis_id, intensity, status, total_score, started_at, ended_at, review_id, created_at, updated_at
+		SELECT id, mode, topic, project_id, job_target_id, job_target_analysis_id, intensity, status, max_turns, total_score, started_at, ended_at, review_id, created_at, updated_at
 		FROM training_sessions
 		WHERE id = ?
 	`, sessionID)
@@ -92,7 +93,7 @@ func (s *Store) GetSession(ctx context.Context, sessionID string) (*domain.Train
 
 func (s *Store) ListTurns(ctx context.Context, sessionID string) ([]domain.TrainingTurn, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, session_id, turn_index, stage, question, expected_points_json, answer, evaluation_json, followup_question, followup_expected_points_json, followup_answer, followup_evaluation_json, weakness_hits_json, created_at, updated_at
+		SELECT id, session_id, turn_index, stage, question, expected_points_json, answer, evaluation_json, weakness_hits_json, created_at, updated_at
 		FROM training_turns
 		WHERE session_id = ?
 		ORDER BY turn_index ASC
@@ -117,7 +118,7 @@ func (s *Store) ListTurns(ctx context.Context, sessionID string) ([]domain.Train
 func (s *Store) SaveTurn(ctx context.Context, turn *domain.TrainingTurn) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE training_turns
-		SET stage = ?, question = ?, expected_points_json = ?, answer = ?, evaluation_json = ?, followup_question = ?, followup_expected_points_json = ?, followup_answer = ?, followup_evaluation_json = ?, weakness_hits_json = ?, updated_at = ?
+		SET stage = ?, question = ?, expected_points_json = ?, answer = ?, evaluation_json = ?, weakness_hits_json = ?, updated_at = ?
 		WHERE id = ?
 	`,
 		turn.Stage,
@@ -125,10 +126,6 @@ func (s *Store) SaveTurn(ctx context.Context, turn *domain.TrainingTurn) error {
 		mustJSON(turn.ExpectedPoints),
 		turn.Answer,
 		mustJSON(turn.Evaluation),
-		turn.FollowupQuestion,
-		mustJSON(turn.FollowupExpectedPoint),
-		turn.FollowupAnswer,
-		mustJSON(turn.FollowupEvaluation),
 		mustJSON(turn.WeaknessHits),
 		nowUTC(),
 		turn.ID,
@@ -255,10 +252,10 @@ func (s *Store) GetLatestResumableSession(ctx context.Context) (*domain.Training
 		FROM training_sessions ts
 		LEFT JOIN project_profiles pp ON ts.project_id = pp.id
 		LEFT JOIN job_targets jt ON ts.job_target_id = jt.id
-		WHERE ts.status IN (?, ?, ?, ?)
+		WHERE ts.status IN (?, ?, ?)
 		ORDER BY ts.updated_at DESC
 		LIMIT 1
-	`, domain.StatusDraft, domain.StatusActive, domain.StatusWaitingAnswer, domain.StatusFollowup)
+	`, domain.StatusDraft, domain.StatusActive, domain.StatusWaitingAnswer)
 
 	var id, mode, topic, projectName, status, reviewID, updatedAt string
 	var jobTargetID, jobTargetTitle, jobTargetCompanyName string
@@ -292,11 +289,11 @@ func (s *Store) GetLatestResumableSession(ctx context.Context) (*domain.Training
 	return item, nil
 }
 
-func insertTurn(ctx context.Context, tx *sql.Tx, turn *domain.TrainingTurn) error {
-	if _, err := tx.ExecContext(ctx, `
+func (s *Store) InsertTurn(ctx context.Context, turn *domain.TrainingTurn) error {
+	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO training_turns (
-			id, session_id, turn_index, stage, question, expected_points_json, answer, evaluation_json, followup_question, followup_expected_points_json, followup_answer, followup_evaluation_json, weakness_hits_json, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			id, session_id, turn_index, stage, question, expected_points_json, answer, evaluation_json, weakness_hits_json, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		turn.ID,
 		turn.SessionID,
@@ -306,10 +303,30 @@ func insertTurn(ctx context.Context, tx *sql.Tx, turn *domain.TrainingTurn) erro
 		mustJSON(turn.ExpectedPoints),
 		turn.Answer,
 		mustJSON(turn.Evaluation),
-		turn.FollowupQuestion,
-		mustJSON(turn.FollowupExpectedPoint),
-		turn.FollowupAnswer,
-		mustJSON(turn.FollowupEvaluation),
+		mustJSON(turn.WeaknessHits),
+		nowUTC(),
+		nowUTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("insert turn: %w", err)
+	}
+	return nil
+}
+
+func insertTurn(ctx context.Context, tx *sql.Tx, turn *domain.TrainingTurn) error {
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO training_turns (
+			id, session_id, turn_index, stage, question, expected_points_json, answer, evaluation_json, weakness_hits_json, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		turn.ID,
+		turn.SessionID,
+		turn.TurnIndex,
+		turn.Stage,
+		turn.Question,
+		mustJSON(turn.ExpectedPoints),
+		turn.Answer,
+		mustJSON(turn.Evaluation),
 		mustJSON(turn.WeaknessHits),
 		nowUTC(),
 		nowUTC(),

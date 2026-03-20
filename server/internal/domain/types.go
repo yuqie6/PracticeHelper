@@ -10,7 +10,6 @@ const (
 	StatusActive        = "active"
 	StatusWaitingAnswer = "waiting_answer"
 	StatusEvaluating    = "evaluating"
-	StatusFollowup      = "followup"
 	StatusReviewPending = "review_pending"
 	StatusCompleted     = "completed"
 
@@ -191,21 +190,17 @@ type TrainingSession struct {
 }
 
 type TrainingTurn struct {
-	ID                    string            `json:"id"`
-	SessionID             string            `json:"session_id"`
-	TurnIndex             int               `json:"turn_index"`
-	Stage                 string            `json:"stage"`
-	Question              string            `json:"question"`
-	ExpectedPoints        []string          `json:"expected_points"`
-	Answer                string            `json:"answer"`
-	Evaluation            *EvaluationResult `json:"evaluation,omitempty"`
-	FollowupQuestion      string            `json:"followup_question,omitempty"`
-	FollowupExpectedPoint []string          `json:"followup_expected_points,omitempty"`
-	FollowupAnswer        string            `json:"followup_answer,omitempty"`
-	FollowupEvaluation    *EvaluationResult `json:"followup_evaluation,omitempty"`
-	WeaknessHits          []WeaknessHit     `json:"weakness_hits,omitempty"`
-	CreatedAt             time.Time         `json:"created_at"`
-	UpdatedAt             time.Time         `json:"updated_at"`
+	ID             string            `json:"id"`
+	SessionID      string            `json:"session_id"`
+	TurnIndex      int               `json:"turn_index"`
+	Stage          string            `json:"stage"`
+	Question       string            `json:"question"`
+	ExpectedPoints []string          `json:"expected_points"`
+	Answer         string            `json:"answer"`
+	Evaluation     *EvaluationResult `json:"evaluation,omitempty"`
+	WeaknessHits   []WeaknessHit     `json:"weakness_hits,omitempty"`
+	CreatedAt      time.Time         `json:"created_at"`
+	UpdatedAt      time.Time         `json:"updated_at"`
 }
 
 type EvaluationResult struct {

@@ -16,6 +16,14 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 	// 训练会话在创建时就要把首题持久化下来，而不是等用户答题后再补写，
 	// 这样页面刷新后仍能恢复到同一轮训练上下文。topic 也在这里统一 trim/lower，
 	// 避免 basics 模式因为大小写和空白差异导致模板命中不稳定。
+	maxTurns := request.MaxTurns
+	if maxTurns < 2 {
+		maxTurns = 2
+	}
+	if maxTurns > 5 {
+		maxTurns = 5
+	}
+
 	startedAt := time.Now().UTC()
 	session := &domain.TrainingSession{
 		ID:         newID("sess"),
@@ -24,6 +32,7 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 		ProjectID:  request.ProjectID,
 		Intensity:  request.Intensity,
 		Status:     domain.StatusWaitingAnswer,
+		MaxTurns:   maxTurns,
 		TotalScore: 0,
 		StartedAt:  &startedAt,
 	}
@@ -115,6 +124,14 @@ func (s *Service) CreateSessionStream(
 		return nil, ErrInvalidMode
 	}
 
+	maxTurns := request.MaxTurns
+	if maxTurns < 2 {
+		maxTurns = 2
+	}
+	if maxTurns > 5 {
+		maxTurns = 5
+	}
+
 	startedAt := time.Now().UTC()
 	session := &domain.TrainingSession{
 		ID:         newID("sess"),
@@ -123,6 +140,7 @@ func (s *Service) CreateSessionStream(
 		ProjectID:  request.ProjectID,
 		Intensity:  request.Intensity,
 		Status:     domain.StatusWaitingAnswer,
+		MaxTurns:   maxTurns,
 		TotalScore: 0,
 		StartedAt:  &startedAt,
 	}

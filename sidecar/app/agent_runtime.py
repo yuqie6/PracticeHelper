@@ -144,10 +144,11 @@ class AgentRuntime:
     def evaluate_answer(self, request: EvaluateAnswerRequest) -> EvaluationResult:
         started_at = time.perf_counter()
         logger.info(
-            "evaluate_answer started mode=%s topic=%s is_followup=%s",
+            "evaluate_answer started mode=%s topic=%s turn=%d/%d",
             request.mode,
             request.topic,
-            request.is_followup,
+            request.turn_index,
+            request.max_turns,
         )
         system_prompt, user_prompt, tools = evaluate_prompt_bundle(request)
         response = self._run_task(
@@ -157,10 +158,11 @@ class AgentRuntime:
             tools=tools,
         )
         logger.info(
-            "evaluate_answer completed mode=%s topic=%s is_followup=%s duration_ms=%.2f",
+            "evaluate_answer completed mode=%s topic=%s turn=%d/%d duration_ms=%.2f",
             request.mode,
             request.topic,
-            request.is_followup,
+            request.turn_index,
+            request.max_turns,
             (time.perf_counter() - started_at) * 1000,
         )
         return response

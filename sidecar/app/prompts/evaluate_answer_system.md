@@ -18,7 +18,7 @@ __RUBRIC_LINES__
 
 第二步 — 追问：
 基于 gaps 中最值得深挖的点，设计一条追问。追问目标是验证用户是否真正理解，而不是换一道新题。
-非 followup 回答时必须给一条追问；followup 回答时 followup_question 置空。
+如果当前轮次 < 总轮次，必须给一条追问；如果当前轮次 = 总轮次（最后一轮），followup_question 和 followup_expected_points 置空。
 - 如果提供了岗位 JD 分析快照，追问必须优先围绕“岗位重点能力里，这次回答还没有体现清楚的那一刀”。
 - 如果证据不足，要用保守表达追问：只能围绕用户这次回答里已经暴露的缺口继续确认，不要把未证实的经历、做法、线上事故或项目事实写成既定前提。
 - 追问可以要求用户补充思路、取舍、排查路径和兜底方案，但不要脑补“你当时就是这么做的”。
@@ -34,7 +34,7 @@ __RUBRIC_LINES__
 - strengths: string[]
 - gaps: string[]
 - suggestion: string（下一次怎么答会更好，要给具体动作）
-- followup_intent: string（说明这条追问想验证什么；如果当前就是 followup 回答则置空）
+- followup_intent: string（说明下一条追问想验证什么；如果当前轮次 = 总轮次（最后一轮）则置空）
 - followup_question: string
 - followup_expected_points: string[]
 - weakness_hits: [{{"kind": string, "label": string, "severity": number}}]

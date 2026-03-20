@@ -232,14 +232,16 @@ def test_evaluate_prompt_bundle_requires_conservative_followup_when_evidence_is_
             question="Redis 为什么快？",
             expected_points=["内存访问", "事件循环"],
             answer="因为它在内存里。",
-            is_followup=False,
+            turn_index=1,
+            max_turns=2,
         )
     )
 
     assert "证据不足，要用保守表达追问" in system_prompt
     assert "不要把未证实的经历、做法、线上事故或项目事实写成既定前提" in system_prompt
+    assert "如果当前轮次 = 总轮次（最后一轮）则置空" in system_prompt
     payload = tools[0].handler({})
-    assert payload["is_followup"] is False
+    assert payload["turn_index"] == 1
     assert "是否为追问回答：否" in user_prompt
 
 
@@ -272,13 +274,15 @@ def test_evaluate_prompt_bundle_marks_followup_requests() -> None:
             question="如果线上报警频繁，你会怎么止血？",
             expected_points=["先止血", "再排查"],
             answer="我会先降级，再看指标。",
-            is_followup=True,
+            turn_index=2,
+            max_turns=2,
         )
     )
 
     payload = tools[0].handler({})
-    assert payload["is_followup"] is True
+    assert payload["turn_index"] == 2
     assert "是否为追问回答：是" in user_prompt
+    assert "最后一轮" in user_prompt
 
 
 def test_review_prompt_bundle_includes_job_target_analysis_context() -> None:
