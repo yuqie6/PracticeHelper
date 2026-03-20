@@ -10,10 +10,11 @@ ENV_LOADER := set -a; [ -f ".env" ] && . ".env"; set +a
 TOOLS_BIN := $(CURDIR)/.tools/bin
 GOLANGCI_LINT_BIN := $(TOOLS_BIN)/golangci-lint
 GOLANGCI_LINT_VERSION := v2.11.3
+AIR_BIN := $(TOOLS_BIN)/air
 
 .PHONY: help bootstrap setup install-tools deps deps-web deps-sidecar \
 	check \
-	dev-web dev-server dev-sidecar web-dev server-dev sidecar-dev \
+	dev-web dev-server dev-server-hot dev-sidecar web-dev server-dev server-dev-hot sidecar-dev \
 	lint lint-web lint-server lint-sidecar \
 	format format-web format-server format-sidecar \
 	test test-web test-server test-sidecar \
@@ -44,7 +45,11 @@ $(GOLANGCI_LINT_BIN):
 	mkdir -p "$(TOOLS_BIN)"
 	GOBIN="$(TOOLS_BIN)" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
-install-tools: $(GOLANGCI_LINT_BIN) ## 安装仓库本地开发工具
+$(AIR_BIN):
+	mkdir -p "$(TOOLS_BIN)"
+	GOBIN="$(TOOLS_BIN)" go install github.com/air-verse/air@latest
+
+install-tools: $(GOLANGCI_LINT_BIN) $(AIR_BIN) ## 安装仓库本地开发工具
 
 check: lint test build ## 运行完整校验流水线
 
@@ -56,12 +61,17 @@ dev-web: ## 启动前端开发服务器 (5173)
 dev-server: ## 启动 Go API 服务 (8090)
 	$(ENV_LOADER); cd "$(SERVER_DIR)" && GOCACHE=/tmp/go-build go run -tags "$(GO_SQLITE_TAGS)" ./cmd/api
 
+dev-server-hot: $(AIR_BIN) ## 启动 Go API 服务热重载 (8090)
+	$(ENV_LOADER); cd "$(SERVER_DIR)" && "$(AIR_BIN)" -c .air.toml
+
 dev-sidecar: ## 启动 Python sidecar (8000)
 	$(ENV_LOADER); cd "$(SIDECAR_DIR)" && uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 web-dev: dev-web
 
 server-dev: dev-server
+
+server-dev-hot: dev-server-hot
 
 sidecar-dev: dev-sidecar
 
