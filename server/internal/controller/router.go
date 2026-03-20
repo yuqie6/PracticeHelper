@@ -39,9 +39,11 @@ func NewRouter(svc *service.Service) *gin.Engine {
 
 		api.GET("/job-targets", handler.listJobTargets)
 		api.POST("/job-targets", handler.createJobTarget)
+		api.POST("/job-targets/clear-active", handler.clearActiveJobTarget)
 		api.GET("/job-targets/analysis-runs/:id", handler.getJobTargetAnalysisRun)
 		api.GET("/job-targets/:id", handler.getJobTarget)
 		api.PATCH("/job-targets/:id", handler.updateJobTarget)
+		api.POST("/job-targets/:id/activate", handler.activateJobTarget)
 		api.POST("/job-targets/:id/analyze", handler.analyzeJobTarget)
 		api.GET("/job-targets/:id/analysis-runs", handler.listJobTargetAnalysisRuns)
 
@@ -170,6 +172,29 @@ func (h *Handler) analyzeJobTarget(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"data": data})
+}
+
+func (h *Handler) activateJobTarget(c *gin.Context) {
+	data, err := h.service.ActivateJobTarget(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrJobTargetNotFound):
+			writeError(c, http.StatusNotFound, err)
+		default:
+			writeError(c, http.StatusInternalServerError, err)
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) clearActiveJobTarget(c *gin.Context) {
+	data, err := h.service.ClearActiveJobTarget(c.Request.Context())
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
 }
 
 func (h *Handler) listJobTargetAnalysisRuns(c *gin.Context) {

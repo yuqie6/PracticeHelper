@@ -33,16 +33,18 @@ const (
 )
 
 type UserProfile struct {
-	ID                   int64      `json:"id"`
-	TargetRole           string     `json:"target_role"`
-	TargetCompanyType    string     `json:"target_company_type"`
-	CurrentStage         string     `json:"current_stage"`
-	ApplicationDeadline  *time.Time `json:"application_deadline,omitempty"`
-	TechStacks           []string   `json:"tech_stacks"`
-	PrimaryProjects      []string   `json:"primary_projects"`
-	SelfReportedWeakness []string   `json:"self_reported_weaknesses"`
-	CreatedAt            time.Time  `json:"created_at"`
-	UpdatedAt            time.Time  `json:"updated_at"`
+	ID                   int64         `json:"id"`
+	TargetRole           string        `json:"target_role"`
+	TargetCompanyType    string        `json:"target_company_type"`
+	CurrentStage         string        `json:"current_stage"`
+	ApplicationDeadline  *time.Time    `json:"application_deadline,omitempty"`
+	TechStacks           []string      `json:"tech_stacks"`
+	PrimaryProjects      []string      `json:"primary_projects"`
+	SelfReportedWeakness []string      `json:"self_reported_weaknesses"`
+	ActiveJobTargetID    string        `json:"active_job_target_id,omitempty"`
+	CreatedAt            time.Time     `json:"created_at"`
+	UpdatedAt            time.Time     `json:"updated_at"`
+	ActiveJobTarget      *JobTargetRef `json:"active_job_target,omitempty"`
 }
 
 type UserProfileInput struct {
@@ -53,6 +55,7 @@ type UserProfileInput struct {
 	TechStacks           []string `json:"tech_stacks"`
 	PrimaryProjects      []string `json:"primary_projects"`
 	SelfReportedWeakness []string `json:"self_reported_weaknesses"`
+	ActiveJobTargetID    string   `json:"active_job_target_id,omitempty"`
 }
 
 type ProjectProfile struct {
@@ -74,9 +77,10 @@ type ProjectProfile struct {
 }
 
 type JobTargetRef struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	CompanyName string `json:"company_name,omitempty"`
+	ID                   string `json:"id"`
+	Title                string `json:"title"`
+	CompanyName          string `json:"company_name,omitempty"`
+	LatestAnalysisStatus string `json:"latest_analysis_status,omitempty"`
 }
 
 type JobTarget struct {
@@ -258,32 +262,36 @@ type NextSession struct {
 }
 
 type TrainingSessionSummary struct {
-	ID          string    `json:"id"`
-	Mode        string    `json:"mode"`
-	Topic       string    `json:"topic,omitempty"`
-	ProjectName string    `json:"project_name,omitempty"`
-	Status      string    `json:"status"`
-	TotalScore  float64   `json:"total_score"`
-	ReviewID    string    `json:"review_id,omitempty"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          string        `json:"id"`
+	Mode        string        `json:"mode"`
+	Topic       string        `json:"topic,omitempty"`
+	ProjectName string        `json:"project_name,omitempty"`
+	Status      string        `json:"status"`
+	TotalScore  float64       `json:"total_score"`
+	ReviewID    string        `json:"review_id,omitempty"`
+	UpdatedAt   time.Time     `json:"updated_at"`
+	JobTarget   *JobTargetRef `json:"job_target,omitempty"`
 }
 
 type Dashboard struct {
-	Profile           *UserProfile             `json:"profile"`
-	Weaknesses        []WeaknessTag            `json:"weaknesses"`
-	RecentSessions    []TrainingSessionSummary `json:"recent_sessions"`
-	CurrentSession    *TrainingSessionSummary  `json:"current_session,omitempty"`
-	TodayFocus        string                   `json:"today_focus"`
-	RecommendedTrack  string                   `json:"recommended_track"`
-	DaysUntilDeadline *int                     `json:"days_until_deadline,omitempty"`
+	Profile             *UserProfile             `json:"profile"`
+	Weaknesses          []WeaknessTag            `json:"weaknesses"`
+	RecentSessions      []TrainingSessionSummary `json:"recent_sessions"`
+	CurrentSession      *TrainingSessionSummary  `json:"current_session,omitempty"`
+	TodayFocus          string                   `json:"today_focus"`
+	RecommendedTrack    string                   `json:"recommended_track"`
+	ActiveJobTarget     *JobTargetRef            `json:"active_job_target,omitempty"`
+	RecommendationScope string                   `json:"recommendation_scope"`
+	DaysUntilDeadline   *int                     `json:"days_until_deadline,omitempty"`
 }
 
 type CreateSessionRequest struct {
-	Mode        string `json:"mode" binding:"required"`
-	Topic       string `json:"topic"`
-	ProjectID   string `json:"project_id"`
-	JobTargetID string `json:"job_target_id"`
-	Intensity   string `json:"intensity" binding:"required"`
+	Mode                  string `json:"mode" binding:"required"`
+	Topic                 string `json:"topic"`
+	ProjectID             string `json:"project_id"`
+	JobTargetID           string `json:"job_target_id"`
+	IgnoreActiveJobTarget bool   `json:"ignore_active_job_target,omitempty"`
+	Intensity             string `json:"intensity" binding:"required"`
 }
 
 type SubmitAnswerRequest struct {

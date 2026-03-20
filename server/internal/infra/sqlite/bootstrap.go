@@ -33,6 +33,7 @@ func migrate(db *sql.DB) error {
 			tech_stacks_json TEXT NOT NULL,
 			primary_projects_json TEXT NOT NULL,
 			self_reported_weaknesses_json TEXT NOT NULL,
+			active_job_target_id TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		);`,
@@ -193,6 +194,9 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 	if err := ensureColumn(db, "training_sessions", "job_target_analysis_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "user_profile", "active_job_target_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 

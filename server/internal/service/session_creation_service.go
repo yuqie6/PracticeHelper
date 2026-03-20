@@ -28,7 +28,7 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 		StartedAt:  &startedAt,
 	}
 
-	jobTarget, jobTargetAnalysis, err := s.resolveJobTargetBinding(ctx, request.JobTargetID)
+	jobTarget, jobTargetAnalysis, err := s.resolveJobTargetBinding(ctx, request.JobTargetID, request.IgnoreActiveJobTarget)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +127,7 @@ func (s *Service) CreateSessionStream(
 		StartedAt:  &startedAt,
 	}
 
-	jobTarget, jobTargetAnalysis, err := s.resolveJobTargetBinding(ctx, request.JobTargetID)
+	jobTarget, jobTargetAnalysis, err := s.resolveJobTargetBinding(ctx, request.JobTargetID, request.IgnoreActiveJobTarget)
 	if err != nil {
 		return nil, err
 	}

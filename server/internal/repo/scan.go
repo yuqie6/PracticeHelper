@@ -18,11 +18,12 @@ func scanUserProfile(scanner interface{ Scan(dest ...any) error }) (*domain.User
 		techStacksJSON           string
 		primaryProjectsJSON      string
 		selfReportedWeaknessJSON string
+		activeJobTargetID        string
 		createdAt                string
 		updatedAt                string
 	)
 
-	if err := scanner.Scan(&id, &targetRole, &targetCompanyType, &currentStage, &applicationDeadline, &techStacksJSON, &primaryProjectsJSON, &selfReportedWeaknessJSON, &createdAt, &updatedAt); err != nil {
+	if err := scanner.Scan(&id, &targetRole, &targetCompanyType, &currentStage, &applicationDeadline, &techStacksJSON, &primaryProjectsJSON, &selfReportedWeaknessJSON, &activeJobTargetID, &createdAt, &updatedAt); err != nil {
 		return nil, err
 	}
 
@@ -35,6 +36,7 @@ func scanUserProfile(scanner interface{ Scan(dest ...any) error }) (*domain.User
 		TechStacks:           parseStringList(techStacksJSON),
 		PrimaryProjects:      parseStringList(primaryProjectsJSON),
 		SelfReportedWeakness: parseStringList(selfReportedWeaknessJSON),
+		ActiveJobTargetID:    activeJobTargetID,
 		CreatedAt:            parseTime(createdAt),
 		UpdatedAt:            parseTime(updatedAt),
 	}

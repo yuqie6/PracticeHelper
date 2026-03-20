@@ -83,6 +83,24 @@ func (s *Service) AnalyzeJobTarget(
 	return updatedRun, nil
 }
 
+func (s *Service) ActivateJobTarget(
+	ctx context.Context,
+	jobTargetID string,
+) (*domain.UserProfile, error) {
+	target, err := s.repo.GetJobTarget(ctx, jobTargetID)
+	if err != nil {
+		return nil, err
+	}
+	if target == nil {
+		return nil, ErrJobTargetNotFound
+	}
+	return s.repo.SetActiveJobTarget(ctx, jobTargetID)
+}
+
+func (s *Service) ClearActiveJobTarget(ctx context.Context) (*domain.UserProfile, error) {
+	return s.repo.ClearActiveJobTarget(ctx)
+}
+
 func (s *Service) ListJobTargetAnalysisRuns(
 	ctx context.Context,
 	jobTargetID string,
@@ -114,10 +132,43 @@ func (s *Service) GetJobTargetAnalysisRun(
 func (s *Service) resolveJobTargetBinding(
 	ctx context.Context,
 	jobTargetID string,
+	ignoreActiveJobTarget bool,
 ) (*domain.JobTarget, *domain.JobTargetAnalysisRun, error) {
 	jobTargetID = strings.TrimSpace(jobTargetID)
 	if jobTargetID == "" {
-		return nil, nil, nil
+		if ignoreActiveJobTarget {
+			return nil, nil, nil
+		}
+		profile, err := s.repo.GetUserProfile(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		if profile == nil || strings.TrimSpace(profile.ActiveJobTargetID) == "" {
+			return nil, nil, nil
+		}
+
+		target, err := s.repo.GetJobTarget(ctx, profile.ActiveJobTargetID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if target == nil {
+			return nil, nil, nil
+		}
+		if target.LatestAnalysisStatus != domain.JobTargetAnalysisSucceeded || target.LatestAnalysisID == "" {
+			return nil, nil, nil
+		}
+
+		analysis, err := s.repo.GetJobTargetAnalysisRun(ctx, target.LatestAnalysisID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if analysis == nil || analysis.Status != domain.JobTargetAnalysisSucceeded {
+			return nil, nil, nil
+		}
+		if err := s.repo.MarkJobTargetUsed(ctx, target.ID); err != nil {
+			return nil, nil, err
+		}
+		return target, analysis, nil
 	}
 
 	target, err := s.repo.GetJobTarget(ctx, jobTargetID)

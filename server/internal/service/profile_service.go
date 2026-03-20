@@ -20,9 +20,26 @@ func (s *Service) GetDashboard(ctx context.Context) (*domain.Dashboard, error) {
 		return nil, err
 	}
 
-	weaknesses, err := s.repo.ListWeaknesses(ctx, 5)
+	weaknesses, err := s.repo.ListWeaknesses(ctx, 20)
 	if err != nil {
 		return nil, err
+	}
+
+	var activeJobTarget *domain.JobTarget
+	if profile != nil && profile.ActiveJobTargetID != "" {
+		activeJobTarget, err = s.repo.GetJobTarget(ctx, profile.ActiveJobTargetID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	recommendationScope := "generic"
+	if activeJobTarget != nil && activeJobTarget.LatestAnalysisStatus == domain.JobTargetAnalysisSucceeded && activeJobTarget.LatestSuccessfulAnalysis != nil {
+		weaknesses = weightWeaknessesForActiveJobTarget(weaknesses, activeJobTarget)
+		recommendationScope = "job_target"
+	}
+	if len(weaknesses) > 5 {
+		weaknesses = weaknesses[:5]
 	}
 
 	recent, err := s.repo.ListRecentSessions(ctx, 5)
@@ -36,12 +53,16 @@ func (s *Service) GetDashboard(ctx context.Context) (*domain.Dashboard, error) {
 	}
 
 	dashboard := &domain.Dashboard{
-		Profile:          profile,
-		Weaknesses:       weaknesses,
-		RecentSessions:   recent,
-		CurrentSession:   currentSession,
-		TodayFocus:       buildTodayFocus(profile, weaknesses),
-		RecommendedTrack: buildRecommendedTrack(profile, weaknesses),
+		Profile:             profile,
+		Weaknesses:          weaknesses,
+		RecentSessions:      recent,
+		CurrentSession:      currentSession,
+		TodayFocus:          buildTodayFocus(profile, activeJobTarget, weaknesses, recommendationScope),
+		RecommendedTrack:    buildRecommendedTrack(profile, activeJobTarget, weaknesses, recommendationScope),
+		RecommendationScope: recommendationScope,
+	}
+	if profile != nil {
+		dashboard.ActiveJobTarget = profile.ActiveJobTarget
 	}
 
 	if profile != nil && profile.ApplicationDeadline != nil {

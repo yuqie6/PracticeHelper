@@ -3,8 +3,11 @@ package service
 import (
 	"context"
 	"fmt"
+	"math"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"practicehelper/server/internal/domain"
 )
@@ -54,11 +57,22 @@ func (s *Service) coolDownSessionWeakness(
 	return nil
 }
 
-func buildTodayFocus(profile *domain.UserProfile, weaknesses []domain.WeaknessTag) string {
+func buildTodayFocus(
+	profile *domain.UserProfile,
+	activeJobTarget *domain.JobTarget,
+	weaknesses []domain.WeaknessTag,
+	recommendationScope string,
+) string {
 	if len(weaknesses) > 0 {
+		if recommendationScope == "job_target" && activeJobTarget != nil {
+			return fmt.Sprintf("今天优先补 %s：%s（围绕 %s）", formatWeaknessKindLabel(weaknesses[0].Kind), weaknesses[0].Label, activeJobTarget.Title)
+		}
 		return fmt.Sprintf("今天优先补 %s：%s", formatWeaknessKindLabel(weaknesses[0].Kind), weaknesses[0].Label)
 	}
 
+	if recommendationScope == "job_target" && activeJobTarget != nil {
+		return fmt.Sprintf("今天先围绕 %s 做一轮岗位定向训练。", activeJobTarget.Title)
+	}
 	if profile != nil && len(profile.PrimaryProjects) > 0 {
 		return fmt.Sprintf("今天先做一轮项目表达训练，主讲 %s", profile.PrimaryProjects[0])
 	}
@@ -66,26 +80,55 @@ func buildTodayFocus(profile *domain.UserProfile, weaknesses []domain.WeaknessTa
 	return "先完成画像初始化，然后做一轮 Redis 或 Go 基础训练。"
 }
 
-func buildRecommendedTrack(profile *domain.UserProfile, weaknesses []domain.WeaknessTag) string {
+func buildRecommendedTrack(
+	profile *domain.UserProfile,
+	activeJobTarget *domain.JobTarget,
+	weaknesses []domain.WeaknessTag,
+	recommendationScope string,
+) string {
 	if len(weaknesses) > 0 {
 		switch weaknesses[0].Kind {
 		case "topic":
+			if recommendationScope == "job_target" && activeJobTarget != nil {
+				return fmt.Sprintf("围绕 %s 补 %s 相关专项", activeJobTarget.Title, strings.ToUpper(weaknesses[0].Label))
+			}
 			return fmt.Sprintf("%s 专项训练", strings.ToUpper(weaknesses[0].Label))
 		case "project":
+			if recommendationScope == "job_target" && activeJobTarget != nil {
+				return fmt.Sprintf("围绕 %s 补 %s 项目专项", activeJobTarget.Title, weaknesses[0].Label)
+			}
 			return fmt.Sprintf("%s 项目专项", weaknesses[0].Label)
 		case "expression":
+			if recommendationScope == "job_target" && activeJobTarget != nil {
+				return fmt.Sprintf("围绕 %s 补「%s」表达方式专项", activeJobTarget.Title, weaknesses[0].Label)
+			}
 			return fmt.Sprintf("围绕「%s」做表达方式专项", weaknesses[0].Label)
 		case "followup_breakdown":
+			if recommendationScope == "job_target" && activeJobTarget != nil {
+				return fmt.Sprintf("围绕 %s 补「%s」追问抗压专项", activeJobTarget.Title, weaknesses[0].Label)
+			}
 			return fmt.Sprintf("围绕「%s」做追问抗压专项", weaknesses[0].Label)
 		case "depth":
+			if recommendationScope == "job_target" && activeJobTarget != nil {
+				return fmt.Sprintf("围绕 %s 补「%s」展开深挖专项", activeJobTarget.Title, weaknesses[0].Label)
+			}
 			return fmt.Sprintf("围绕「%s」做展开深挖专项", weaknesses[0].Label)
 		case "detail":
+			if recommendationScope == "job_target" && activeJobTarget != nil {
+				return fmt.Sprintf("围绕 %s 补「%s」细节补强专项", activeJobTarget.Title, weaknesses[0].Label)
+			}
 			return fmt.Sprintf("围绕「%s」做细节补强专项", weaknesses[0].Label)
 		default:
+			if recommendationScope == "job_target" && activeJobTarget != nil {
+				return fmt.Sprintf("围绕 %s 补「%s」针对性训练", activeJobTarget.Title, weaknesses[0].Label)
+			}
 			return fmt.Sprintf("围绕「%s」做针对性训练", weaknesses[0].Label)
 		}
 	}
 
+	if recommendationScope == "job_target" && activeJobTarget != nil {
+		return fmt.Sprintf("%s 岗位定向训练", activeJobTarget.Title)
+	}
 	if profile != nil && profile.TargetRole != "" {
 		return fmt.Sprintf("%s 目标岗位基础训练", profile.TargetRole)
 	}
@@ -116,6 +159,86 @@ func formatWeaknessKindLabel(kind string) string {
 	default:
 		return kind
 	}
+}
+
+func weightWeaknessesForActiveJobTarget(
+	weaknesses []domain.WeaknessTag,
+	activeJobTarget *domain.JobTarget,
+) []domain.WeaknessTag {
+	if activeJobTarget == nil || activeJobTarget.LatestSuccessfulAnalysis == nil {
+		return weaknesses
+	}
+
+	keywords := collectJobTargetKeywords(activeJobTarget.LatestSuccessfulAnalysis)
+	if len(keywords) == 0 {
+		return weaknesses
+	}
+
+	weighted := append([]domain.WeaknessTag(nil), weaknesses...)
+	sort.SliceStable(weighted, func(i, j int) bool {
+		leftScore := weaknessWeightedScore(weighted[i], keywords)
+		rightScore := weaknessWeightedScore(weighted[j], keywords)
+		if leftScore != rightScore {
+			return leftScore > rightScore
+		}
+		if weighted[i].Severity != weighted[j].Severity {
+			return weighted[i].Severity > weighted[j].Severity
+		}
+		if weighted[i].Frequency != weighted[j].Frequency {
+			return weighted[i].Frequency > weighted[j].Frequency
+		}
+		return weighted[i].LastSeenAt.After(weighted[j].LastSeenAt)
+	})
+
+	return weighted
+}
+
+func collectJobTargetKeywords(run *domain.JobTargetAnalysisRun) []string {
+	if run == nil {
+		return nil
+	}
+
+	raw := append([]string{}, run.MustHaveSkills...)
+	raw = append(raw, run.Responsibilities...)
+	raw = append(raw, run.EvaluationFocus...)
+
+	seen := map[string]struct{}{}
+	keywords := make([]string, 0, len(raw))
+	for _, item := range raw {
+		normalized := normalizeJobTargetKeyword(item)
+		if len(normalized) < 2 {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		keywords = append(keywords, normalized)
+	}
+	return keywords
+}
+
+func weaknessWeightedScore(item domain.WeaknessTag, keywords []string) float64 {
+	weight := 1.0
+	label := normalizeJobTargetKeyword(item.Label)
+	for _, keyword := range keywords {
+		if strings.Contains(label, keyword) || strings.Contains(keyword, label) {
+			weight = 1.35
+			break
+		}
+	}
+	return math.Round((item.Severity * weight * 1000)) / 1000
+}
+
+func normalizeJobTargetKeyword(value string) string {
+	var builder strings.Builder
+	builder.Grow(len(value))
+	for _, r := range strings.ToLower(strings.TrimSpace(value)) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
 }
 
 func daysUntilDeadline(deadline time.Time) int {

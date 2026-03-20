@@ -203,9 +203,11 @@ func (s *Store) ListRecentSessions(ctx context.Context, limit int) ([]domain.Tra
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT ts.id, ts.mode, ts.topic, COALESCE(pp.name, ''), ts.status, ts.total_score, ts.review_id, ts.updated_at
+		SELECT ts.id, ts.mode, ts.topic, COALESCE(pp.name, ''), ts.status, ts.total_score, ts.review_id, ts.updated_at,
+			COALESCE(jt.id, ''), COALESCE(jt.title, ''), COALESCE(jt.company_name, '')
 		FROM training_sessions ts
 		LEFT JOIN project_profiles pp ON ts.project_id = pp.id
+		LEFT JOIN job_targets jt ON ts.job_target_id = jt.id
 		ORDER BY ts.updated_at DESC
 		LIMIT ?
 	`, limit)
@@ -217,12 +219,13 @@ func (s *Store) ListRecentSessions(ctx context.Context, limit int) ([]domain.Tra
 	items := make([]domain.TrainingSessionSummary, 0)
 	for rows.Next() {
 		var id, mode, topic, projectName, status, reviewID, updatedAt string
+		var jobTargetID, jobTargetTitle, jobTargetCompanyName string
 		var totalScore float64
-		if err := rows.Scan(&id, &mode, &topic, &projectName, &status, &totalScore, &reviewID, &updatedAt); err != nil {
+		if err := rows.Scan(&id, &mode, &topic, &projectName, &status, &totalScore, &reviewID, &updatedAt, &jobTargetID, &jobTargetTitle, &jobTargetCompanyName); err != nil {
 			return nil, fmt.Errorf("scan recent session: %w", err)
 		}
 
-		items = append(items, domain.TrainingSessionSummary{
+		item := domain.TrainingSessionSummary{
 			ID:          id,
 			Mode:        mode,
 			Topic:       topic,
@@ -231,7 +234,15 @@ func (s *Store) ListRecentSessions(ctx context.Context, limit int) ([]domain.Tra
 			TotalScore:  totalScore,
 			ReviewID:    reviewID,
 			UpdatedAt:   parseTime(updatedAt),
-		})
+		}
+		if jobTargetID != "" {
+			item.JobTarget = &domain.JobTargetRef{
+				ID:          jobTargetID,
+				Title:       jobTargetTitle,
+				CompanyName: jobTargetCompanyName,
+			}
+		}
+		items = append(items, item)
 	}
 
 	return items, nil
@@ -239,17 +250,20 @@ func (s *Store) ListRecentSessions(ctx context.Context, limit int) ([]domain.Tra
 
 func (s *Store) GetLatestResumableSession(ctx context.Context) (*domain.TrainingSessionSummary, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT ts.id, ts.mode, ts.topic, COALESCE(pp.name, ''), ts.status, ts.total_score, ts.review_id, ts.updated_at
+		SELECT ts.id, ts.mode, ts.topic, COALESCE(pp.name, ''), ts.status, ts.total_score, ts.review_id, ts.updated_at,
+			COALESCE(jt.id, ''), COALESCE(jt.title, ''), COALESCE(jt.company_name, '')
 		FROM training_sessions ts
 		LEFT JOIN project_profiles pp ON ts.project_id = pp.id
+		LEFT JOIN job_targets jt ON ts.job_target_id = jt.id
 		WHERE ts.status IN (?, ?, ?, ?)
 		ORDER BY ts.updated_at DESC
 		LIMIT 1
 	`, domain.StatusDraft, domain.StatusActive, domain.StatusWaitingAnswer, domain.StatusFollowup)
 
 	var id, mode, topic, projectName, status, reviewID, updatedAt string
+	var jobTargetID, jobTargetTitle, jobTargetCompanyName string
 	var totalScore float64
-	if err := row.Scan(&id, &mode, &topic, &projectName, &status, &totalScore, &reviewID, &updatedAt); err != nil {
+	if err := row.Scan(&id, &mode, &topic, &projectName, &status, &totalScore, &reviewID, &updatedAt, &jobTargetID, &jobTargetTitle, &jobTargetCompanyName); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
@@ -257,7 +271,7 @@ func (s *Store) GetLatestResumableSession(ctx context.Context) (*domain.Training
 		return nil, fmt.Errorf("get latest resumable session: %w", err)
 	}
 
-	return &domain.TrainingSessionSummary{
+	item := &domain.TrainingSessionSummary{
 		ID:          id,
 		Mode:        mode,
 		Topic:       topic,
@@ -266,7 +280,16 @@ func (s *Store) GetLatestResumableSession(ctx context.Context) (*domain.Training
 		TotalScore:  totalScore,
 		ReviewID:    reviewID,
 		UpdatedAt:   parseTime(updatedAt),
-	}, nil
+	}
+	if jobTargetID != "" {
+		item.JobTarget = &domain.JobTargetRef{
+			ID:          jobTargetID,
+			Title:       jobTargetTitle,
+			CompanyName: jobTargetCompanyName,
+		}
+	}
+
+	return item, nil
 }
 
 func insertTurn(ctx context.Context, tx *sql.Tx, turn *domain.TrainingTurn) error {

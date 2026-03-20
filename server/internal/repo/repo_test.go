@@ -733,6 +733,52 @@ func TestGetReviewIncludesBoundJobTargetRef(t *testing.T) {
 	}
 }
 
+func TestSetAndClearActiveJobTargetPersistsOnProfile(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	target, err := store.CreateJobTarget(ctx, domain.JobTargetInput{
+		Title:       "后端工程师 - Example",
+		CompanyName: "Example",
+		SourceText:  "要求 Go、Redis、Kafka 经验。",
+	})
+	if err != nil {
+		t.Fatalf("CreateJobTarget() error = %v", err)
+	}
+
+	profile, err := store.SetActiveJobTarget(ctx, target.ID)
+	if err != nil {
+		t.Fatalf("SetActiveJobTarget() error = %v", err)
+	}
+	if profile == nil {
+		t.Fatal("expected profile after setting active job target")
+	}
+	if profile.ActiveJobTargetID != target.ID {
+		t.Fatalf("expected active job target id %q, got %q", target.ID, profile.ActiveJobTargetID)
+	}
+	if profile.ActiveJobTarget == nil || profile.ActiveJobTarget.Title != target.Title {
+		t.Fatal("expected active job target ref to be hydrated")
+	}
+
+	profile, err = store.ClearActiveJobTarget(ctx)
+	if err != nil {
+		t.Fatalf("ClearActiveJobTarget() error = %v", err)
+	}
+	if profile == nil {
+		t.Fatal("expected profile after clearing active job target")
+	}
+	if profile.ActiveJobTargetID != "" {
+		t.Fatalf("expected active job target id to be cleared, got %q", profile.ActiveJobTargetID)
+	}
+	if profile.ActiveJobTarget != nil {
+		t.Fatal("expected active job target ref to be cleared")
+	}
+}
+
 func openTestStore(t *testing.T) (*Store, error) {
 	t.Helper()
 

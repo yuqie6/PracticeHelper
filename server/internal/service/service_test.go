@@ -25,7 +25,7 @@ func TestBuildTodayFocusUsesReadableWeaknessLabels(t *testing.T) {
 		},
 	}
 
-	focus := buildTodayFocus(profile, weaknesses)
+	focus := buildTodayFocus(profile, nil, weaknesses, "generic")
 	want := "今天优先补 展开深度：回答缺少因果展开"
 	if focus != want {
 		t.Fatalf("unexpected today focus: got %q want %q", focus, want)
@@ -46,11 +46,35 @@ func TestBuildRecommendedTrackCoversNewWeaknessKinds(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := buildRecommendedTrack(nil, []domain.WeaknessTag{{Kind: tc.kind, Label: "x"}})
+			got := buildRecommendedTrack(nil, nil, []domain.WeaknessTag{{Kind: tc.kind, Label: "x"}}, "generic")
 			if got != tc.want {
 				t.Fatalf("unexpected recommended track: got %q want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestWeightWeaknessesForActiveJobTargetPrioritizesMatchedLabels(t *testing.T) {
+	weighted := weightWeaknessesForActiveJobTarget(
+		[]domain.WeaknessTag{
+			{Kind: "detail", Label: "回答缺少因果展开", Severity: 0.88, Frequency: 2},
+			{Kind: "topic", Label: "缓存一致性", Severity: 0.75, Frequency: 1},
+		},
+		&domain.JobTarget{
+			Title: "后端工程师",
+			LatestSuccessfulAnalysis: &domain.JobTargetAnalysisRun{
+				MustHaveSkills:   []string{"Redis", "缓存一致性"},
+				Responsibilities: []string{"负责核心链路稳定性"},
+				EvaluationFocus:  []string{"故障排查闭环"},
+			},
+		},
+	)
+
+	if len(weighted) != 2 {
+		t.Fatalf("expected 2 weighted weaknesses, got %d", len(weighted))
+	}
+	if weighted[0].Label != "缓存一致性" {
+		t.Fatalf("expected matched weakness to rank first, got %s", weighted[0].Label)
 	}
 }
 
@@ -176,6 +200,151 @@ func TestCreateSessionPassesBoundJobTargetAnalysisToSidecar(t *testing.T) {
 	}
 	if len(captured.JobTargetAnalysis.MustHaveSkills) == 0 {
 		t.Fatal("expected must-have skills to be forwarded to sidecar")
+	}
+}
+
+func TestCreateSessionFallsBackToActiveJobTargetWhenRequestOmitsOne(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	target := seedReadyJobTarget(t, store)
+	if _, err := store.SetActiveJobTarget(context.Background(), target.ID); err != nil {
+		t.Fatalf("SetActiveJobTarget() error = %v", err)
+	}
+
+	var captured domain.GenerateQuestionRequest
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/generate_question" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(domain.GenerateQuestionResponse{
+			Question:       "这个岗位要求缓存一致性时，你会怎么解释 Redis 写路径的取舍？",
+			ExpectedPoints: []string{"一致性目标", "失败兜底", "性能取舍"},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	session, err := svc.CreateSession(context.Background(), domain.CreateSessionRequest{
+		Mode:      domain.ModeBasics,
+		Topic:     "redis",
+		Intensity: "standard",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	if session.JobTargetID != target.ID {
+		t.Fatalf("expected active job target %q, got %q", target.ID, session.JobTargetID)
+	}
+	if captured.JobTargetAnalysis == nil {
+		t.Fatal("expected active job target analysis to be injected")
+	}
+}
+
+func TestCreateSessionIgnoresUnavailableActiveJobTarget(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	target, err := store.CreateJobTarget(context.Background(), domain.JobTargetInput{
+		Title:       "后端工程师 - Example",
+		CompanyName: "Example",
+		SourceText:  "要求 Go、Redis、Kafka 经验。",
+	})
+	if err != nil {
+		t.Fatalf("CreateJobTarget() error = %v", err)
+	}
+	if _, err := store.SetActiveJobTarget(context.Background(), target.ID); err != nil {
+		t.Fatalf("SetActiveJobTarget() error = %v", err)
+	}
+
+	var captured domain.GenerateQuestionRequest
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(domain.GenerateQuestionResponse{
+			Question:       "Redis 为什么快？",
+			ExpectedPoints: []string{"内存访问", "事件循环"},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	session, err := svc.CreateSession(context.Background(), domain.CreateSessionRequest{
+		Mode:      domain.ModeBasics,
+		Topic:     "redis",
+		Intensity: "standard",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	if session.JobTargetID != "" {
+		t.Fatalf("expected generic fallback when active job target is unavailable, got %q", session.JobTargetID)
+	}
+	if captured.JobTargetAnalysis != nil {
+		t.Fatal("expected no job target analysis when active job target is unavailable")
+	}
+}
+
+func TestCreateSessionCanExplicitlyIgnoreActiveJobTarget(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	target := seedReadyJobTarget(t, store)
+	if _, err := store.SetActiveJobTarget(context.Background(), target.ID); err != nil {
+		t.Fatalf("SetActiveJobTarget() error = %v", err)
+	}
+
+	var captured domain.GenerateQuestionRequest
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(domain.GenerateQuestionResponse{
+			Question:       "Redis 为什么快？",
+			ExpectedPoints: []string{"内存访问", "事件循环"},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	session, err := svc.CreateSession(context.Background(), domain.CreateSessionRequest{
+		Mode:                  domain.ModeBasics,
+		Topic:                 "redis",
+		Intensity:             "standard",
+		IgnoreActiveJobTarget: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if session.JobTargetID != "" {
+		t.Fatalf("expected explicit generic training to skip active job target, got %q", session.JobTargetID)
+	}
+	if captured.JobTargetAnalysis != nil {
+		t.Fatal("expected no job target analysis when active job target is explicitly ignored")
 	}
 }
 
