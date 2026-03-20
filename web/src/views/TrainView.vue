@@ -83,6 +83,15 @@
             </option>
           </select>
         </label>
+        <label class="space-y-2">
+          <span class="neo-subheading">{{ t('train.fields.maxTurns') }}</span>
+          <select v-model.number="form.max_turns" class="neo-select">
+            <option :value="2">2</option>
+            <option :value="3">3</option>
+            <option :value="4">4</option>
+            <option :value="5">5</option>
+          </select>
+        </label>
       </div>
 
       <label v-if="form.mode === 'basics'" class="space-y-2">
@@ -91,6 +100,12 @@
           <option value="go">{{ formatTopicLabel(t, 'go') }}</option>
           <option value="redis">{{ formatTopicLabel(t, 'redis') }}</option>
           <option value="kafka">{{ formatTopicLabel(t, 'kafka') }}</option>
+          <option value="mysql">{{ formatTopicLabel(t, 'mysql') }}</option>
+          <option value="system_design">{{ formatTopicLabel(t, 'system_design') }}</option>
+          <option value="distributed">{{ formatTopicLabel(t, 'distributed') }}</option>
+          <option value="network">{{ formatTopicLabel(t, 'network') }}</option>
+          <option value="os">{{ formatTopicLabel(t, 'os') }}</option>
+          <option value="microservice">{{ formatTopicLabel(t, 'microservice') }}</option>
         </select>
       </label>
 
@@ -194,6 +209,7 @@ const form = reactive({
   project_id: '',
   job_target_id: '',
   intensity: 'standard',
+  max_turns: 2,
 });
 const jobTargetSelectionTouched = ref(false);
 const streamSections = ref<StreamSection[]>([]);
@@ -276,6 +292,7 @@ const mutation = useMutation({
     job_target_id?: string;
     ignore_active_job_target?: boolean;
     intensity: string;
+    max_turns?: number;
   }) => {
     streamSections.value = [];
     streamEvents.value = [];
@@ -369,6 +386,7 @@ function submit() {
     ignore_active_job_target:
       !form.job_target_id && Boolean(activeJobTarget.value),
     intensity: form.intensity,
+    max_turns: form.max_turns,
   });
 }
 

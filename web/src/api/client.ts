@@ -134,14 +134,11 @@ export interface TrainingEvaluation {
 
 export interface TrainingTurn {
   id: string;
+  turn_index: number;
   question: string;
   expected_points: string[];
   answer: string;
   evaluation?: TrainingEvaluation;
-  followup_question?: string;
-  followup_expected_points?: string[];
-  followup_answer?: string;
-  followup_evaluation?: TrainingEvaluation;
 }
 
 export interface TrainingSession {
@@ -153,6 +150,7 @@ export interface TrainingSession {
   job_target_analysis_id?: string;
   intensity: string;
   status: string;
+  max_turns: number;
   total_score: number;
   review_id?: string;
   turns: TrainingTurn[];

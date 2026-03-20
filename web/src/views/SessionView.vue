@@ -5,6 +5,9 @@
       <p class="text-base font-semibold">
         {{ t('session.hero.description', { status: currentStatusLabel }) }}
       </p>
+      <p v-if="session" class="mt-1 text-sm font-black">
+        {{ t('session.turnIndicator', { current: currentTurnIndex, total: session.max_turns }) }}
+      </p>
     </header>
 
     <div class="neo-panel space-y-2 bg-white">
@@ -81,7 +84,7 @@
     </div>
 
     <div
-      v-else-if="session && activePrompt"
+      v-else-if="session && currentTurn"
       class="neo-grid lg:grid-cols-[1.1fr_0.9fr]"
     >
       <div class="neo-panel space-y-4">
@@ -95,7 +98,7 @@
           <p class="neo-subheading">{{ t('session.followupIntentTitle') }}</p>
           <p class="text-sm font-semibold leading-6">{{ followupIntent }}</p>
         </div>
-        <h3 class="text-2xl font-black">{{ activePrompt.question }}</h3>
+        <h3 class="text-2xl font-black">{{ currentTurn.question }}</h3>
 
         <form
           v-if="canAnswerCurrentSession"
@@ -142,25 +145,25 @@
         <p class="neo-kicker bg-[var(--neo-green)]">
           {{ t('session.feedback') }}
         </p>
-        <template v-if="mainEvaluation">
+        <template v-if="latestEvaluation">
           <p class="text-lg font-black">
-            {{ t('session.mainScore', { score: mainEvaluation.score }) }}
+            {{ t('session.mainScore', { score: latestEvaluation.score }) }}
           </p>
           <p
             class="border-2 border-black bg-white px-4 py-4 text-base font-semibold leading-7 md:border-4"
           >
             {{
-              mainEvaluation.headline || t('session.feedbackHeadlineFallback')
+              latestEvaluation.headline || t('session.feedbackHeadlineFallback')
             }}
           </p>
 
-          <details v-if="mainEvaluation.strengths.length" class="space-y-2">
+          <details v-if="latestEvaluation.strengths.length" class="space-y-2">
             <summary class="neo-subheading cursor-pointer">
               {{ t('session.strengths') }}
             </summary>
             <ul class="mt-3 space-y-2">
               <li
-                v-for="item in mainEvaluation.strengths"
+                v-for="item in latestEvaluation.strengths"
                 :key="item"
                 class="neo-note"
               >
@@ -169,13 +172,13 @@
             </ul>
           </details>
 
-          <details v-if="mainEvaluation.gaps.length" class="space-y-2" open>
+          <details v-if="latestEvaluation.gaps.length" class="space-y-2" open>
             <summary class="neo-subheading cursor-pointer">
               {{ t('session.gaps') }}
             </summary>
             <ul class="mt-3 space-y-2">
               <li
-                v-for="item in mainEvaluation.gaps"
+                v-for="item in latestEvaluation.gaps"
                 :key="item"
                 class="neo-note"
               >
@@ -187,12 +190,12 @@
           <div class="space-y-2">
             <p class="neo-subheading">{{ t('session.suggestionTitle') }}</p>
             <p class="neo-note">
-              {{ mainEvaluation.suggestion || t('session.suggestionFallback') }}
+              {{ latestEvaluation.suggestion || t('session.suggestionFallback') }}
             </p>
           </div>
 
           <details
-            v-if="Object.keys(mainEvaluation.score_breakdown ?? {}).length"
+            v-if="Object.keys(latestEvaluation.score_breakdown ?? {}).length"
             class="space-y-2"
           >
             <summary class="neo-subheading cursor-pointer">
@@ -200,7 +203,7 @@
             </summary>
             <ul class="mt-3 space-y-2">
               <li
-                v-for="(score, label) in mainEvaluation.score_breakdown"
+                v-for="(score, label) in latestEvaluation.score_breakdown"
                 :key="label"
                 class="flex items-center justify-between border-2 border-black bg-white px-3 py-2 text-sm font-semibold md:border-4"
               >
@@ -257,14 +260,29 @@ const { data } = useQuery({
 });
 
 const session = computed(() => data.value ?? null);
-const lastTurn = computed(
-  () => session.value?.turns?.[session.value.turns.length - 1],
-);
-const mainEvaluation = computed(() => lastTurn.value?.evaluation ?? null);
+const turns = computed(() => session.value?.turns ?? []);
+const currentTurn = computed(() => turns.value[turns.value.length - 1] ?? null);
+const currentTurnIndex = computed(() => currentTurn.value?.turn_index ?? 1);
+const latestEvaluation = computed(() => {
+  // 当前 turn 已经有评估结果（已作答）→ 显示当前 turn 的评估
+  if (currentTurn.value?.evaluation) {
+    return currentTurn.value.evaluation;
+  }
+  // 当前 turn 还没作答，且是追问轮 → 显示上一轮评估作为上下文
+  if (currentTurnIndex.value > 1 && turns.value.length >= 2) {
+    return turns.value[turns.value.length - 2]?.evaluation ?? null;
+  }
+  return null;
+});
+const followupIntent = computed(() => {
+  // 追问意图来自上一轮评估（当前 turn 还没答时才显示）
+  if (currentTurnIndex.value > 1 && !currentTurn.value?.answer && turns.value.length >= 2) {
+    return turns.value[turns.value.length - 2]?.evaluation?.followup_intent ?? '';
+  }
+  return '';
+});
 const canAnswerCurrentSession = computed(() =>
-  ['waiting_answer', 'active', 'followup'].includes(
-    session.value?.status ?? '',
-  ),
+  ['waiting_answer', 'active'].includes(session.value?.status ?? ''),
 );
 const currentStatusLabel = computed(() => {
   if (!session.value?.status) {
@@ -274,37 +292,10 @@ const currentStatusLabel = computed(() => {
   return formatStatusLabel(t, session.value.status);
 });
 
-const activePrompt = computed(() => {
-  const turn = lastTurn.value;
-  if (!turn) {
-    return null;
-  }
-  // 这里不是单纯切换展示文案，而是在把后端 session 状态映射成当前唯一允许作答的题目。
-  // completed 必须返回 null，避免前端在复盘已生成后继续展示可提交的输入框。
-  if (session.value?.status === 'followup' && turn.followup_question) {
-    return {
-      question: turn.followup_question,
-      expectedPoints: turn.followup_expected_points ?? [],
-    };
-  }
-  if (session.value?.status === 'completed') {
-    return null;
-  }
-  return {
-    question: turn.question,
-    expectedPoints: turn.expected_points,
-  };
-});
-
 const placeholderText = computed(() =>
-  session.value?.status === 'followup'
+  currentTurnIndex.value > 1
     ? t('session.placeholderFollowup')
     : t('session.placeholderInitial'),
-);
-const followupIntent = computed(() =>
-  session.value?.status === 'followup'
-    ? (mainEvaluation.value?.followup_intent ?? '')
-    : '',
 );
 const showSubmittedAnswer = computed(
   () =>
@@ -386,9 +377,6 @@ const showReviewRecovery = computed(
     !isSubmitting.value,
 );
 const progressMode = computed(() => {
-  const turns = session.value?.turns ?? [];
-  const latestTurn = turns[turns.length - 1];
-
   if (session.value?.status === 'review_pending' || isRetryingReview.value) {
     return 'review';
   }
@@ -397,15 +385,12 @@ const progressMode = computed(() => {
     return 'question';
   }
 
-  if (session.value?.status === 'evaluating') {
-    return latestTurn?.followup_answer ? 'review' : 'answer';
-  }
-
+  const isLastTurn = currentTurnIndex.value >= (session.value?.max_turns ?? 2);
   if (isSubmitting.value) {
-    return session.value?.status === 'followup' ? 'review' : 'answer';
+    return isLastTurn ? 'review' : 'answer';
   }
 
-  return 'question';
+  return 'answer';
 });
 const progressTitle = computed(() => {
   switch (progressMode.value) {
