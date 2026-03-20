@@ -19,18 +19,38 @@ PracticeHelper 由三个进程组成，通过 HTTP 通信：
 
 ```
 server/
-  cmd/api/main.go           # 入口：加载配置 → 打开数据库 → 创建 sidecar client → 注册路由 → 启动
+  cmd/api/main.go           # 入口装配：加载配置 → sqlite.Open/Bootstrap → repo.New → service.New → 注册路由 → 启动
   internal/
-    config/config.go         # 从环境变量读取 Port / DatabasePath / SidecarURL / SidecarTimeout / LogPath
-    controller/router.go     # Gin 路由与 handler：解析请求 → 调用 service → 序列化响应
-    service/service.go       # 业务逻辑：训练会话编排、出题/评分调度、薄弱点更新
-    domain/types.go          # 所有数据结构定义
-    repo/repo.go             # SQLite 存储层：DDL、CRUD、FTS5 检索
-    sidecar/client.go        # sidecar HTTP 客户端：序列化请求 → POST → 反序列化响应
-    observability/request.go # request_id 生成与透传
+    config/config.go          # 从环境变量读取 Port / DatabasePath / SidecarURL / SidecarTimeout / LogPath
+    controller/router.go      # Gin transport 层：路由、handler、错误映射、stream 输出、中间件
+    domain/types.go           # 共享数据结构：领域实体、请求/响应 DTO、stream event
+    infra/sqlite/
+      open.go                 # SQLite 连接与 DSN 组装
+      bootstrap.go            # migration + seed question templates
+    repo/
+      repo.go                 # Store 定义与 repo.New(db)
+      profile_repo.go         # 用户画像读写
+      project_repo.go         # 项目画像、repo chunk、FTS 检索
+      import_job_repo.go      # 项目导入任务 CRUD
+      question_template_repo.go # basics 模板查询
+      session_repo.go         # 训练 session / turn / 原子状态切换
+      review_repo.go          # review card 落库与查询
+      weakness_repo.go        # weakness 聚合与降温
+      scan.go                 # DB row -> domain 扫描器
+      util.go                 # repo 内部 JSON/时间/ID/FTS 辅助函数
+    service/
+      service.go              # Service 定义、构造与服务级错误
+      profile_service.go      # 画像与 dashboard 聚合
+      import_service.go       # 项目导入编排与后台恢复
+      session_service.go      # 会话创建、答题状态机、review 收口
+      weakness_service.go     # weakness 辅助逻辑与 dashboard 文案 helper
+    sidecar/client.go         # sidecar HTTP 客户端：序列化请求 → POST → 反序列化响应/流
+    observability/request.go  # request_id 生成与透传
 ```
 
-调用链路：`controller → service → repo` + `service → sidecar/client`。controller 不直接访问数据库，service 不直接处理 HTTP。
+调用链路：`cmd/api(main)` 先完成 `sqlite.Open + sqlite.Bootstrap + repo.New` 装配，然后进入
+`controller → service → repo` 和 `service → sidecar/client`。controller 不直接访问数据库，
+service 不直接处理 HTTP，repo 也不再负责数据库连接与 migration。
 
 ## 3. Python sidecar 管线
 
@@ -167,7 +187,8 @@ Go API 不再同步等待整个导入结束，而是先创建 `project_import_jo
 
 ## 4. 数据库 Schema
 
-SQLite 共 10 张表（含 1 张 FTS5 虚拟表），启动时自动建表：
+SQLite 共 10 张表（含 1 张 FTS5 虚拟表），启动时由 `internal/infra/sqlite.Bootstrap`
+自动建表并补种子数据：
 
 | 表 | 用途 | 关键字段 |
 |---|------|---------|
