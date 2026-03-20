@@ -50,6 +50,7 @@ func NewRouter(svc *service.Service) *gin.Engine {
 		api.GET("/sessions/:id", handler.getSession)
 		api.POST("/sessions/:id/answer", handler.submitAnswer)
 		api.POST("/sessions/:id/answer/stream", handler.submitAnswerStream)
+		api.POST("/sessions/:id/retry-review", handler.retrySessionReview)
 
 		api.GET("/reviews/:id", handler.getReview)
 		api.GET("/weaknesses", handler.listWeaknesses)
@@ -264,6 +265,23 @@ func (h *Handler) submitAnswerStream(c *gin.Context) {
 	streamJSON(c, http.StatusOK, func(emit func(domain.StreamEvent) error) (any, error) {
 		return h.service.SubmitAnswerStream(c.Request.Context(), c.Param("id"), request, emit)
 	})
+}
+
+func (h *Handler) retrySessionReview(c *gin.Context) {
+	data, err := h.service.RetrySessionReview(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrSessionNotFound):
+			writeError(c, http.StatusNotFound, err)
+		case errors.Is(err, service.ErrSessionNotRecoverable):
+			writeError(c, http.StatusConflict, err)
+		default:
+			writeError(c, http.StatusBadGateway, err)
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": data})
 }
 
 func (h *Handler) getReview(c *gin.Context) {

@@ -15,10 +15,11 @@ import (
 )
 
 var (
-	ErrInvalidMode       = errors.New("invalid mode")
-	ErrProjectNotFound   = errors.New("project not found")
-	ErrSessionNotFound   = errors.New("session not found")
-	ErrImportJobNotFound = errors.New("import job not found")
+	ErrInvalidMode           = errors.New("invalid mode")
+	ErrProjectNotFound       = errors.New("project not found")
+	ErrSessionNotFound       = errors.New("session not found")
+	ErrImportJobNotFound     = errors.New("import job not found")
+	ErrSessionNotRecoverable = errors.New("session is not in a recoverable state")
 )
 
 type Service struct {
@@ -537,30 +538,8 @@ func (s *Service) SubmitAnswer(ctx context.Context, sessionID string, request do
 			return nil, err
 		}
 
-		updatedSession, err := s.repo.GetSession(ctx, session.ID)
+		updatedSession, err := s.finalizeReview(ctx, session.ID)
 		if err != nil {
-			return nil, err
-		}
-		review, err := s.sidecar.GenerateReview(ctx, domain.GenerateReviewRequest{
-			Session: updatedSession,
-			Project: updatedSession.Project,
-			Turns:   updatedSession.Turns,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		review.ID = newID("review")
-		review.SessionID = updatedSession.ID
-		if err := s.repo.CreateReview(ctx, review); err != nil {
-			return nil, err
-		}
-
-		endedAt := time.Now().UTC()
-		updatedSession.ReviewID = review.ID
-		updatedSession.Status = domain.StatusCompleted
-		updatedSession.EndedAt = &endedAt
-		if err := s.repo.SaveSession(ctx, updatedSession); err != nil {
 			return nil, err
 		}
 
@@ -696,30 +675,8 @@ func (s *Service) SubmitAnswerStream(
 			return nil, err
 		}
 
-		updatedSession, err := s.repo.GetSession(ctx, session.ID)
+		updatedSession, err := s.finalizeReviewStream(ctx, session.ID, emit)
 		if err != nil {
-			return nil, err
-		}
-		review, err := s.sidecar.GenerateReviewStream(ctx, domain.GenerateReviewRequest{
-			Session: updatedSession,
-			Project: updatedSession.Project,
-			Turns:   updatedSession.Turns,
-		}, emit)
-		if err != nil {
-			return nil, err
-		}
-
-		review.ID = newID("review")
-		review.SessionID = updatedSession.ID
-		if err := s.repo.CreateReview(ctx, review); err != nil {
-			return nil, err
-		}
-
-		endedAt := time.Now().UTC()
-		updatedSession.ReviewID = review.ID
-		updatedSession.Status = domain.StatusCompleted
-		updatedSession.EndedAt = &endedAt
-		if err := s.repo.SaveSession(ctx, updatedSession); err != nil {
 			return nil, err
 		}
 
@@ -731,6 +688,74 @@ func (s *Service) SubmitAnswerStream(
 	}
 
 	return s.repo.GetSession(ctx, session.ID)
+}
+
+func (s *Service) finalizeReview(ctx context.Context, sessionID string) (*domain.TrainingSession, error) {
+	updatedSession, err := s.repo.GetSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if updatedSession == nil {
+		return nil, ErrSessionNotFound
+	}
+
+	review, err := s.sidecar.GenerateReview(ctx, domain.GenerateReviewRequest{
+		Session: updatedSession,
+		Project: updatedSession.Project,
+		Turns:   updatedSession.Turns,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return s.persistReview(ctx, updatedSession, review)
+}
+
+func (s *Service) finalizeReviewStream(
+	ctx context.Context,
+	sessionID string,
+	emit func(domain.StreamEvent) error,
+) (*domain.TrainingSession, error) {
+	updatedSession, err := s.repo.GetSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if updatedSession == nil {
+		return nil, ErrSessionNotFound
+	}
+
+	review, err := s.sidecar.GenerateReviewStream(ctx, domain.GenerateReviewRequest{
+		Session: updatedSession,
+		Project: updatedSession.Project,
+		Turns:   updatedSession.Turns,
+	}, emit)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.persistReview(ctx, updatedSession, review)
+}
+
+func (s *Service) persistReview(
+	ctx context.Context,
+	session *domain.TrainingSession,
+	review *domain.ReviewCard,
+) (*domain.TrainingSession, error) {
+	review.ID = newID("review")
+	review.SessionID = session.ID
+	if err := s.repo.CreateReview(ctx, review); err != nil {
+		return nil, err
+	}
+
+	endedAt := time.Now().UTC()
+	session.ReviewID = review.ID
+	session.Status = domain.StatusCompleted
+	session.EndedAt = &endedAt
+	if err := s.repo.SaveSession(ctx, session); err != nil {
+		return nil, err
+	}
+
+	return session, nil
 }
 
 func (s *Service) GetSession(ctx context.Context, sessionID string) (*domain.TrainingSession, error) {
@@ -746,6 +771,21 @@ func (s *Service) GetSession(ctx context.Context, sessionID string) (*domain.Tra
 
 func (s *Service) GetReview(ctx context.Context, reviewID string) (*domain.ReviewCard, error) {
 	return s.repo.GetReview(ctx, reviewID)
+}
+
+func (s *Service) RetrySessionReview(ctx context.Context, sessionID string) (*domain.TrainingSession, error) {
+	session, err := s.repo.GetSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if session == nil {
+		return nil, ErrSessionNotFound
+	}
+	if session.Status != domain.StatusReviewPending {
+		return nil, ErrSessionNotRecoverable
+	}
+
+	return s.finalizeReview(ctx, sessionID)
 }
 
 func (s *Service) ListWeaknesses(ctx context.Context) ([]domain.WeaknessTag, error) {
