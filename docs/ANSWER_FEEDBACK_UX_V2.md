@@ -33,26 +33,30 @@
 
 改动：
 - 前端：`ProgressPanel` 不再按定时器推进，改为消费 `StreamEvent` 中的 `phase` 值映射到用户可读步骤
-- 后端（可选增强）：在流式输出中补充 `answer_saved` / `evaluation_started` 等状态事件
+- 后端（可选增强）：在流式输出中补充 `answer_received` / `answer_saved` / `evaluation_started` 等状态事件
 
 `StreamEvent` 扩展：
 
 ```go
 // 新增 type=status 事件，name 取值：
-// answer_saved, evaluation_started, feedback_ready,
-// followup_ready, review_started, review_saved
+// answer_received, answer_saved, evaluation_started,
+// feedback_ready, followup_ready, review_started, review_saved
 ```
 
 前端映射：
 
 ```
-answer_saved       → "已保存回答"
+answer_received    → "已收到回答"
 evaluation_started → "正在评估"
 feedback_ready     → "反馈已生成"
 followup_ready     → "追问已生成"
 review_started     → "正在生成复盘"
 review_saved       → "复盘已完成"
 ```
+
+说明：
+- `answer_received` 用于第一时间让用户看到“系统已经接单”
+- `answer_saved` 代表 turn 已真正落库，主要用于流式链路观测和后端自检，不必单独占一个进度步骤
 
 **1.2 提交确认与草稿保留**
 

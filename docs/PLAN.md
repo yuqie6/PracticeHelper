@@ -42,7 +42,7 @@
 ### 本阶段已完成
 
 - 训练页与开始训练页的进度面板已改为消费真实流式事件，不再依赖定时器假进度
-- 回答提交流式链路补充 `answer_saved` / `evaluation_started` / `feedback_ready` / `followup_ready` / `review_started` / `review_saved` 状态事件
+- 回答提交流式链路补充 `answer_received` / `answer_saved` / `evaluation_started` / `feedback_ready` / `followup_ready` / `review_started` / `review_saved` 状态事件
 - 训练页在提交后会固定展示已提交内容，失败时保留草稿，避免误以为回答丢失
 - 训练完成后会先展示复盘收口过渡，再跳转到复盘页
 - `EvaluationResult` 已新增 `headline` / `suggestion` / `followup_intent`，训练页反馈区改为结论优先的层级化展示
@@ -57,21 +57,23 @@
 
 ---
 
-## Phase 7 - 推荐质量与智能体增强 ⬜ 当前阶段
+## Phase 7 - 推荐质量与智能体增强 ✅ 已完成
 
 目标：让历史训练真正反馈到下一轮推荐，提升 AI 输出的稳定性和可信度。
 
-### 待完成
+### 本阶段已完成
 
-- 验证薄弱点 severity 升降机制
-- 验证首页推荐与真实弱项的绑定
-- 弱项记忆增加时间衰减，区分"偶发卡壳"和"稳定弱项"
-- 增加种子题目模板覆盖度
-- 追问生成增加"证据不足时保守表达"约束
+- `weakness_tags` 在读取时会按 `last_seen_at` 计算有效 severity，区分近期稳定弱项和陈旧偶发问题
+- 旧弱项再次命中时，会先按衰减后的有效热度继续累加，而不是沿着陈旧高点直接叠加
+- dashboard 的 `today_focus` / `recommended_track` 已直接绑定当前有效 Top1 弱项，推荐文案会带出具体 label
+- 基础题种子模板已扩到 Go / Redis / Kafka 每个 topic 至少 5 条
+- 追问 prompt 已增加“证据不足时保守表达”约束，避免把未证实事实写成既定前提
+- 已补充 repo / service / sidecar 测试，覆盖衰减排序、推荐文案、题库覆盖和 prompt 约束
 
 ### 完成标准
 
-做 3 轮训练后，首页建议准确反映薄弱环节，弱项改善后推荐会变化。
+- 自动化测试能证明衰减排序、推荐绑定、题库覆盖和 prompt 约束都已生效
+- 继续做 3 轮 live 训练时，首页建议应能随真实薄弱环节变化而变化
 
 ---
 

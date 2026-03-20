@@ -118,9 +118,12 @@ make help
 
 - 保存画像
 - 后台导入项目
+- 项目画像编辑并保存后再恢复原值
 - basics 训练一轮
 - project 训练一轮
 - 拉取两张 review
+- 校验 dashboard 的 top weakness、`today_focus`、`recommended_track` 是否绑定到同一条弱项
+- 校验回答流式状态序列是否覆盖 `answer_received` → `answer_saved` → `review_saved`
 
 如果你只想替换仓库地址，不需要改样例文件，直接传参即可：
 

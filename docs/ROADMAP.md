@@ -217,6 +217,17 @@ v1 候选的优先级和阶段划分见 [VISION.md](./VISION.md) 的演化路线
 
 一个新用户从零开始，能无障碍地完成：画像 → 导入项目 → 基础训练 → 项目训练 → 查看复盘 → 首页推荐反映弱项。
 
+#### 当前验证口径
+
+`scripts/e2e_live.py` 现在会在真实 LLM 环境下强校验以下链路：
+
+- 画像保存与 dashboard 回显
+- 真实仓库导入
+- 项目画像草稿编辑保存，再恢复原值
+- basics / project 两轮训练都完成并生成 review
+- dashboard 的 top weakness、`today_focus`、`recommended_track` 三者绑定一致
+- 回答提交流式状态序列覆盖 `answer_received` → `answer_saved` → `review_saved`
+
 ---
 
 ### Phase 7 - 错误处理与健壮性 ⬜

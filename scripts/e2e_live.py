@@ -85,6 +85,11 @@ def post_data(base_url: str, path: str, payload: dict[str, Any], timeout: float 
     return status, body["data"]
 
 
+def patch_data(base_url: str, path: str, payload: dict[str, Any], timeout: float = 60.0) -> tuple[int, Any]:
+    status, body = request_json(base_url, "PATCH", path, payload=payload, timeout=timeout)
+    return status, body["data"]
+
+
 def stream_json(base_url: str, path: str, payload: dict[str, Any], timeout: float = 300.0) -> tuple[Any, list[dict[str, Any]]]:
     request = urllib.request.Request(
         urllib.parse.urljoin(base_url, path),
@@ -118,13 +123,21 @@ def stream_json(base_url: str, path: str, payload: dict[str, Any], timeout: floa
 def summarize_stream(events: list[dict[str, Any]]) -> dict[str, Any]:
     counts: dict[str, int] = {}
     reasoning: list[str] = []
+    status_names: list[str] = []
+    phases: list[str] = []
     for event in events:
         event_type = str(event.get("type", "unknown"))
         counts[event_type] = counts.get(event_type, 0) + 1
         if event_type == "reasoning" and event.get("text"):
             reasoning.append(str(event["text"]))
+        if event_type == "status" and event.get("name"):
+            status_names.append(str(event["name"]))
+        if event_type == "phase" and event.get("phase"):
+            phases.append(str(event["phase"]))
     return {
         "counts": counts,
+        "status_names": status_names,
+        "phases": phases,
         "reasoning_samples": reasoning[:3],
     }
 
@@ -190,6 +203,142 @@ def import_project(base_url: str, repo_url: str, timeout_seconds: float, poll_in
         time.sleep(poll_interval_seconds)
 
 
+def expect(condition: bool, message: str) -> None:
+    if not condition:
+        raise RuntimeError(message)
+
+
+def as_string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value]
+
+
+def project_to_input(project: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": str(project.get("name", "")).strip(),
+        "summary": str(project.get("summary", "")).strip(),
+        "tech_stack": as_string_list(project.get("tech_stack")),
+        "highlights": as_string_list(project.get("highlights")),
+        "challenges": as_string_list(project.get("challenges")),
+        "tradeoffs": as_string_list(project.get("tradeoffs")),
+        "ownership_points": as_string_list(project.get("ownership_points")),
+        "followup_points": as_string_list(project.get("followup_points")),
+    }
+
+
+def build_project_edit_payload(project: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    payload = project_to_input(project)
+    marker = "phase6 smoke: 项目画像已验证可编辑并保存"
+    payload["name"] = f"{payload['name']} [phase6-smoke]"
+    payload["summary"] = f"{payload['summary']}（phase6 smoke 已验证）".strip()
+    followup_points = list(payload["followup_points"])
+    if marker not in followup_points:
+        followup_points.append(marker)
+    payload["followup_points"] = followup_points
+    return payload, marker
+
+
+def verify_project_edit_cycle(base_url: str, project: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    original_payload = project_to_input(project)
+    edited_payload, marker = build_project_edit_payload(project)
+    project_id = str(project["id"])
+    edited_applied = False
+
+    try:
+        _, updated = patch_data(
+            base_url,
+            f"/api/projects/{urllib.parse.quote(project_id)}",
+            edited_payload,
+            timeout=30.0,
+        )
+        edited_applied = True
+        refreshed = get_data(base_url, f"/api/projects/{urllib.parse.quote(project_id)}", timeout=30.0)
+
+        expect(updated["name"] == edited_payload["name"], "project edit response did not persist edited name")
+        expect(
+            refreshed["summary"] == edited_payload["summary"],
+            "project edit verification failed: summary was not persisted",
+        )
+        expect(
+            marker in as_string_list(refreshed.get("followup_points")),
+            "project edit verification failed: followup point marker missing after save",
+        )
+    finally:
+        if edited_applied:
+            patch_data(
+                base_url,
+                f"/api/projects/{urllib.parse.quote(project_id)}",
+                original_payload,
+                timeout=30.0,
+            )
+
+    restored = get_data(base_url, f"/api/projects/{urllib.parse.quote(project_id)}", timeout=30.0)
+    expect(restored["name"] == original_payload["name"], "project restore failed: name mismatch")
+    expect(restored["summary"] == original_payload["summary"], "project restore failed: summary mismatch")
+    expect(
+        as_string_list(restored.get("followup_points")) == original_payload["followup_points"],
+        "project restore failed: followup points mismatch",
+    )
+
+    return restored, {
+        "project_id": project_id,
+        "edited_name": edited_payload["name"],
+        "edited_summary": edited_payload["summary"],
+        "marker_followup_point": marker,
+        "restored": True,
+    }
+
+
+def extract_status_names(events: list[dict[str, Any]]) -> list[str]:
+    return [str(event["name"]) for event in events if event.get("type") == "status" and event.get("name")]
+
+
+def expect_status_subsequence(events: list[dict[str, Any]], expected: list[str], label: str) -> list[str]:
+    got = extract_status_names(events)
+    cursor = 0
+    for name in got:
+        if cursor < len(expected) and name == expected[cursor]:
+            cursor += 1
+
+    expect(
+        cursor == len(expected),
+        f"{label} status sequence mismatch: got {got}, expected subsequence {expected}",
+    )
+    return got
+
+
+def verify_dashboard_binding(
+    dashboard: dict[str, Any],
+    expected_session_ids: list[str],
+) -> dict[str, Any]:
+    weaknesses = dashboard.get("weaknesses")
+    expect(isinstance(weaknesses, list) and len(weaknesses) > 0, "dashboard weaknesses is empty after live run")
+
+    top_weakness = weaknesses[0]
+    label = str(top_weakness.get("label", "")).strip()
+    recommended_track = str(dashboard.get("recommended_track", "")).strip()
+    today_focus = str(dashboard.get("today_focus", "")).strip()
+    recent_sessions = dashboard.get("recent_sessions")
+    expect(label != "", "dashboard top weakness label is empty")
+    expect(recommended_track != "", "dashboard recommended_track is empty")
+    expect(today_focus != "", "dashboard today_focus is empty")
+    expect(label.lower() in recommended_track.lower(), "recommended_track is not bound to top weakness label")
+    expect(label.lower() in today_focus.lower(), "today_focus is not bound to top weakness label")
+    expect(isinstance(recent_sessions, list), "dashboard recent_sessions is not a list")
+
+    recent_session_ids = {str(item.get("id", "")) for item in recent_sessions}
+    for session_id in expected_session_ids:
+        expect(session_id in recent_session_ids, f"dashboard recent_sessions missing session {session_id}")
+
+    return {
+        "top_weakness": top_weakness,
+        "recommended_track": recommended_track,
+        "today_focus": today_focus,
+        "recent_session_ids": sorted(recent_session_ids),
+    }
+
+
 def main() -> int:
     args = parse_args()
     scenario = load_scenario(args.scenario)
@@ -215,7 +364,7 @@ def main() -> int:
         timeout_seconds=args.import_timeout_seconds,
         poll_interval_seconds=args.poll_interval_seconds,
     )
-    project = imported["project"]
+    project, project_edit_verification = verify_project_edit_cycle(base_url, imported["project"])
 
     basics_payload = scenario["basics"]
     basics_session, basics_create_events = stream_json(
@@ -241,6 +390,18 @@ def main() -> int:
         timeout=240.0,
     )
     basics_review = get_data(base_url, f"/api/reviews/{urllib.parse.quote(basics_final['review_id'])}", timeout=30.0)
+    basics_main_statuses = expect_status_subsequence(
+        basics_main_events,
+        ["answer_received", "evaluation_started", "feedback_ready", "answer_saved", "followup_ready"],
+        "basics main answer",
+    )
+    basics_followup_statuses = expect_status_subsequence(
+        basics_followup_events,
+        ["answer_received", "evaluation_started", "feedback_ready", "answer_saved", "review_started", "review_saved"],
+        "basics followup answer",
+    )
+    expect(basics_final["status"] == "completed", f"basics session did not complete: {basics_final['status']}")
+    expect(str(basics_final.get("review_id", "")).strip() != "", "basics session missing review_id")
 
     project_payload = scenario["project"]
     project_session, project_create_events = stream_json(
@@ -266,8 +427,24 @@ def main() -> int:
         timeout=240.0,
     )
     project_review = get_data(base_url, f"/api/reviews/{urllib.parse.quote(project_final['review_id'])}", timeout=30.0)
+    project_main_statuses = expect_status_subsequence(
+        project_main_events,
+        ["answer_received", "evaluation_started", "feedback_ready", "answer_saved", "followup_ready"],
+        "project main answer",
+    )
+    project_followup_statuses = expect_status_subsequence(
+        project_followup_events,
+        ["answer_received", "evaluation_started", "feedback_ready", "answer_saved", "review_started", "review_saved"],
+        "project followup answer",
+    )
+    expect(project_final["status"] == "completed", f"project session did not complete: {project_final['status']}")
+    expect(str(project_final.get("review_id", "")).strip() != "", "project session missing review_id")
 
     dashboard_after = get_data(base_url, "/api/dashboard", timeout=30.0)
+    dashboard_binding = verify_dashboard_binding(
+        dashboard_after,
+        [str(basics_final["id"]), str(project_final["id"])],
+    )
 
     summary = {
         "base_url": base_url,
@@ -275,12 +452,18 @@ def main() -> int:
         "profile_id": profile["id"],
         "dashboard_days_until_deadline": dashboard_before.get("days_until_deadline"),
         "import": imported,
+        "project_edit_verification": project_edit_verification,
         "current_session_after_runs": dashboard_after.get("current_session"),
+        "dashboard_binding": dashboard_binding,
         "basics": {
             "session_id": basics_session["id"],
             "final_status": basics_final["status"],
             "review_id": basics_final["review_id"],
             "review_overall": basics_review["overall"],
+            "status_sequence": {
+                "main": basics_main_statuses,
+                "followup": basics_followup_statuses,
+            },
             "events": {
                 "create": summarize_stream(basics_create_events),
                 "main": summarize_stream(basics_main_events),
@@ -294,6 +477,10 @@ def main() -> int:
             "final_status": project_final["status"],
             "review_id": project_final["review_id"],
             "review_overall": project_review["overall"],
+            "status_sequence": {
+                "main": project_main_statuses,
+                "followup": project_followup_statuses,
+            },
             "events": {
                 "create": summarize_stream(project_create_events),
                 "main": summarize_stream(project_main_events),
