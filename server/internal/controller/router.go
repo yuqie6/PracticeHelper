@@ -247,6 +247,11 @@ func (h *Handler) submitAnswer(c *gin.Context) {
 		switch {
 		case errors.Is(err, service.ErrSessionNotFound):
 			writeError(c, http.StatusNotFound, err)
+		case errors.Is(err, service.ErrSessionBusy),
+			errors.Is(err, service.ErrSessionReviewPending),
+			errors.Is(err, service.ErrSessionCompleted),
+			errors.Is(err, service.ErrSessionAnswerConflict):
+			writeError(c, http.StatusConflict, err)
 		default:
 			writeError(c, http.StatusBadGateway, err)
 		}
@@ -273,7 +278,9 @@ func (h *Handler) retrySessionReview(c *gin.Context) {
 		switch {
 		case errors.Is(err, service.ErrSessionNotFound):
 			writeError(c, http.StatusNotFound, err)
-		case errors.Is(err, service.ErrSessionNotRecoverable):
+		case errors.Is(err, service.ErrSessionNotRecoverable),
+			errors.Is(err, service.ErrSessionBusy),
+			errors.Is(err, service.ErrSessionCompleted):
 			writeError(c, http.StatusConflict, err)
 		default:
 			writeError(c, http.StatusBadGateway, err)
@@ -356,6 +363,7 @@ func corsMiddleware() gin.HandlerFunc {
 func writeError(c *gin.Context, status int, err error) {
 	c.JSON(status, gin.H{
 		"error": gin.H{
+			"code":    errorCode(err),
 			"message": err.Error(),
 		},
 	})
@@ -388,9 +396,36 @@ func streamJSON(
 
 	result, err := run(emit)
 	if err != nil {
-		_ = emit(domain.StreamEvent{Type: "error", Message: err.Error()})
+		_ = emit(domain.StreamEvent{Type: "error", Code: errorCode(err), Message: err.Error()})
 		return
 	}
 
 	_ = emit(domain.StreamEvent{Type: "result", Data: result})
+}
+
+func errorCode(err error) string {
+	switch {
+	case errors.Is(err, service.ErrInvalidMode):
+		return "invalid_mode"
+	case errors.Is(err, service.ErrProjectNotFound):
+		return "project_not_found"
+	case errors.Is(err, service.ErrSessionNotFound):
+		return "session_not_found"
+	case errors.Is(err, service.ErrImportJobNotFound):
+		return "import_job_not_found"
+	case errors.Is(err, service.ErrSessionNotRecoverable):
+		return "session_not_recoverable"
+	case errors.Is(err, service.ErrSessionBusy):
+		return "session_busy"
+	case errors.Is(err, service.ErrSessionReviewPending):
+		return "session_review_pending"
+	case errors.Is(err, service.ErrSessionCompleted):
+		return "session_completed"
+	case errors.Is(err, service.ErrSessionAnswerConflict):
+		return "session_answer_conflict"
+	case errors.Is(err, repo.ErrAlreadyImported):
+		return "project_already_imported"
+	default:
+		return "unknown_error"
+	}
 }

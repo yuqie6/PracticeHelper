@@ -9,6 +9,7 @@ import (
 
 	"practicehelper/server/internal/config"
 	"practicehelper/server/internal/controller"
+	"practicehelper/server/internal/infra/sqlite"
 	"practicehelper/server/internal/repo"
 	"practicehelper/server/internal/service"
 	"practicehelper/server/internal/sidecar"
@@ -25,12 +26,19 @@ func main() {
 	defer cleanup()
 	slog.SetDefault(logger)
 
-	repository, err := repo.Open(cfg.DatabasePath)
+	db, err := sqlite.Open(cfg.DatabasePath)
 	if err != nil {
-		logger.Error("open store failed", "error", err)
+		logger.Error("open sqlite failed", "error", err)
 		os.Exit(1)
 	}
-	defer func() { _ = repository.Close() }()
+	defer func() { _ = db.Close() }()
+
+	if err := sqlite.Bootstrap(db); err != nil {
+		logger.Error("bootstrap sqlite failed", "error", err)
+		os.Exit(1)
+	}
+
+	repository := repo.New(db)
 
 	sidecarClient := sidecar.New(cfg.SidecarURL, cfg.SidecarTimeout)
 	svc := service.New(repository, sidecarClient)

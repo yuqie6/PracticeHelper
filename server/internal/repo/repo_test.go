@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"practicehelper/server/internal/domain"
+	"practicehelper/server/internal/infra/sqlite"
 )
 
-func TestOpenInitializesSQLiteFTS5Schema(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "practicehelper.db"))
+func TestNewStoreUsesBootstrappedSQLiteSchema(t *testing.T) {
+	store, err := openTestStore(t)
 	if err != nil {
-		t.Fatalf("Open() error = %v", err)
+		t.Fatalf("openTestStore() error = %v", err)
 	}
 	defer func() { _ = store.Close() }()
 
@@ -27,9 +28,9 @@ func TestOpenInitializesSQLiteFTS5Schema(t *testing.T) {
 }
 
 func TestSaveUserProfileParsesDateOnlyDeadline(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "practicehelper.db"))
+	store, err := openTestStore(t)
 	if err != nil {
-		t.Fatalf("Open() error = %v", err)
+		t.Fatalf("openTestStore() error = %v", err)
 	}
 	defer func() { _ = store.Close() }()
 
@@ -58,9 +59,9 @@ func TestSaveUserProfileParsesDateOnlyDeadline(t *testing.T) {
 }
 
 func TestProjectImportJobLifecycle(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "practicehelper.db"))
+	store, err := openTestStore(t)
 	if err != nil {
-		t.Fatalf("Open() error = %v", err)
+		t.Fatalf("openTestStore() error = %v", err)
 	}
 	defer func() { _ = store.Close() }()
 
@@ -149,4 +150,74 @@ func TestProjectImportJobLifecycle(t *testing.T) {
 	if retried.FinishedAt != nil {
 		t.Fatal("expected finished_at to be cleared after retry")
 	}
+}
+
+func TestTransitionSessionStatusRequiresCurrentStatusMatch(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	session := &domain.TrainingSession{
+		ID:        "sess_transition",
+		Mode:      domain.ModeBasics,
+		Topic:     "go",
+		Intensity: "standard",
+		Status:    domain.StatusWaitingAnswer,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_transition",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Go 的 goroutine 为什么轻量？",
+		ExpectedPoints: []string{"调度", "栈"},
+	}
+	if err := store.CreateSession(ctx, session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	claimed, err := store.TransitionSessionStatus(
+		ctx,
+		session.ID,
+		[]string{domain.StatusWaitingAnswer},
+		domain.StatusEvaluating,
+	)
+	if err != nil {
+		t.Fatalf("TransitionSessionStatus() first call error = %v", err)
+	}
+	if !claimed {
+		t.Fatal("expected first transition to succeed")
+	}
+
+	claimed, err = store.TransitionSessionStatus(
+		ctx,
+		session.ID,
+		[]string{domain.StatusWaitingAnswer},
+		domain.StatusFollowup,
+	)
+	if err != nil {
+		t.Fatalf("TransitionSessionStatus() second call error = %v", err)
+	}
+	if claimed {
+		t.Fatal("expected second transition to fail because status already changed")
+	}
+}
+
+func openTestStore(t *testing.T) (*Store, error) {
+	t.Helper()
+
+	db, err := sqlite.Open(filepath.Join(t.TempDir(), "practicehelper.db"))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := sqlite.Bootstrap(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
+	return New(db), nil
 }

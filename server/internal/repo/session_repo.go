@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"practicehelper/server/internal/domain"
 )
@@ -143,6 +144,42 @@ func (s *Store) SaveSession(ctx context.Context, session *domain.TrainingSession
 	}
 
 	return nil
+}
+
+func (s *Store) TransitionSessionStatus(
+	ctx context.Context,
+	sessionID string,
+	from []string,
+	to string,
+) (bool, error) {
+	if len(from) == 0 {
+		return false, errors.New("transition session status requires at least one source status")
+	}
+
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(from)), ",")
+	query := fmt.Sprintf(`
+		UPDATE training_sessions
+		SET status = ?, updated_at = ?
+		WHERE id = ? AND status IN (%s)
+	`, placeholders)
+
+	args := make([]any, 0, 3+len(from))
+	args = append(args, to, nowUTC(), sessionID)
+	for _, status := range from {
+		args = append(args, status)
+	}
+
+	result, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return false, fmt.Errorf("transition session status: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("transition session status rows affected: %w", err)
+	}
+
+	return rowsAffected > 0, nil
 }
 
 func (s *Store) ListRecentSessions(ctx context.Context, limit int) ([]domain.TrainingSessionSummary, error) {

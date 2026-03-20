@@ -1,12 +1,28 @@
-package repo
+package sqlite
 
 import (
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 
 	"practicehelper/server/internal/domain"
 )
 
-func (s *Store) migrate() error {
+func Bootstrap(db *sql.DB) error {
+	if err := migrate(db); err != nil {
+		return err
+	}
+
+	if err := seedQuestionTemplates(db); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func migrate(db *sql.DB) error {
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS user_profile (
 			id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -132,7 +148,7 @@ func (s *Store) migrate() error {
 	}
 
 	for _, statement := range statements {
-		if _, err := s.db.Exec(statement); err != nil {
+		if _, err := db.Exec(statement); err != nil {
 			return fmt.Errorf("run migration: %w", err)
 		}
 	}
@@ -140,9 +156,9 @@ func (s *Store) migrate() error {
 	return nil
 }
 
-func (s *Store) seedQuestionTemplates() error {
+func seedQuestionTemplates(db *sql.DB) error {
 	var count int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM question_templates`).Scan(&count); err != nil {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM question_templates`).Scan(&count); err != nil {
 		return fmt.Errorf("count templates: %w", err)
 	}
 	if count > 0 {
@@ -201,7 +217,7 @@ func (s *Store) seedQuestionTemplates() error {
 	}
 
 	for _, template := range templates {
-		if _, err := s.db.Exec(
+		if _, err := db.Exec(
 			`INSERT INTO question_templates (
 				id, mode, topic, prompt, focus_points_json, bad_answers_json, followup_templates_json, score_weights_json
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -219,4 +235,22 @@ func (s *Store) seedQuestionTemplates() error {
 	}
 
 	return nil
+}
+
+func mustJSON(value any) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+
+	return string(data)
+}
+
+func newID(prefix string) string {
+	buffer := make([]byte, 8)
+	if _, err := rand.Read(buffer); err != nil {
+		panic(err)
+	}
+
+	return fmt.Sprintf("%s_%s", prefix, hex.EncodeToString(buffer))
 }

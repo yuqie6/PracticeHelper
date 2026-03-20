@@ -226,6 +226,7 @@ type SubmitAnswerRequest struct {
 
 type StreamEvent struct {
 	Type    string `json:"type"`
+	Code    string `json:"code,omitempty"`
 	Phase   string `json:"phase,omitempty"`
 	Name    string `json:"name,omitempty"`
 	Text    string `json:"text,omitempty"`
