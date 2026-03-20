@@ -1,5 +1,7 @@
 # 开发计划 - PracticeHelper
 
+本文档是当前阶段的执行计划。产品方向和阶段划分见 [VISION.md](./VISION.md)。
+
 ## 已完成
 
 | Phase | 内容 | 交付物 |
@@ -31,30 +33,21 @@
 
 ---
 
-## Phase 6 - 答题反馈 V2 ⬜ 待开始
+## Phase 6 - 答题反馈 V2 ✅ 已完成
 
 目标：把训练体感从"能用"升级到"用户知道发生了什么、为什么这么判、下一步该怎么做"。
 
 详见 [ANSWER_FEEDBACK_UX_V2.md](./ANSWER_FEEDBACK_UX_V2.md)。
 
-### Layer 1：消除卡住感
+### 本阶段已完成
 
-- 前端 `ProgressPanel` 改为消费真实 `StreamEvent.phase`，不再用定时器假进度
-- 后端补充 `answer_saved` / `evaluation_started` 等状态事件
-- 提交确认态 + 失败保留草稿
-- 复盘前收口过渡
-
-### Layer 2：反馈可理解性
-
-- sidecar `EvaluationResult` 新增 `headline` / `suggestion` / `followup_intent`
-- 反馈卡信息层级重排：结论优先，分项得分折叠
-- 追问卡新增意图展示
-
-### Layer 3：训练闭环
-
-- sidecar `ReviewCard` 新增 `top_fix` / `top_fix_reason` / `recommended_next`
-- 复盘页改为动作导向：优先修正项 → 下一轮推荐 → 一键开始
-- "继续训练"携带推荐参数跳转
+- 训练页与开始训练页的进度面板已改为消费真实流式事件，不再依赖定时器假进度
+- 回答提交流式链路补充 `answer_saved` / `evaluation_started` / `feedback_ready` / `followup_ready` / `review_started` / `review_saved` 状态事件
+- 训练页在提交后会固定展示已提交内容，失败时保留草稿，避免误以为回答丢失
+- 训练完成后会先展示复盘收口过渡，再跳转到复盘页
+- `EvaluationResult` 已新增 `headline` / `suggestion` / `followup_intent`，训练页反馈区改为结论优先的层级化展示
+- `ReviewCard` 已新增 `top_fix` / `top_fix_reason` / `recommended_next`，复盘页可直接启动推荐的下一轮训练
+- `TrainView` 已支持从复盘推荐参数预填 mode/topic/project_id
 
 ### 完成标准
 
@@ -64,7 +57,7 @@
 
 ---
 
-## Phase 7 - 推荐质量与智能体增强 ⬜ 待开始
+## Phase 7 - 推荐质量与智能体增强 ⬜ 当前阶段
 
 目标：让历史训练真正反馈到下一轮推荐，提升 AI 输出的稳定性和可信度。
 

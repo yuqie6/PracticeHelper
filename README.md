@@ -1,8 +1,8 @@
 # PracticeHelper
 
-PracticeHelper 是一个面向后端 / AI Agent 方向求职者的面试训练工具。
+PracticeHelper 是一个面向后端 / AI Agent 方向求职者的面试训练系统，围绕用户画像、项目理解和弱点记忆，提供个性化的训练与成长路径。
 
-它不是题库，而是一个能根据你的真实项目和薄弱环节持续追问、打分、复盘的训练 Agent。
+它不是题库，而是一个能根据你的真实项目和薄弱环节持续追问、打分、复盘的训练 Agent。产品方向与未来演化见 [docs/VISION.md](docs/VISION.md)。
 
 ## 它能做什么
 
