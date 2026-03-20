@@ -1,115 +1,92 @@
 # 开发计划 - PracticeHelper
 
-## Phase 0 - 立项与技术栈决策 ✅ 已完成
+## 已完成
 
-确定产品边界、技术选型和工程约束。
-
-**交付物**：README.md、docs/PRD.md、docs/PLAN.md、docs/ARCHITECTURE.md
-
----
-
-## Phase 1 - 工程骨架 ✅ 已完成
-
-搭建可持续开发的三端最小骨架。
-
-**交付物**：
-- `web/`：Vue 3 + Vite + TypeScript + pnpm，Tailwind + neo-brutalist CSS 设计系统
-- `server/`：Gin + SQLite，完整分层结构（config / controller / service / repo / sidecar）
-- `sidecar/`：FastAPI + LangGraph + AgentRuntime
-- Makefile 统一命令、bootstrap.sh 一键初始化
+| Phase | 内容 | 交付物 |
+|-------|------|--------|
+| 0 | 立项与技术栈决策 | README / PRD / PLAN / ARCHITECTURE |
+| 1 | 工程骨架 | web (Vue3+Vite) / server (Gin+SQLite) / sidecar (FastAPI+LangGraph) / Makefile |
+| 2 | 画像与首页 | HomeView / ProfileView / dashboard API |
+| 3 | 项目导入 | ProjectsView / 仓库克隆→chunk→LLM 画像管线 / 后台任务+进度轮询+失败重试 |
+| 4 | 基础+项目训练 | TrainView / SessionView / ReviewView / 出题→评分→追问→复盘→薄弱点更新全链路 |
+| 5-patch | 主线修复 | schema 兼容 / sidecar 超时可配 / 导入后台化+通知 / 流式结构化卡片 / 错误提示收口 |
 
 ---
 
-## Phase 2 - 画像与首页 ✅ 已完成
+## Phase 5 - 端到端验证 🟡 进行中
 
-**交付物**：
-- 首页（HomeView）：Dashboard 聚合展示——今日建议、投递倒计时、薄弱点热区、训练记录、推荐专项、画像摘要
-- 画像页（ProfileView）：完整表单（目标岗位、公司类型、阶段、投递时间、技术栈、主讲项目、自感弱项），支持创建和更新
-- Go API：`GET/POST/PATCH /api/profile`、`GET /api/dashboard`
-- 前端数据层：vue-query 封装，保存后自动刷新 dashboard
-
----
-
-## Phase 3 - 项目导入 ✅ 已完成
-
-**交付物**：
-- 项目页（ProjectsView）：仓库 URL 导入、项目列表、项目画像编辑（名称、摘要、技术栈、亮点、难点、trade-off、ownership、可追问点）
-- sidecar 管线：克隆仓库 → 文件过滤 → chunk 切分 → LLM 生成画像
-- Go API：`POST /api/projects/import`、`GET /api/projects`、`GET/PATCH /api/projects/:id`
-
----
-
-## Phase 4 - 基础知识训练 + 项目训练 ✅ 已完成
-
-**交付物**：
-- 训练配置页（TrainView）：模式选择（基础知识 / 项目）、主题选择、项目选择、强度选择
-- 训练过程页（SessionView）：问题展示、答案输入、评估反馈（评分、优点、漏洞）、追问自动切换、训练完成后自动跳转复盘
-- 复盘页（ReviewView）：总评、分项得分、回答亮点、漏洞、下次训练重点、继续训练入口
-- Go service：完整的训练会话编排（出题 → 评分 → 追问 → 复盘 → 薄弱点更新）
-- sidecar：generate_question / evaluate_answer / generate_review 三条 AI 链路
-- 种子题目：Go / Redis / Kafka 各 1 个模板
-
----
-
-## Phase 5 - 端到端验证与健壮性 🟡 进行中
-
-这一阶段要先把计划拉回基线：当前已经做掉的不少内容本身是合理的，但其中一部分属于“为主线成立而必须补的修复”，另一部分已经开始提前进入下一阶段的架构扩张。后续执行必须先按下面三类重新收口，不能继续边验证边无边界长功能。
-
-### A. 主线必须项
-
-这些项目不做完，当前版本就不能算真正闭环：
-
-- 配置真实 LLM 后稳定跑通完整流程（画像 → 导入项目 → 基础训练 → 项目训练 → 复盘）
-- 让导入、出题、评估、复盘各阶段都具备可见状态，而不是黑箱等待
-- 收口 session 状态机异常路径（重复提交保护、stream/non-stream 一致性、review 失败后的中间状态与恢复）
-- 为仓库导入、出题、评分、复盘补充可回放的端到端样例，降低真实 LLM 漂移带来的回归风险（当前已补 `scripts/e2e_live.py`，还需要持续用最新运行中的服务验证）
-
-### B. 为主线成立而补的必要修复
-
-这些项虽然一开始没有单独写成阶段目标，但已经证明是主线要成立的前提，因此保留：
-
-- 修正真实 LLM 返回 `depth/detail` 弱点分类时的 schema 兼容问题
-- 把 Go -> sidecar 超时改成可配置的 90 秒，避免大一点的仓库导入被 API 提前打断
-- 把项目导入改成后台任务，并补上进度轮询、失败重试和全局通知
-- 把流式 `content` 从原始 JSON 文本收口为结构化草稿卡片
-- 补上导入 / 启动 / 提交 / 画像加载保存 / 复盘加载失败提示
-
-### C. 明确延后，不再混入当前主线
-
-这些方向是对的，但从现在开始应视为下一层架构升级，不再伪装成“顺手修补”：
-
-- 把后台导入任务升级为真正可恢复的 worker / 队列模型
-- 为仓库理解沉淀更细的分析资产，而不是只保留最终项目画像
-- 多 agent 并行分析仓库
-- 推进 tool-loop 的流式化，替代当前 single-shot streaming 路径
-- 评分 rubric 程序化、证据绑定、弱项记忆衰减等智能体质量增强
-
-### 当前严格执行顺序
-
-1. 先完成真实 LLM 端到端验证闭环
-2. 再收口主链路上的失败态与恢复路径
-3. 然后补可回放验证样例
-4. 只有上述三项收口后，才进入 worker 化 / 多 agent 等扩张项
-
-**完成标准**：一个新用户从零开始，能无障碍地完成画像 → 导入项目 → 做一轮基础训练 → 做一轮项目训练 → 查看复盘
-
----
-
-## Phase 6 - 推荐与闭环收口 ⬜ 待开始
-
-让历史训练真正反馈到下一轮训练。
+目标：配置真实 LLM 后，新用户能无障碍走完画像 → 导入项目 → 基础训练 → 项目训练 → 复盘。
 
 ### 待完成
-- 验证薄弱点 severity 的升降机制是否符合预期
-- 验证首页推荐是否与真实弱项绑定
-- 增加更多种子题目模板（当前每个主题只有 1 题）
-- 给弱项记忆增加时间衰减或证据阈值，区分“偶发卡壳”和“稳定弱项”
-- 在项目画像和追问生成里强化“证据不足时保守表达”的约束，避免把不确定推断写成确定事实
 
-**完成标准**：做 3 轮训练后，首页建议准确反映薄弱环节，且弱项改善后推荐会变化
+- 真实 LLM 端到端稳定跑通（`scripts/e2e_live.py` 持续验证）
+- session 状态机异常路径收口：重复提交保护、review 失败后的中间状态与恢复
+- `review_pending` 会话补复盘重试入口，避免页面长时间卡在处理中
+- 补充可回放端到端样例，降低 LLM 漂移回归风险
+
+### 完成标准
+
+从零开始完成完整流程无阻塞，失败态有明确恢复路径。
 
 ---
 
-## 执行顺序
+## Phase 6 - 答题反馈 V2 ⬜ 待开始
 
-Phase 5（端到端验证与智能体质量收口）→ Phase 6（推荐闭环），核心工作从“功能已具备”转向“结果更稳、解释更强、失败可恢复”的验证和打磨。
+目标：把训练体感从"能用"升级到"用户知道发生了什么、为什么这么判、下一步该怎么做"。
+
+详见 [ANSWER_FEEDBACK_UX_V2.md](./ANSWER_FEEDBACK_UX_V2.md)。
+
+### Layer 1：消除卡住感
+
+- 前端 `ProgressPanel` 改为消费真实 `StreamEvent.phase`，不再用定时器假进度
+- 后端补充 `answer_saved` / `evaluation_started` 等状态事件
+- 提交确认态 + 失败保留草稿
+- 复盘前收口过渡
+
+### Layer 2：反馈可理解性
+
+- sidecar `EvaluationResult` 新增 `headline` / `suggestion` / `followup_intent`
+- 反馈卡信息层级重排：结论优先，分项得分折叠
+- 追问卡新增意图展示
+
+### Layer 3：训练闭环
+
+- sidecar `ReviewCard` 新增 `top_fix` / `top_fix_reason` / `recommended_next`
+- 复盘页改为动作导向：优先修正项 → 下一轮推荐 → 一键开始
+- "继续训练"携带推荐参数跳转
+
+### 完成标准
+
+- 提交后能看到真实阶段推进
+- 每次反馈有一句话结论 + 改进建议，追问有意图说明
+- 复盘页有具体下一轮推荐，可一键开始
+
+---
+
+## Phase 7 - 推荐质量与智能体增强 ⬜ 待开始
+
+目标：让历史训练真正反馈到下一轮推荐，提升 AI 输出的稳定性和可信度。
+
+### 待完成
+
+- 验证薄弱点 severity 升降机制
+- 验证首页推荐与真实弱项的绑定
+- 弱项记忆增加时间衰减，区分"偶发卡壳"和"稳定弱项"
+- 增加种子题目模板覆盖度
+- 追问生成增加"证据不足时保守表达"约束
+
+### 完成标准
+
+做 3 轮训练后，首页建议准确反映薄弱环节，弱项改善后推荐会变化。
+
+---
+
+## 明确延后
+
+以下方向正确但不属于近期计划：
+
+- 导入任务升级为可恢复的 worker / 队列模型
+- 仓库理解沉淀细粒度分析资产
+- 多 agent 并行分析仓库
+- tool-loop 流式化替代 single-shot streaming
+- 评分 rubric 程序化、证据绑定（引用用户原文 + repo chunk）
