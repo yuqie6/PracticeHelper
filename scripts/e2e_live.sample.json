@@ -1,0 +1,23 @@
+{
+  "profile": {
+    "target_role": "Go 后端工程师",
+    "target_company_type": "互联网公司",
+    "current_stage": "在职看机会",
+    "application_deadline": "2026-04-10T00:00:00Z",
+    "tech_stacks": ["Go", "Redis", "Kafka"],
+    "primary_projects": ["PracticeHelper"],
+    "self_reported_weaknesses": ["项目表达"]
+  },
+  "basics": {
+    "topic": "redis",
+    "intensity": "standard",
+    "main_answer": "Redis 快主要因为数据在内存、单线程事件循环减少切换和锁成本，并结合高效数据结构与 I/O 多路复用提升吞吐。线上还要注意大 key、慢命令和持久化带来的抖动。",
+    "followup_answer": "I/O 多路复用让 Redis 用单线程就能同时监听大量连接，把就绪事件交给事件循环处理。这样不用为每个连接开线程，但也要求单次命令足够快，否则整个事件循环都会被阻塞。"
+  },
+  "project": {
+    "repo_url": "https://github.com/octocat/Hello-World",
+    "intensity": "standard",
+    "main_answer": "这个仓库的核心价值不在业务复杂度，而在如何把配置加载这件小事做成可复用库。面试时我会从 API 设计、默认行为、环境变量覆盖关系和侵入性控制来讲它的取舍。",
+    "followup_answer": "如果继续扩展，我会优先补边界测试、错误语义和多配置源优先级说明，再决定是否增加更强的 schema 校验。这样能先稳住库的可信度，而不是过早堆功能。"
+  }
+}

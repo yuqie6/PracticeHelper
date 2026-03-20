@@ -108,9 +108,31 @@ make help
 | `make test` | 运行三端测试 |
 | `make build` | 构建前端产物和编译 Go 后端 |
 | `make check` | 顺序执行 `lint`、`test`、`build` 完整校验 |
-| `make e2e-live` | 对当前运行中的 API 跑一轮真实端到端 smoke |
+| `make e2e-live` | 用内置可回放样例，对当前运行中的 API 跑一轮真实端到端 smoke |
 
 兼容旧习惯时，`make web-dev` / `make server-dev` / `make sidecar-dev` 仍然可用，但推荐统一切到 `dev-*` 这一组命名。
+
+### 真实 E2E 回放
+
+`make e2e-live` 默认会读取 `scripts/e2e_live.sample.json`，按固定画像、固定两轮回答跑完整主线：
+
+- 保存画像
+- 后台导入项目
+- basics 训练一轮
+- project 训练一轮
+- 拉取两张 review
+
+如果你只想替换仓库地址，不需要改样例文件，直接传参即可：
+
+```bash
+python3 ./scripts/e2e_live.py --repo-url https://github.com/yourname/your-repo --output /tmp/practicehelper-e2e-live-summary.json
+```
+
+如果你要回放自己的固定话术，可以复制 `scripts/e2e_live.sample.json` 改成自己的场景，再执行：
+
+```bash
+python3 ./scripts/e2e_live.py --scenario ./scripts/e2e_live.sample.json --output /tmp/practicehelper-e2e-live-summary.json
+```
 
 手动运行 Go 服务时需要带 FTS5 编译标签：
 
@@ -132,7 +154,7 @@ cd server && GOCACHE=/tmp/go-build go run -tags sqlite_fts5 ./cmd/api
 - [x] 请求级结构化日志、日志落盘、训练恢复入口、日期倒计时修复
 - [x] 训练创建 / 回答提交阶段的可见等待态
 - [x] 训练创建 / 回答提交的流式输出与推理摘要展示
-- [x] 可回放的真实端到端 smoke 脚本（`scripts/e2e_live.py` / `make e2e-live`）
-- [ ] 端到端验证（配置真实 LLM 后跑通完整流程）
+- [x] 可回放的真实端到端 smoke 脚本（`scripts/e2e_live.py` / `make e2e-live` / `scripts/e2e_live.sample.json`）
+- [x] 端到端验证（配置真实 LLM 后可用 `make e2e-live` 跑通完整流程）
 - [ ] 错误处理与健壮性
 - [ ] 训练质量调优（prompt 优化、种子题目扩充）

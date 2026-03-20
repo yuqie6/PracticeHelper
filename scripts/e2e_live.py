@@ -8,7 +8,11 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Any
+
+
+DEFAULT_SCENARIO_PATH = Path(__file__).with_name("e2e_live.sample.json")
 
 
 def parse_args() -> argparse.Namespace:
@@ -16,8 +20,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base-url", default="http://127.0.0.1:8090", help="Go API base URL")
     parser.add_argument(
         "--repo-url",
-        default="https://github.com/octocat/Hello-World",
-        help="Repository URL used for project import",
+        default="",
+        help="Repository URL used for project import; defaults to scenario.project.repo_url",
     )
     parser.add_argument("--import-timeout-seconds", type=float, default=180.0)
     parser.add_argument("--poll-interval-seconds", type=float, default=2.0)
@@ -26,7 +30,26 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Optional output path for the final JSON summary",
     )
+    parser.add_argument(
+        "--scenario",
+        default=str(DEFAULT_SCENARIO_PATH),
+        help="Replayable scenario JSON path",
+    )
     return parser.parse_args()
+
+
+def load_scenario(path: str) -> dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"scenario must be a JSON object: {path}")
+
+    for key in ("profile", "basics", "project"):
+        if key not in payload or not isinstance(payload[key], dict):
+            raise RuntimeError(f"scenario missing object field: {key}")
+
+    return payload
 
 
 def request_json(
@@ -169,78 +192,77 @@ def import_project(base_url: str, repo_url: str, timeout_seconds: float, poll_in
 
 def main() -> int:
     args = parse_args()
-    base_url = args.base_url.rstrip("/")
+    scenario = load_scenario(args.scenario)
+    base_url = str(scenario.get("base_url") or args.base_url).rstrip("/")
+    repo_url = args.repo_url if args.repo_url else str(scenario["project"].get("repo_url", "")).strip()
+    if not repo_url:
+        raise RuntimeError("repo_url is required either in --repo-url or scenario.project.repo_url")
 
     ensure_import_job_support(base_url)
 
+    profile_payload = scenario["profile"]
     _, profile = post_data(
         base_url,
         "/api/profile",
-        {
-            "target_role": "Go 后端工程师",
-            "target_company_type": "互联网公司",
-            "current_stage": "在职看机会",
-            "application_deadline": "2026-04-10T00:00:00Z",
-            "tech_stacks": ["Go", "Redis", "Kafka"],
-            "primary_projects": ["PracticeHelper"],
-            "self_reported_weaknesses": ["项目表达"],
-        },
+        profile_payload,
         timeout=30.0,
     )
 
     dashboard_before = get_data(base_url, "/api/dashboard", timeout=30.0)
     imported = import_project(
         base_url,
-        args.repo_url,
+        repo_url,
         timeout_seconds=args.import_timeout_seconds,
         poll_interval_seconds=args.poll_interval_seconds,
     )
     project = imported["project"]
 
+    basics_payload = scenario["basics"]
     basics_session, basics_create_events = stream_json(
         base_url,
         "/api/sessions/stream",
-        {"mode": "basics", "topic": "redis", "intensity": "standard"},
+        {
+            "mode": "basics",
+            "topic": basics_payload["topic"],
+            "intensity": basics_payload["intensity"],
+        },
         timeout=240.0,
     )
     basics_main, basics_main_events = stream_json(
         base_url,
         f"/api/sessions/{urllib.parse.quote(basics_session['id'])}/answer/stream",
-        {
-            "answer": "Redis 快主要因为数据在内存、单线程事件循环减少切换和锁成本，并结合高效数据结构与 I/O 多路复用提升吞吐。线上还要注意大 key、慢命令和持久化带来的抖动。"
-        },
+        {"answer": basics_payload["main_answer"]},
         timeout=240.0,
     )
     basics_final, basics_followup_events = stream_json(
         base_url,
         f"/api/sessions/{urllib.parse.quote(basics_session['id'])}/answer/stream",
-        {
-            "answer": "I/O 多路复用让 Redis 用单线程就能同时监听大量连接，把就绪事件交给事件循环处理。这样不用为每个连接开线程，但也要求单次命令足够快，否则整个事件循环都会被阻塞。"
-        },
+        {"answer": basics_payload["followup_answer"]},
         timeout=240.0,
     )
     basics_review = get_data(base_url, f"/api/reviews/{urllib.parse.quote(basics_final['review_id'])}", timeout=30.0)
 
+    project_payload = scenario["project"]
     project_session, project_create_events = stream_json(
         base_url,
         "/api/sessions/stream",
-        {"mode": "project", "project_id": project["id"], "intensity": "standard"},
+        {
+            "mode": "project",
+            "project_id": project["id"],
+            "intensity": project_payload["intensity"],
+        },
         timeout=240.0,
     )
     project_main, project_main_events = stream_json(
         base_url,
         f"/api/sessions/{urllib.parse.quote(project_session['id'])}/answer/stream",
-        {
-            "answer": "这个仓库的核心价值不在业务复杂度，而在如何把配置加载这件小事做成可复用库。面试时我会从 API 设计、默认行为、环境变量覆盖关系和侵入性控制来讲它的取舍。"
-        },
+        {"answer": project_payload["main_answer"]},
         timeout=240.0,
     )
     project_final, project_followup_events = stream_json(
         base_url,
         f"/api/sessions/{urllib.parse.quote(project_session['id'])}/answer/stream",
-        {
-            "answer": "如果继续扩展，我会优先补边界测试、错误语义和多配置源优先级说明，再决定是否增加更强的 schema 校验。这样能先稳住库的可信度，而不是过早堆功能。"
-        },
+        {"answer": project_payload["followup_answer"]},
         timeout=240.0,
     )
     project_review = get_data(base_url, f"/api/reviews/{urllib.parse.quote(project_final['review_id'])}", timeout=30.0)
@@ -249,6 +271,7 @@ def main() -> int:
 
     summary = {
         "base_url": base_url,
+        "scenario_path": str(Path(args.scenario).resolve()),
         "profile_id": profile["id"],
         "dashboard_days_until_deadline": dashboard_before.get("days_until_deadline"),
         "import": imported,
