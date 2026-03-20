@@ -104,8 +104,8 @@
           <option value="system_design">{{ formatTopicLabel(t, 'system_design') }}</option>
           <option value="distributed">{{ formatTopicLabel(t, 'distributed') }}</option>
           <option value="network">{{ formatTopicLabel(t, 'network') }}</option>
-          <option value="os">{{ formatTopicLabel(t, 'os') }}</option>
           <option value="microservice">{{ formatTopicLabel(t, 'microservice') }}</option>
+          <option value="docker_k8s">{{ formatTopicLabel(t, 'docker_k8s') }}</option>
         </select>
       </label>
 

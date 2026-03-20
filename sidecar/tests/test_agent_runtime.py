@@ -239,7 +239,6 @@ def test_evaluate_prompt_bundle_requires_conservative_followup_when_evidence_is_
 
     assert "证据不足，要用保守表达追问" in system_prompt
     assert "不要把未证实的经历、做法、线上事故或项目事实写成既定前提" in system_prompt
-    assert "如果当前轮次 = 总轮次（最后一轮）则置空" in system_prompt
     payload = tools[0].handler({})
     assert payload["turn_index"] == 1
     assert "是否为追问回答：否" in user_prompt

@@ -1,0 +1,586 @@
+[
+  {
+    "mode": "basics", "topic": "go",
+    "prompt": "Go 的 goroutine 为什么比系统线程更轻量？",
+    "focus_points": ["GMP 调度", "栈扩缩容", "协作式与抢占式调度", "上下文切换成本"],
+    "bad_answers": ["只说 goroutine 很轻，不解释为什么", "只背概念，不提调度器和栈"],
+    "followup_templates": ["如果 goroutine 很多，调度器怎么避免完全失控？", "goroutine 泄漏在线上怎么排查？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "go",
+    "prompt": "Go 的 channel 和 mutex 各适合什么场景？",
+    "focus_points": ["共享状态保护", "所有权转移", "性能与复杂度取舍", "典型误用"],
+    "bad_answers": ["只说 channel 更高级", "只说 mutex 更快，不说场景边界"],
+    "followup_templates": ["什么时候为了不用 mutex 而硬上 channel 会更糟？", "你在线上怎么判断这段并发逻辑该不该重构？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "go",
+    "prompt": "Go 里的 context 一般解决什么问题？什么时候会被滥用？",
+    "focus_points": ["取消与超时", "跨边界透传", "请求级元数据", "不要塞业务参数"],
+    "bad_answers": ["只说传参", "只说用来控制超时，不提边界和滥用"],
+    "followup_templates": ["如果某个下游不响应，context 应该怎么配合止血？", "为什么把可选业务参数塞进 context 是坏味道？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "go",
+    "prompt": "接口很稳定时，你还会在 Go 里保留 interface 抽象吗？",
+    "focus_points": ["面向变化点抽象", "测试替身", "包边界", "过度抽象成本"],
+    "bad_answers": ["只说 interface 解耦", "把所有依赖都抽象成接口"],
+    "followup_templates": ["什么时候应该先写具体类型，后面再抽接口？", "为了测试而抽接口时，怎么避免抽象失真？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "go",
+    "prompt": "在 Go 服务里遇到内存持续上涨，你会怎么排查？",
+    "focus_points": ["pprof", "堆对象定位", "逃逸与缓存", "泄漏和正常增长区分", "回归验证"],
+    "bad_answers": ["只说看 top", "只说加机器，不说定位过程"],
+    "followup_templates": ["如果堆不高但 RSS 一直涨，你会继续看哪里？", "修完后怎么确认不是靠运气消失？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "go",
+    "prompt": "Go 的 GC 对延迟敏感服务有什么影响？你怎么调优？",
+    "focus_points": ["STW 阶段", "写屏障", "GOGC 参数", "内存 ballast", "对象分配优化"],
+    "bad_answers": ["只说 GC 会停顿", "不区分 STW 和并发标记阶段"],
+    "followup_templates": ["GOGC 调大和调小分别牺牲什么？", "你怎么判断 GC 压力是否已经成为瓶颈？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "go",
+    "prompt": "Go 的 error 处理为什么不用 try/catch？这个设计好在哪里？",
+    "focus_points": ["显式错误传播", "errors.Is/As", "错误包装链", "sentinel error vs 自定义类型", "panic 的适用场景"],
+    "bad_answers": ["只说 Go 没有异常", "只抱怨 if err != nil 太多"],
+    "followup_templates": ["什么时候用 panic 是合理的？", "错误包装链过深时怎么保持可读性？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "go",
+    "prompt": "Go 的 reflect 和 unsafe 包在什么场景下才值得用？",
+    "focus_points": ["序列化框架", "ORM", "性能代价", "类型安全丧失", "替代方案"],
+    "bad_answers": ["说永远不该用", "只说 reflect 慢但不说具体场景"],
+    "followup_templates": ["如果你在写一个通用的配置解析库，不用 reflect 还有什么办法？", "unsafe.Pointer 在标准库里哪些地方出现过？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+
+  {
+    "mode": "basics", "topic": "redis",
+    "prompt": "Redis 为什么快？",
+    "focus_points": ["内存访问", "事件循环", "高效数据结构", "网络模型", "避免大 key"],
+    "bad_answers": ["只说因为在内存里", "只说单线程快，不说 IO 模型和数据结构"],
+    "followup_templates": ["Redis 6 的多线程多在哪里？", "大 key 和持久化会带来什么问题？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "redis",
+    "prompt": "缓存击穿、缓存穿透、缓存雪崩怎么区分？分别怎么兜底？",
+    "focus_points": ["问题定义", "热点 key", "空值缓存/布隆过滤器", "过期打散", "降级思路"],
+    "bad_answers": ["三个概念混着说", "只说加锁，不说不同场景的根因"],
+    "followup_templates": ["热点 key 真被打爆时，只加互斥锁够吗？", "空值缓存要注意什么副作用？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "redis",
+    "prompt": "Redis 持久化里 RDB 和 AOF 怎么取舍？",
+    "focus_points": ["恢复速度", "数据丢失窗口", "磁盘与 CPU 开销", "混合持久化", "业务场景"],
+    "bad_answers": ["只背 RDB 快 AOF 安全", "不谈线上恢复和资源代价"],
+    "followup_templates": ["如果重启时间很敏感，你会怎么配置持久化？", "AOF 重写时要注意什么抖动风险？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "redis",
+    "prompt": "Redis 分布式锁为什么不能只靠 SETNX？",
+    "focus_points": ["过期时间", "误删锁", "原子释放", "续期", "锁的适用边界"],
+    "bad_answers": ["只说 SETNX 就够了", "只背 Redlock，不说单实例实现的底线要求"],
+    "followup_templates": ["业务执行时间超过锁过期时间时你怎么处理？", "什么场景下你宁愿不用 Redis 锁？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "redis",
+    "prompt": "你会怎么发现并治理 Redis 大 key？",
+    "focus_points": ["识别方式", "业务影响", "拆分策略", "渐进迁移", "监控验证"],
+    "bad_answers": ["只说删掉", "只说会慢，不说具体影响和迁移风险"],
+    "followup_templates": ["如果这个大 key 不能直接删，你会怎么平滑治理？", "为什么大 key 问题不只是慢查询？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "redis",
+    "prompt": "Redis Cluster 的数据分片和故障转移是怎么工作的？",
+    "focus_points": ["哈希槽", "节点间 gossip", "主从复制", "故障检测投票", "客户端重定向"],
+    "bad_answers": ["只说一致性哈希", "不区分 Cluster 和哨兵模式"],
+    "followup_templates": ["集群扩缩容时数据迁移对线上有什么影响？", "客户端收到 MOVED 响应后应该怎么处理？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "redis",
+    "prompt": "Redis 的内存淘汰策略有哪些？线上该怎么选？",
+    "focus_points": ["allkeys-lru", "volatile-lru", "volatile-ttl", "noeviction", "业务场景匹配", "maxmemory 配置"],
+    "bad_answers": ["只知道 LRU", "不结合业务场景说选型理由"],
+    "followup_templates": ["如果缓存和持久数据混用一个 Redis，淘汰策略怎么配？", "LFU 和 LRU 在什么场景下差距最大？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "redis",
+    "prompt": "Redis 的 Pipeline 和 Lua 脚本分别解决什么问题？",
+    "focus_points": ["Pipeline 减少 RTT", "Lua 保证原子性", "Pipeline 不保证原子", "Lua 阻塞主线程", "适用场景区分"],
+    "bad_answers": ["混淆 Pipeline 和事务", "说 Lua 脚本没有副作用"],
+    "followup_templates": ["Lua 脚本执行时间过长会有什么后果？", "Pipeline 失败了其中一条命令，其他命令还会执行吗？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+
+  {
+    "mode": "basics", "topic": "kafka",
+    "prompt": "Kafka 消费幂等一般怎么做？",
+    "focus_points": ["业务幂等键", "重复消费", "事务边界", "offset 提交时机", "失败重试策略"],
+    "bad_answers": ["只说 Kafka 自己保证", "只背 at least once，不落到业务实现"],
+    "followup_templates": ["为什么 offset 不能先提交？", "如果重试和 DLQ 设计不好会怎样？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "kafka",
+    "prompt": "Kafka 为什么能做到高吞吐？代价是什么？",
+    "focus_points": ["顺序写磁盘", "批量压缩", "零拷贝", "分区并行", "延迟与一致性代价"],
+    "bad_answers": ["只说因为顺序写", "只讲快，不讲代价和适用前提"],
+    "followup_templates": ["吞吐上去了，为什么尾延迟不一定好看？", "分区加多之后消费者一定更快吗？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "kafka",
+    "prompt": "Kafka 里消息积压了，你会怎么定位根因？",
+    "focus_points": ["生产与消费速率对比", "分区倾斜", "下游瓶颈", "rebalance", "止血方案"],
+    "bad_answers": ["只说扩容消费者", "不区分 broker、consumer、下游服务的问题"],
+    "followup_templates": ["如果扩消费者也没用，你下一步看什么？", "积压消掉以后怎么防止再次发生？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "kafka",
+    "prompt": "一个 topic 该怎么规划 partition 数？",
+    "focus_points": ["吞吐需求", "consumer 并行度", "顺序要求", "运维成本", "扩分区副作用"],
+    "bad_answers": ["越多越好", "只看消费者数量，不谈顺序和资源成本"],
+    "followup_templates": ["为什么扩 partition 可能反而带来更多问题？", "顺序消费要求强时你会怎么折中？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "kafka",
+    "prompt": "Kafka 消费失败时，重试队列和 DLQ 应该怎么设计？",
+    "focus_points": ["瞬时失败与永久失败区分", "重试节奏", "幂等", "可观测性", "人工介入路径"],
+    "bad_answers": ["失败就一直重试", "只有 DLQ，没有回放和排障路径"],
+    "followup_templates": ["为什么同分区里的失败消息不能简单跳过去？", "DLQ 放久了没人看，系统上会出什么假象？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "kafka",
+    "prompt": "Kafka 的 Consumer Group Rebalance 为什么会造成消费停顿？怎么优化？",
+    "focus_points": ["rebalance 触发条件", "STW 期间所有分区停消费", "CooperativeStickyAssignor", "session/heartbeat 超时调优", "静态成员"],
+    "bad_answers": ["只说 rebalance 慢", "不区分 eager 和 cooperative 策略"],
+    "followup_templates": ["如果消费者频繁超时触发 rebalance，你会先查什么？", "静态成员 ID 的副作用是什么？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "kafka",
+    "prompt": "Kafka 的 ISR 机制是怎么保证数据可靠性的？",
+    "focus_points": ["ISR 定义", "acks=all", "min.insync.replicas", "ISR 收缩与扩张", "可用性与持久性取舍"],
+    "bad_answers": ["只说有副本就可靠", "不解释 ISR 和 acks 的配合关系"],
+    "followup_templates": ["如果 ISR 只剩 leader 一个，acks=all 还有意义吗？", "为什么 unclean.leader.election 默认关闭？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "kafka",
+    "prompt": "Kafka 和 RabbitMQ/RocketMQ 的核心差异是什么？你怎么选型？",
+    "focus_points": ["日志模型 vs 队列模型", "消费回溯", "吞吐量级差异", "延迟特性", "运维复杂度"],
+    "bad_answers": ["只说 Kafka 快", "不结合业务场景说选型理由"],
+    "followup_templates": ["什么场景下 RabbitMQ 反而比 Kafka 更合适？", "如果你要做延迟消息，Kafka 原生支持吗？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+
+  {
+    "mode": "basics", "topic": "mysql",
+    "prompt": "MySQL 的 InnoDB 为什么用 B+ 树而不是哈希索引或 B 树？",
+    "focus_points": ["范围查询", "磁盘 IO 优化", "叶子节点链表", "树高控制", "与 B 树的区别"],
+    "bad_answers": ["只说 B+ 树快", "不区分 B 树和 B+ 树"],
+    "followup_templates": ["聚簇索引和非聚簇索引在 B+ 树上有什么不同？", "什么场景下哈希索引反而更好？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "mysql",
+    "prompt": "MySQL 事务隔离级别有哪些？线上一般用哪个？为什么？",
+    "focus_points": ["四个隔离级别", "MVCC", "可重复读的幻读问题", "间隙锁", "RR vs RC 选择"],
+    "bad_answers": ["只背四个级别的名字", "不结合 MVCC 和锁机制解释"],
+    "followup_templates": ["可重复读真的能完全避免幻读吗？", "什么时候你会把隔离级别降到 RC？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "mysql",
+    "prompt": "慢查询怎么排查？EXPLAIN 的关键字段你怎么看？",
+    "focus_points": ["type 列", "key 列", "rows 估算", "Extra 列", "索引覆盖", "回表"],
+    "bad_answers": ["只说加索引", "看不懂 EXPLAIN 输出"],
+    "followup_templates": ["如果 EXPLAIN 显示用了索引但还是慢，可能是什么原因？", "什么时候全表扫描反而比走索引快？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "mysql",
+    "prompt": "MySQL 的死锁是怎么产生的？你怎么排查和预防？",
+    "focus_points": ["锁等待图", "间隙锁交叉", "SHOW ENGINE INNODB STATUS", "锁顺序", "超时配置"],
+    "bad_answers": ["只说两个事务互相等", "不会看死锁日志"],
+    "followup_templates": ["如果死锁频繁但每次都自动回滚了，你还需要处理吗？", "INSERT 语句也会死锁吗？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "mysql",
+    "prompt": "分库分表的方案和坑你了解多少？",
+    "focus_points": ["水平拆分", "分片键选择", "跨分片查询", "全局 ID", "数据迁移", "中间件"],
+    "bad_answers": ["只说数据多了就分", "不提迁移和运维代价"],
+    "followup_templates": ["分片键选错了怎么补救？", "什么时候应该先考虑读写分离而不是分库分表？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "mysql",
+    "prompt": "MySQL 主从复制的延迟问题怎么排查和缓解？",
+    "focus_points": ["binlog 格式", "并行复制", "延迟监控", "半同步复制", "读写分离一致性"],
+    "bad_answers": ["只说加从库", "不区分 IO 线程和 SQL 线程延迟"],
+    "followup_templates": ["如果从库延迟已经影响业务读一致性，你怎么兜底？", "大事务对主从延迟有什么影响？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "mysql",
+    "prompt": "联合索引的最左前缀原则是什么？怎么利用好它？",
+    "focus_points": ["最左匹配", "索引跳跃扫描", "覆盖索引", "索引列顺序设计", "区分度"],
+    "bad_answers": ["只背最左前缀", "不结合实际查询说怎么设计索引"],
+    "followup_templates": ["WHERE a=1 AND c=3 能用到 (a,b,c) 联合索引吗？", "如果查询条件经常变，索引该怎么设计？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "mysql",
+    "prompt": "MySQL 的 redo log 和 binlog 有什么区别？为什么需要两个？",
+    "focus_points": ["redo log 崩溃恢复", "binlog 复制和审计", "两阶段提交", "刷盘策略", "数据一致性保证"],
+    "bad_answers": ["混淆两者用途", "不知道两阶段提交"],
+    "followup_templates": ["如果 redo log 写成功但 binlog 没写成功，会发生什么？", "innodb_flush_log_at_trx_commit 设成 2 有什么风险？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+
+  {
+    "mode": "basics", "topic": "system_design",
+    "prompt": "设计一个短链服务，核心要考虑哪些问题？",
+    "focus_points": ["编码方案", "哈希冲突", "302 vs 301", "高并发读", "过期清理", "防滥用"],
+    "bad_answers": ["只说用哈希", "不考虑读写比和缓存"],
+    "followup_templates": ["如果短链被恶意刷量，你怎么限流和告警？", "为什么用 302 而不是 301？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "system_design",
+    "prompt": "设计一个消息推送系统，要支持百万级在线长连接，你怎么架构？",
+    "focus_points": ["长连接网关", "连接管理", "消息路由", "水平扩展", "断线重连", "消息可靠投递"],
+    "bad_answers": ["只说用 WebSocket", "不考虑扩展和可靠性"],
+    "followup_templates": ["网关节点挂了，上面的连接怎么迁移？", "怎么保证消息不丢不重？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "system_design",
+    "prompt": "你会怎么设计一个分布式限流方案？",
+    "focus_points": ["令牌桶/漏桶", "滑动窗口", "集中式 vs 本地", "Redis 实现", "降级策略", "多维度限流"],
+    "bad_answers": ["只说用 Redis 计数", "不考虑分布式环境下的精度和性能取舍"],
+    "followup_templates": ["本地限流和集中限流各有什么问题？", "如果 Redis 限流服务挂了，你怎么兜底？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "system_design",
+    "prompt": "秒杀系统的核心挑战是什么？你会怎么设计？",
+    "focus_points": ["流量削峰", "库存扣减", "防超卖", "异步下单", "限流降级", "缓存预热"],
+    "bad_answers": ["只说加服务器", "不考虑库存一致性和用户体验"],
+    "followup_templates": ["库存预扣和最终扣减之间的一致性怎么保证？", "如果活动结束后发现超卖了怎么补救？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "system_design",
+    "prompt": "设计一个延迟任务系统（定时任务/延迟队列），你会怎么做？",
+    "focus_points": ["时间轮", "Redis sorted set", "数据库轮询", "精度与吞吐取舍", "失败重试", "幂等"],
+    "bad_answers": ["只说用 cron", "不考虑分布式环境和精度"],
+    "followup_templates": ["时间轮和 sorted set 方案各适合什么量级？", "延迟任务执行失败了怎么保证最终执行？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "system_design",
+    "prompt": "如何设计一个可靠的分布式配置中心？",
+    "focus_points": ["一致性模型", "推拉结合", "灰度发布", "回滚机制", "客户端缓存", "变更审计"],
+    "bad_answers": ["只说用 etcd/Nacos", "不考虑配置推送延迟和故障兜底"],
+    "followup_templates": ["如果配置中心不可用，客户端应该怎么运行？", "配置灰度发布和代码灰度发布有什么不同的注意点？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "system_design",
+    "prompt": "设计一个 Feed 流系统（类似朋友圈/微博），读扩散和写扩散怎么选？",
+    "focus_points": ["读扩散", "写扩散", "混合方案", "大 V 问题", "时间线排序", "存储选型"],
+    "bad_answers": ["只说存到数据库查", "不分析读写比和大 V 场景"],
+    "followup_templates": ["大 V 发一条动态，写扩散的成本有多大？", "如果用混合方案，怎么决定哪些用户走读扩散？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "system_design",
+    "prompt": "你怎么设计一个全链路灰度发布系统？",
+    "focus_points": ["流量标记", "网关染色", "上下游透传", "数据隔离", "回滚策略", "可观测性"],
+    "bad_answers": ["只说按百分比分流", "不考虑数据库和消息队列的灰度隔离"],
+    "followup_templates": ["灰度流量写入了数据库，回滚时数据怎么处理？", "消息队列中的灰度消息怎么隔离？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+
+  {
+    "mode": "basics", "topic": "distributed",
+    "prompt": "CAP 定理到底在说什么？实际系统怎么做选择？",
+    "focus_points": ["一致性/可用性/分区容忍", "网络分区不可避免", "CP vs AP 实际含义", "不是三选二", "PACELC"],
+    "bad_answers": ["背三选二", "不结合实际系统说选择"],
+    "followup_templates": ["一个声称是 CP 的系统，在没有分区时是不是一定强一致？", "你能举一个 AP 系统在实际中妥协一致性的例子吗？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "distributed",
+    "prompt": "分布式事务有哪些方案？各自适合什么场景？",
+    "focus_points": ["2PC/3PC", "TCC", "Saga", "本地消息表", "最终一致性", "性能与复杂度"],
+    "bad_answers": ["只知道 2PC", "不分析各方案的适用边界"],
+    "followup_templates": ["TCC 的 Cancel 阶段失败了怎么办？", "为什么大多数互联网公司不用 XA？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "distributed",
+    "prompt": "Raft 一致性协议的核心机制是什么？",
+    "focus_points": ["Leader 选举", "日志复制", "多数派", "任期", "安全性保证", "与 Paxos 的关系"],
+    "bad_answers": ["只说投票选主", "不解释日志复制和提交的关系"],
+    "followup_templates": ["网络分区导致脑裂时，Raft 怎么保证不会出现两个 leader？", "Raft 的 leader 挂了，未提交的日志怎么处理？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "distributed",
+    "prompt": "分布式 ID 生成有哪些方案？各自的取舍是什么？",
+    "focus_points": ["UUID", "Snowflake", "号段模式", "Redis 自增", "时钟回拨", "全局有序 vs 趋势递增"],
+    "bad_answers": ["只说用 UUID", "不分析 ID 的排序性和性能需求"],
+    "followup_templates": ["Snowflake 遇到时钟回拨怎么处理？", "为什么订单 ID 不适合用自增主键？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "distributed",
+    "prompt": "服务注册发现是怎么工作的？常见方案有什么区别？",
+    "focus_points": ["注册中心", "健康检查", "AP vs CP 选型", "客户端缓存", "Consul/etcd/Nacos 对比"],
+    "bad_answers": ["只说用注册中心", "不区分 AP 和 CP 注册中心的适用场景"],
+    "followup_templates": ["注册中心挂了，已启动的服务还能互相调用吗？", "健康检查失败但服务其实正常，怎么避免误摘？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "distributed",
+    "prompt": "什么是最终一致性？在实际系统中怎么保证？",
+    "focus_points": ["定义", "事件驱动", "补偿机制", "对账", "幂等", "收敛时间"],
+    "bad_answers": ["只说最终会一致", "不说保证手段和监控方式"],
+    "followup_templates": ["如果消息丢了导致不一致，你怎么发现和修复？", "最终一致性的'最终'有没有时间上限？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "distributed",
+    "prompt": "分布式链路追踪是怎么实现的？对性能有什么影响？",
+    "focus_points": ["TraceID/SpanID", "上下文传播", "采样策略", "存储方案", "Jaeger/Zipkin", "性能开销"],
+    "bad_answers": ["只说加个 traceID", "不考虑采样和存储成本"],
+    "followup_templates": ["全量采集和采样采集各适合什么场景？", "链路追踪能帮你发现什么靠日志发现不了的问题？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "distributed",
+    "prompt": "熔断、降级、限流三者的关系是什么？分别在什么时候触发？",
+    "focus_points": ["熔断器状态机", "降级策略", "限流算法", "三者配合", "监控指标", "恢复机制"],
+    "bad_answers": ["三者混为一谈", "只说限流就够了"],
+    "followup_templates": ["熔断器半开状态的探测请求失败了怎么办？", "降级返回兜底数据时，怎么避免用户感知到数据不一致？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+
+  {
+    "mode": "basics", "topic": "network",
+    "prompt": "TCP 三次握手为什么不能是两次？",
+    "focus_points": ["防止历史连接", "双方确认序列号", "SYN 洪泛", "半连接队列", "SYN Cookie"],
+    "bad_answers": ["只说要确认", "不解释两次会有什么具体问题"],
+    "followup_templates": ["SYN 洪泛攻击是怎么利用三次握手的？", "SYN Cookie 怎么在不维护半连接的情况下完成握手？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "network",
+    "prompt": "HTTPS 的 TLS 握手过程是怎样的？为什么需要证书？",
+    "focus_points": ["非对称加密协商", "证书验证链", "会话密钥", "前向安全", "TLS 1.3 优化"],
+    "bad_answers": ["只说加密", "不区分非对称和对称加密的使用场景"],
+    "followup_templates": ["为什么 TLS 1.3 比 1.2 快？", "如果中间人拿到了服务端私钥，前向安全能保护什么？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "network",
+    "prompt": "HTTP/2 相比 HTTP/1.1 解决了什么问题？",
+    "focus_points": ["多路复用", "头部压缩", "服务端推送", "二进制帧", "队头阻塞部分解决", "HTTP/3 的改进"],
+    "bad_answers": ["只说更快", "不区分 TCP 层和 HTTP 层的队头阻塞"],
+    "followup_templates": ["HTTP/2 的多路复用为什么没有完全解决队头阻塞？", "HTTP/3 用 QUIC 替代 TCP 的核心动机是什么？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "network",
+    "prompt": "TCP 的拥塞控制是怎么工作的？对应用层有什么影响？",
+    "focus_points": ["慢启动", "拥塞避免", "快重传/快恢复", "BBR", "对延迟敏感应用的影响"],
+    "bad_answers": ["只说有窗口", "不解释拥塞窗口的变化过程"],
+    "followup_templates": ["BBR 和传统拥塞控制算法的核心差异是什么？", "为什么高延迟网络下 TCP 吞吐会下降？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "network",
+    "prompt": "DNS 解析的完整过程是怎样的？有哪些优化手段？",
+    "focus_points": ["递归与迭代查询", "缓存层级", "TTL", "DNS 劫持", "HTTPDNS", "预解析"],
+    "bad_answers": ["只说查 IP", "不区分递归和迭代"],
+    "followup_templates": ["DNS 缓存投毒是怎么回事？怎么防？", "为什么移动端经常用 HTTPDNS？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "network",
+    "prompt": "负载均衡有哪些常见算法？四层和七层负载均衡有什么区别？",
+    "focus_points": ["轮询/加权/最少连接/一致性哈希", "L4 vs L7", "会话保持", "健康检查", "性能差异"],
+    "bad_answers": ["只说轮询", "不区分四层和七层"],
+    "followup_templates": ["一致性哈希在节点变化时的优势是什么？", "什么场景下必须用七层负载均衡？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "network",
+    "prompt": "线上服务出现大量 TIME_WAIT，你怎么分析和处理？",
+    "focus_points": ["TIME_WAIT 原因", "2MSL", "端口耗尽", "tcp_tw_reuse", "连接池", "长连接"],
+    "bad_answers": ["只说改内核参数", "不分析根因"],
+    "followup_templates": ["为什么不建议直接开启 tcp_tw_recycle？", "用连接池就一定能避免 TIME_WAIT 吗？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "network",
+    "prompt": "WebSocket 和 HTTP 长轮询有什么区别？各适合什么场景？",
+    "focus_points": ["全双工 vs 半双工", "协议升级", "资源开销", "代理/防火墙兼容性", "断线重连"],
+    "bad_answers": ["只说 WebSocket 更好", "不分析兼容性和运维成本"],
+    "followup_templates": ["如果客户端在严格的企业防火墙后面，WebSocket 能通吗？", "SSE 和 WebSocket 怎么选？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+
+  {
+    "mode": "basics", "topic": "microservice",
+    "prompt": "微服务拆分的原则是什么？什么时候不该拆？",
+    "focus_points": ["业务边界", "数据自治", "团队匹配", "拆分代价", "分布式事务", "运维成本"],
+    "bad_answers": ["只说解耦", "不考虑拆分带来的复杂度"],
+    "followup_templates": ["如果两个服务之间每次调用都需要事务，说明什么？", "单体到微服务的过渡期怎么管理？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "microservice",
+    "prompt": "微服务之间的通信方式有哪些？怎么选？",
+    "focus_points": ["同步 RPC/HTTP", "异步消息", "gRPC vs REST", "超时重试", "幂等", "服务网格"],
+    "bad_answers": ["只说用 HTTP", "不分析同步异步的适用场景"],
+    "followup_templates": ["gRPC 和 REST 在什么场景下各有优势？", "异步消息带来的最终一致性怎么监控？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "microservice",
+    "prompt": "API 网关在微服务架构中扮演什么角色？",
+    "focus_points": ["路由", "鉴权", "限流", "协议转换", "请求聚合", "灰度", "单点风险"],
+    "bad_answers": ["只说反向代理", "不考虑网关自身的高可用"],
+    "followup_templates": ["网关自身成为瓶颈时怎么办？", "网关做请求聚合和 BFF 有什么区别？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "microservice",
+    "prompt": "微服务的可观测性应该怎么建设？",
+    "focus_points": ["日志/指标/链路追踪", "三者关联", "告警策略", "SLI/SLO", "采样与存储成本"],
+    "bad_answers": ["只说打日志", "不考虑三个信号的关联"],
+    "followup_templates": ["你怎么从一个告警出发，快速定位到问题服务和代码？", "日志太多存不起怎么办？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "microservice",
+    "prompt": "微服务部署时怎么做到不停机发布？",
+    "focus_points": ["滚动更新", "蓝绿部署", "金丝雀发布", "健康检查", "流量切换", "回滚策略"],
+    "bad_answers": ["只说重启", "不考虑发布过程中的流量处理"],
+    "followup_templates": ["金丝雀发布的流量比例怎么决定？", "如果新版本有数据库 schema 变更，怎么配合发布？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "microservice",
+    "prompt": "微服务场景下的数据一致性怎么保证？",
+    "focus_points": ["每个服务独立数据库", "Saga 模式", "事件溯源", "补偿事务", "最终一致性", "对账"],
+    "bad_answers": ["说用分布式事务", "不考虑性能和复杂度代价"],
+    "followup_templates": ["Saga 中某一步补偿失败了怎么处理？", "事件溯源的快照机制解决什么问题？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "microservice",
+    "prompt": "服务之间的超时和重试策略怎么设计？",
+    "focus_points": ["超时传递", "指数退避", "重试风暴", "幂等前提", "熔断配合", "超时预算"],
+    "bad_answers": ["固定超时固定重试", "不考虑重试放大效应"],
+    "followup_templates": ["上游超时 3 秒，下游超时也 3 秒，会有什么问题？", "重试风暴是怎么发生的？怎么防？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "microservice",
+    "prompt": "你怎么设计微服务的接口版本管理？",
+    "focus_points": ["URL 路径版本", "Header 版本", "向后兼容", "废弃策略", "文档与契约测试"],
+    "bad_answers": ["不做版本管理", "只说加 v2 路径"],
+    "followup_templates": ["如果一个字段要改类型，怎么做到不破坏旧客户端？", "契约测试和集成测试有什么区别？"],
+    "score_weights": {"准确性": 25, "完整性": 25, "落地感": 20, "表达清晰度": 15, "抗追问能力": 15}
+  },
+
+  {
+    "mode": "basics", "topic": "docker_k8s",
+    "prompt": "Docker 容器和虚拟机的本质区别是什么？",
+    "focus_points": ["namespace 隔离", "cgroup 资源限制", "共享内核", "镜像分层", "启动速度", "安全边界"],
+    "bad_answers": ["只说容器更轻", "不解释隔离机制"],
+    "followup_templates": ["容器逃逸是怎么发生的？怎么防？", "什么场景下虚拟机比容器更合适？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "docker_k8s",
+    "prompt": "Kubernetes 的 Pod 调度是怎么工作的？",
+    "focus_points": ["调度器流程", "资源请求与限制", "节点亲和", "污点与容忍", "优先级", "抢占"],
+    "bad_answers": ["只说自动分配", "不了解调度策略"],
+    "followup_templates": ["如果 Pod 一直 Pending，你怎么排查？", "资源 request 和 limit 设置不合理会有什么后果？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "docker_k8s",
+    "prompt": "Kubernetes 的 Service 和 Ingress 分别解决什么问题？",
+    "focus_points": ["ClusterIP/NodePort/LoadBalancer", "kube-proxy", "Ingress Controller", "七层路由", "服务发现"],
+    "bad_answers": ["混淆 Service 和 Ingress", "不了解 kube-proxy 的工作模式"],
+    "followup_templates": ["iptables 模式和 IPVS 模式有什么区别？", "为什么生产环境通常需要 Ingress Controller？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "docker_k8s",
+    "prompt": "Kubernetes 的健康检查有哪几种？怎么配合使用？",
+    "focus_points": ["liveness", "readiness", "startup", "探针类型", "配置策略", "误配后果"],
+    "bad_answers": ["只知道存活检查", "不区分三种探针的用途"],
+    "followup_templates": ["liveness 检查失败会触发什么？和 readiness 失败有什么区别？", "startup probe 解决了什么问题？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "docker_k8s",
+    "prompt": "Docker 镜像怎么做到小而安全？",
+    "focus_points": ["多阶段构建", "基础镜像选择", "减少层数", "安全扫描", "非 root 用户", "distroless"],
+    "bad_answers": ["只说用 alpine", "不考虑安全最佳实践"],
+    "followup_templates": ["多阶段构建的原理是什么？", "为什么不建议在生产镜像里装调试工具？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "docker_k8s",
+    "prompt": "Kubernetes 的 HPA 自动扩缩容是怎么工作的？",
+    "focus_points": ["metrics-server", "CPU/内存指标", "自定义指标", "扩缩策略", "冷却期", "VPA 对比"],
+    "bad_answers": ["只说自动加 Pod", "不了解指标来源和扩缩逻辑"],
+    "followup_templates": ["HPA 和 VPA 能同时使用吗？", "自定义指标驱动扩缩的典型场景是什么？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "docker_k8s",
+    "prompt": "Kubernetes 的 ConfigMap 和 Secret 怎么管理配置？有什么局限？",
+    "focus_points": ["挂载方式", "热更新", "大小限制", "加密存储", "外部密钥管理", "GitOps"],
+    "bad_answers": ["只说存键值对", "不考虑安全和版本管理"],
+    "followup_templates": ["Secret 在 etcd 里是加密的吗？", "配置变更后怎么让 Pod 自动感知？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  },
+  {
+    "mode": "basics", "topic": "docker_k8s",
+    "prompt": "容器化应用的日志和监控怎么做？",
+    "focus_points": ["stdout 日志收集", "DaemonSet 采集", "EFK/Loki", "Prometheus + Grafana", "资源指标与业务指标"],
+    "bad_answers": ["只说看 kubectl logs", "不考虑日志持久化和聚合"],
+    "followup_templates": ["容器重启后日志丢了怎么办？", "Prometheus 拉取模式在大规模集群下有什么挑战？"],
+    "score_weights": {"准确性": 30, "完整性": 25, "落地感": 15, "表达清晰度": 15, "抗追问能力": 15}
+  }
+]

@@ -34,7 +34,7 @@ __RUBRIC_LINES__
 - strengths: string[]
 - gaps: string[]
 - suggestion: string（下一次怎么答会更好，要给具体动作）
-- followup_intent: string（说明下一条追问想验证什么；如果当前轮次 = 总轮次（最后一轮）则置空）
+- followup_intent: string（说明这条追问想验证什么；如果当前就是 followup 回答则置空）
 - followup_question: string
 - followup_expected_points: string[]
 - weakness_hits: [{{"kind": string, "label": string, "severity": number}}]

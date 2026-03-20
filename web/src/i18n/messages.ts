@@ -59,9 +59,9 @@ export const messages = {
         mysql: 'MySQL',
         system_design: '系统设计',
         distributed: '分布式',
-        network: '计算机网络',
-        os: '操作系统',
-        microservice: '微服务架构',
+        network: '网络',
+        microservice: '微服务',
+        docker_k8s: 'Docker & K8s',
       },
       status: {
         draft: '草稿',
@@ -596,8 +596,8 @@ export const messages = {
         system_design: 'System Design',
         distributed: 'Distributed Systems',
         network: 'Networking',
-        os: 'Operating Systems',
         microservice: 'Microservices',
+        docker_k8s: 'Docker & K8s',
       },
       status: {
         draft: 'Draft',

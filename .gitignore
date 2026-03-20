@@ -23,7 +23,8 @@ dist/
 out/
 
 # SQLite / local data
-data/
+data/*
+!data/seed/
 *.db
 *.db-shm
 *.db-wal
