@@ -2,7 +2,7 @@
 
 PracticeHelper 是一个面向后端 / AI Agent 方向求职者的面试训练系统，围绕用户画像、项目理解和弱点记忆，提供个性化的训练与成长路径。
 
-它不是题库，而是一个能根据你的真实项目和薄弱环节持续追问、打分、复盘的训练 Agent。产品方向与未来演化见 [docs/VISION.md](docs/VISION.md)。
+它不是题库，而是一个能根据你的真实项目和薄弱环节持续追问、打分、复盘的训练 Agent。产品方向与未来演化见 [docs/VISION.md](docs/VISION.md)，当前主线与下一阶段方案见 [docs/PLAN.md](docs/PLAN.md) 和 [docs/JD_TRAINING_STAGE_B.md](docs/JD_TRAINING_STAGE_B.md)。
 
 ## 它能做什么
 
@@ -102,6 +102,7 @@ make help
 | `make setup` | 安装前端、Python 依赖和本地工具 |
 | `make dev-web` | 启动前端开发服务器（端口 5173） |
 | `make dev-server` | 启动 Go API 服务（端口 8090） |
+| `make dev-server-hot` | 用 `air` 启动 Go API 热重载（端口 8090） |
 | `make dev-sidecar` | 启动 Python sidecar（端口 8000） |
 | `make lint` | 运行三端 lint 检查 |
 | `make format` | 运行三端格式化 |
@@ -111,6 +112,14 @@ make help
 | `make e2e-live` | 用内置可回放样例，对当前运行中的 API 跑一轮真实端到端 smoke |
 
 兼容旧习惯时，`make web-dev` / `make server-dev` / `make sidecar-dev` 仍然可用，但推荐统一切到 `dev-*` 这一组命名。
+
+Go 服务如果需要边改边自动重启，可以直接执行：
+
+```bash
+make dev-server-hot
+```
+
+第一次执行会自动把 `air` 安装到仓库本地的 `.tools/bin/air`，后面保存 `server/` 下的 `.go` 文件时会自动重新编译并重启服务。
 
 ### 真实 E2E 回放
 
@@ -123,7 +132,7 @@ make help
 - project 训练一轮
 - 拉取两张 review
 - 校验 dashboard 的 top weakness、`today_focus`、`recommended_track` 是否绑定到同一条弱项
-- 校验回答流式状态序列是否覆盖 `answer_received` → `answer_saved` → `review_saved`
+- 校验回答提交流式状态序列是否覆盖 `answer_received` → `answer_saved` → `review_saved`
 
 如果你只想替换仓库地址，不需要改样例文件，直接传参即可：
 
@@ -143,6 +152,12 @@ python3 ./scripts/e2e_live.py --scenario ./scripts/e2e_live.sample.json --output
 cd server && GOCACHE=/tmp/go-build go run -tags sqlite_fts5 ./cmd/api
 ```
 
+如果你想手动跑热重载，也可以这样执行：
+
+```bash
+cd server && ../.tools/bin/air -c .air.toml
+```
+
 ## 当前进度
 
 - [x] 产品文档与技术栈决策
@@ -159,5 +174,18 @@ cd server && GOCACHE=/tmp/go-build go run -tags sqlite_fts5 ./cmd/api
 - [x] 训练创建 / 回答提交的流式输出与推理摘要展示
 - [x] 可回放的真实端到端 smoke 脚本（`scripts/e2e_live.py` / `make e2e-live` / `scripts/e2e_live.sample.json`）
 - [x] 端到端验证（配置真实 LLM 后可用 `make e2e-live` 跑通完整流程）
-- [ ] 错误处理与健壮性
-- [ ] 训练质量调优（prompt 优化、种子题目扩充）
+- [x] 训练体验做稳（答题反馈 V2、推荐质量与弱项衰减、题库扩充、追问保守表达）
+- [ ] 阶段 B：岗位视角训练（独立 JD 页面、多 JD 管理、分析历史、训练前选择 JD）
+
+## 当前主线
+
+当前主线已经从“训练体验做稳”切到“岗位视角接入”：
+
+- 阶段 A 已完成，重点问题已经从“能不能用”转到“练的是不是目标岗位要的内容”
+- 下一步不再优先继续打磨 Phase 7 小边角，而是推进阶段 B 的最小闭环：
+  - 独立 JD 页面
+  - 多 JD 管理与分析历史
+  - 训练前手动选择 JD
+  - basics / project 的出题和评分都引用所选 JD
+
+详细方案见 [docs/JD_TRAINING_STAGE_B.md](docs/JD_TRAINING_STAGE_B.md)。

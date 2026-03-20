@@ -1,5 +1,7 @@
 # 答题反馈 V2
 
+> 状态：已完成。本文保留为阶段 A 的设计记录，同时同步当前实现口径。
+
 ## 现状问题
 
 基于当前代码，有 4 个核心体感问题：
@@ -29,11 +31,11 @@
 
 **1.1 真实阶段驱动的处理态**
 
-当前 `StreamEvent.type` 已有 `phase / context / reasoning / content`。问题不在后端缺事件，在于前端没用它们。
+设计时的判断是：`StreamEvent` 已经有可扩展的事件结构，关键问题不在“能不能发事件”，而在“前端没有把真实流式事件映射成用户能理解的阶段提示”。
 
-改动：
+最终落地：
 - 前端：`ProgressPanel` 不再按定时器推进，改为消费 `StreamEvent` 中的 `phase` 值映射到用户可读步骤
-- 后端（可选增强）：在流式输出中补充 `answer_received` / `answer_saved` / `evaluation_started` 等状态事件
+- 后端（已落地增强）：在流式输出中补充 `answer_received` / `answer_saved` / `evaluation_started` 等状态事件
 
 `StreamEvent` 扩展：
 
@@ -47,6 +49,7 @@
 
 ```
 answer_received    → "已收到回答"
+answer_saved       → "已保存回答"
 evaluation_started → "正在评估"
 feedback_ready     → "反馈已生成"
 followup_ready     → "追问已生成"
