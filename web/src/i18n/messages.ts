@@ -99,6 +99,67 @@ export const messages = {
         detail: '细节支撑',
       },
     },
+    jobTargetStatus: {
+      homeActive: {
+        idle: '当前默认 JD 是 {name}，但还没完成分析；首页推荐和训练会先停留在通用口径。',
+        running:
+          '当前默认 JD 是 {name}，但还在分析中；分析完成前，首页推荐和训练不会自动使用它。',
+        succeeded:
+          '当前默认 JD 是 {name}，首页推荐和训练默认已切到岗位视角。',
+        failed:
+          '当前默认 JD 是 {name}，但最近一次分析失败了；修正文案或重新分析后，岗位视角才会恢复。',
+        stale:
+          '当前默认 JD 是 {name}，但原文已经改过；旧分析只保留给你回看，新训练不会继续使用它。',
+        unknown:
+          '当前默认 JD 暂时无法确认是否可用，首页推荐和训练会先保持通用口径。',
+      },
+      trainSelection: {
+        idle: '这份 JD 还没分析，当前不能绑定训练。先去岗位页完成分析。',
+        running: '这份 JD 还在分析中，分析完成前不能绑定训练。',
+        succeeded:
+          '这轮会固定绑定这份 JD 当前可用的分析快照；训练开始后，后续修改不会影响本轮结果。',
+        failed:
+          '这份 JD 最近一次分析失败了，修正文案或重新分析后才能绑定训练。',
+        stale:
+          '这份 JD 原文已经改过，旧分析结果只供回看；重新分析后才能绑定训练。',
+        unknown: '当前无法确认这份 JD 是否可用于训练，请回岗位页重新检查。',
+      },
+      trainFallback: {
+        idle:
+          '当前默认 JD「{name}」还没分析，系统不会自动带入它；如果要走岗位视角，请先去岗位页完成分析。',
+        running:
+          '当前默认 JD「{name}」还在分析中，系统不会自动带入它；如果要走岗位视角，请等分析完成。',
+        succeeded:
+          '当前默认 JD「{name}」可直接用于训练；如果这轮不想带岗位视角，可以保持当前“通用训练”。',
+        failed:
+          '当前默认 JD「{name}」最近一次分析失败了，系统不会自动带入它；修正文案或重新分析后才能恢复岗位视角。',
+        stale:
+          '当前默认 JD「{name}」原文已经改过，系统不会自动带入旧分析；重新分析后才能恢复岗位视角。',
+        unknown:
+          '当前默认 JD 暂时无法确认是否可用，系统不会自动带入它；如需岗位视角，请先回岗位页确认状态。',
+      },
+      jobsReadiness: {
+        idle: '这份 JD 还没有分析结果，当前不能用于新训练绑定。',
+        running: '这份 JD 正在分析中。分析完成前，你还不能把它用于新训练绑定。',
+        succeeded: '这份 JD 的当前原文和最新分析一致，可以直接用于新的训练绑定。',
+        failed:
+          '这份 JD 的当前原文分析失败了。修正文案或重新分析后，才会恢复成可用状态。',
+        stale:
+          '这份 JD 的原文已经变更，当前分析已过期。你仍可回看旧快照，但新训练不会继续使用它。',
+        unknown: '这份 JD 暂时无法确认是否可用于训练，请重新检查。',
+      },
+      jobsSnapshot: {
+        idle: '当前还没有成功分析快照，所以这里暂时没有可回看的岗位要求。',
+        running:
+          '当前分析仍在进行中；如果下面出现旧快照，它只是历史成功结果，不代表当前原文已经重新可用。',
+        succeeded: '下面展示的是当前可用于训练的最新分析快照。',
+        failed:
+          '下面展示的是最近一次成功分析的旧快照，仅供回看；当前原文仍处于分析失败状态。',
+        stale:
+          '下面展示的是最近一次成功分析的旧快照，仅供回看；当前原文需要重新分析后才能重新用于训练。',
+        unknown: '下面的快照状态暂时无法确认，请回岗位页重新检查。',
+      },
+    },
     home: {
       hero: {
         kicker: '今日建议',
@@ -136,7 +197,7 @@ export const messages = {
         jobTargetScoped:
           '当前默认 JD 是 {name}，首页推荐和训练默认已切到岗位视角。',
         jobTargetUnavailable:
-          '当前默认 JD 是 {name}，但分析结果暂不可用，系统先退回通用口径。',
+          '当前默认 JD 是 {name}，但当前原文还没有可用分析结果；重新分析后才会恢复岗位视角。',
         profileKicker: 'Profile',
         profileTitle: '目标画像',
         profileEmpty: '画像还没初始化，系统暂时无法给出更准确的建议。',
@@ -265,6 +326,7 @@ export const messages = {
       emptyList: '还没有岗位 JD，先新建一份。',
       createTitle: '新建岗位 JD',
       editorTitle: '岗位详情',
+      readinessTitle: '当前训练状态',
       latestAnalysisTitle: '最新成功分析',
       historyTitle: '分析历史',
       historyEmpty: '还没有分析记录。',
@@ -285,7 +347,7 @@ export const messages = {
       activeReadyDescription:
         '这份 JD 已作为默认岗位，首页推荐和训练默认都会围绕它展开。',
       activeNotReadyDescription:
-        '这份 JD 已设为默认岗位，但当前分析结果不可直接用于默认训练，系统会暂时退回通用口径。',
+        '这份 JD 已设为默认岗位，但当前原文还没有可用分析；首页会继续显示它，但训练和推荐不会自动使用它。',
       analyzing: '分析中...',
       fields: {
         title: '岗位标题',
@@ -327,7 +389,7 @@ export const messages = {
       jobTargetUnavailable:
         '这份 JD 还没有可用分析结果，暂时不能开始本轮训练。',
       activeJobTargetUnavailable:
-        '当前默认 JD「{name}」暂不可用，所以这轮先退回通用训练。你也可以手动换一份 JD。',
+        '当前默认 JD「{name}」现在不能直接用于训练；如果要走岗位视角，请先去岗位页修正或重新分析。',
       startAction: '开始这一轮训练',
       startErrorTitle: '启动失败',
     },
@@ -565,6 +627,78 @@ export const messages = {
         detail: 'Supporting detail',
       },
     },
+    jobTargetStatus: {
+      homeActive: {
+        idle:
+          'The default JD is {name}, but it has not been analyzed yet, so recommendations and training stay in generic mode.',
+        running:
+          'The default JD is {name}, but analysis is still running. Training and recommendations will not use it automatically until that finishes.',
+        succeeded:
+          'The default JD is {name}, and both recommendations and training are already using job-target mode.',
+        failed:
+          'The default JD is {name}, but the latest analysis failed. Fix the JD or rerun analysis to restore job-target mode.',
+        stale:
+          'The default JD is {name}, but its source text changed. The old analysis remains visible for review only and new training will not use it.',
+        unknown:
+          'The default JD is temporarily unavailable, so recommendations and training stay in generic mode.',
+      },
+      trainSelection: {
+        idle:
+          'This JD has not been analyzed yet, so it cannot be bound to a new session.',
+        running:
+          'This JD is still being analyzed, so it cannot be bound to a new session yet.',
+        succeeded:
+          'This session will bind to the current successful analysis snapshot for this JD, and later edits will not change the session.',
+        failed:
+          'The latest analysis for this JD failed. Fix the text or rerun analysis before binding it to training.',
+        stale:
+          'The JD source text has changed. The previous analysis is review-only until you rerun analysis.',
+        unknown:
+          'The current training readiness for this JD is unknown. Recheck it on the job target page.',
+      },
+      trainFallback: {
+        idle:
+          'The default JD "{name}" has not been analyzed yet, so it will not be auto-applied. Go back to the job target page if you want job-target mode.',
+        running:
+          'The default JD "{name}" is still analyzing, so it will not be auto-applied yet.',
+        succeeded:
+          'The default JD "{name}" is ready for training. Keep the current generic option only if you want to skip job-target mode for this round.',
+        failed:
+          'The default JD "{name}" failed its latest analysis, so it will not be auto-applied until you fix or rerun it.',
+        stale:
+          'The default JD "{name}" has changed, so the old analysis will not be auto-applied. Rerun analysis to restore job-target mode.',
+        unknown:
+          'The default JD is temporarily unavailable, so it will not be auto-applied until you verify it again.',
+      },
+      jobsReadiness: {
+        idle:
+          'This JD has no analysis result yet, so it cannot be used for new training.',
+        running:
+          'This JD is currently being analyzed. It cannot be used for new training until that finishes.',
+        succeeded:
+          'This JD is aligned with its latest successful analysis and can be used for new training now.',
+        failed:
+          'Analysis for the current JD text failed. Fix the text or rerun analysis before using it again.',
+        stale:
+          'The JD text changed, so the current analysis is stale. You can still review the old snapshot, but new training will not use it.',
+        unknown:
+          'The training readiness for this JD is currently unknown. Please recheck it.',
+      },
+      jobsSnapshot: {
+        idle:
+          'There is no successful analysis snapshot yet, so there is nothing reviewable here.',
+        running:
+          'Analysis is still running. If you see a snapshot below, it is only an older successful result and not the current source text.',
+        succeeded:
+          'The snapshot below is the latest analysis currently used for training.',
+        failed:
+          'The snapshot below is the most recent successful result and is review-only while the current text is still in a failed state.',
+        stale:
+          'The snapshot below is the most recent successful result and is review-only until the current JD text is analyzed again.',
+        unknown:
+          'The status of the snapshot below is currently unknown. Please recheck it.',
+      },
+    },
     home: {
       hero: {
         kicker: 'Today',
@@ -607,7 +741,7 @@ export const messages = {
         jobTargetScoped:
           'The current default JD is {name}, and recommendations now follow that role context.',
         jobTargetUnavailable:
-          'The current default JD is {name}, but its analysis is not usable right now, so the product falls back to generic mode.',
+          'The current default JD is {name}, but its current text has no usable analysis yet. Rerun analysis to restore job-target mode.',
         profileKicker: 'Profile',
         profileTitle: 'Target profile',
         profileEmpty:
@@ -743,6 +877,7 @@ export const messages = {
       emptyList: 'No JD yet. Create one first.',
       createTitle: 'Create JD',
       editorTitle: 'JD details',
+      readinessTitle: 'Current training status',
       latestAnalysisTitle: 'Latest successful analysis',
       historyTitle: 'Analysis history',
       historyEmpty: 'No analysis history yet.',
@@ -764,7 +899,7 @@ export const messages = {
       activeReadyDescription:
         'This JD is now the default role context, so home recommendations and default training will follow it.',
       activeNotReadyDescription:
-        'This JD is set as default, but its analysis is not usable yet. The product will temporarily fall back to generic mode.',
+        'This JD is still marked as default, but its current text is not usable yet. The product keeps showing it, but training and recommendations will not auto-use it.',
       analyzing: 'Analyzing...',
       fields: {
         title: 'Job title',
@@ -806,7 +941,7 @@ export const messages = {
       jobTargetUnavailable:
         'This JD does not have a usable analysis result yet, so this session cannot start.',
       activeJobTargetUnavailable:
-        'The current default JD "{name}" is not usable right now, so this session falls back to generic mode unless you pick another JD.',
+        'The current default JD "{name}" cannot be used right now. Fix or rerun it from the job target page if you want job-target mode for this round.',
       startAction: 'Start this session',
       startErrorTitle: 'Start failed',
     },

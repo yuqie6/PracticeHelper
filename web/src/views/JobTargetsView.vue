@@ -131,11 +131,7 @@
           </div>
 
           <p v-if="selectedJobTarget && isActiveSelection" class="neo-note">
-            {{
-              selectedJobTarget.latest_analysis_status === 'succeeded'
-                ? t('jobs.activeReadyDescription')
-                : t('jobs.activeNotReadyDescription')
-            }}
+            {{ activeSelectionDescription }}
           </p>
 
           <form class="space-y-4" @submit.prevent="submit">
@@ -184,6 +180,25 @@
           </form>
         </div>
 
+        <div v-if="selectedJobTarget" class="neo-panel space-y-4">
+          <p class="neo-kicker bg-[var(--neo-blue)]">
+            {{ t('jobs.readinessTitle') }}
+          </p>
+          <div
+            class="space-y-3 border-2 border-black bg-white px-4 py-4 md:border-4"
+          >
+            <p class="text-base font-black">
+              {{
+                formatJobTargetAnalysisStatusLabel(
+                  t,
+                  selectedJobTarget.latest_analysis_status,
+                )
+              }}
+            </p>
+            <p class="neo-note">{{ selectedJobTargetReadinessDescription }}</p>
+          </div>
+        </div>
+
         <div class="neo-panel space-y-4">
           <p class="neo-kicker bg-[var(--neo-green)]">
             {{ t('jobs.latestAnalysisTitle') }}
@@ -192,6 +207,8 @@
             <div
               class="space-y-4 border-2 border-black bg-white px-4 py-4 md:border-4"
             >
+              <p class="neo-note">{{ latestSnapshotDescription }}</p>
+
               <div class="space-y-2">
                 <p class="neo-subheading">{{ t('jobs.fields.summary') }}</p>
                 <p class="neo-note">{{ selectedLatestAnalysis.summary }}</p>
@@ -328,6 +345,7 @@ import {
   updateJobTarget,
 } from '../api/client';
 import NoticePanel from '../components/NoticePanel.vue';
+import { describeJobTargetStatus } from '../lib/jobTargetStatus';
 import { formatJobTargetAnalysisStatusLabel } from '../lib/labels';
 
 const queryClient = useQueryClient();
@@ -385,6 +403,33 @@ const isActiveSelection = computed(
 const analysisRuns = computed(() => analysisRunsData.value ?? []);
 const showEditor = computed(
   () => Boolean(selectedJobTarget.value) || isCreatingNew.value,
+);
+const selectedJobTargetReadinessDescription = computed(() => {
+  if (!selectedJobTarget.value) {
+    return '';
+  }
+  return describeJobTargetStatus(
+    t,
+    'jobsReadiness',
+    selectedJobTarget.value.latest_analysis_status,
+  );
+});
+const latestSnapshotDescription = computed(() => {
+  if (!selectedJobTarget.value || !selectedLatestAnalysis.value) {
+    return '';
+  }
+  return describeJobTargetStatus(
+    t,
+    'jobsSnapshot',
+    selectedJobTarget.value.latest_analysis_status,
+  );
+});
+const activeSelectionDescription = computed(() =>
+  isActiveSelection.value
+    ? selectedJobTarget.value?.latest_analysis_status === 'succeeded'
+      ? t('jobs.activeReadyDescription')
+      : t('jobs.activeNotReadyDescription')
+    : '',
 );
 
 watch(

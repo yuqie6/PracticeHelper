@@ -207,6 +207,7 @@ import {
   describeSession,
   describeWeakness,
 } from '../lib/dashboard';
+import { describeJobTargetStatus } from '../lib/jobTargetStatus';
 import {
   formatModeLabel,
   formatStatusLabel,
@@ -243,7 +244,14 @@ const jobTargetSummary = computed(() => {
   if (dashboard.value?.recommendation_scope === 'job_target') {
     return t('home.cards.jobTargetScoped', { name: active.title });
   }
-  return t('home.cards.jobTargetUnavailable', { name: active.title });
+  return describeJobTargetStatus(
+    t,
+    'homeActive',
+    active.latest_analysis_status,
+    {
+      name: active.title,
+    },
+  );
 });
 
 function formatSessionName(session: TrainingSessionSummary): string {

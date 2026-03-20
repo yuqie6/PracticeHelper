@@ -130,6 +130,12 @@
         {{ jobTargetBlockedReason }}
       </p>
       <p
+        v-else-if="selectedJobTargetHint"
+        class="neo-note text-[var(--neo-green)]"
+      >
+        {{ selectedJobTargetHint }}
+      </p>
+      <p
         v-else-if="activeJobTargetFallbackNotice"
         class="neo-note text-[var(--neo-red)]"
       >
@@ -165,6 +171,10 @@ import {
 import NoticePanel from '../components/NoticePanel.vue';
 import ProgressPanel from '../components/ProgressPanel.vue';
 import StreamTracePanel from '../components/StreamTracePanel.vue';
+import {
+  describeJobTargetStatus,
+  isJobTargetReady,
+} from '../lib/jobTargetStatus';
 import {
   formatIntensityLabel,
   formatModeLabel,
@@ -219,9 +229,25 @@ const jobTargetBlockedReason = computed(() => {
   if (!selectedJobTarget.value) {
     return '';
   }
-  return selectedJobTarget.value.latest_analysis_status === 'succeeded'
+  return isJobTargetReady(selectedJobTarget.value.latest_analysis_status)
     ? ''
-    : t('train.jobTargetUnavailable');
+    : describeJobTargetStatus(
+        t,
+        'trainSelection',
+        selectedJobTarget.value.latest_analysis_status,
+      );
+});
+const selectedJobTargetHint = computed(() => {
+  if (!selectedJobTarget.value) {
+    return '';
+  }
+  return isJobTargetReady(selectedJobTarget.value.latest_analysis_status)
+    ? describeJobTargetStatus(
+        t,
+        'trainSelection',
+        selectedJobTarget.value.latest_analysis_status,
+      )
+    : '';
 });
 const activeJobTargetFallbackNotice = computed(() => {
   if (
@@ -232,9 +258,14 @@ const activeJobTargetFallbackNotice = computed(() => {
   ) {
     return '';
   }
-  return t('train.activeJobTargetUnavailable', {
-    name: activeJobTarget.value.title,
-  });
+  return describeJobTargetStatus(
+    t,
+    'trainFallback',
+    activeJobTarget.value.latest_analysis_status,
+    {
+      name: activeJobTarget.value.title,
+    },
+  );
 });
 
 const mutation = useMutation({
@@ -368,6 +399,23 @@ function buildSessionTarget(session: TrainingSessionSummary): string {
 
 function resolveStartErrorMessage(error: unknown): string {
   if (error instanceof ApiError && error.code === 'job_target_not_ready') {
+    if (selectedJobTarget.value) {
+      return describeJobTargetStatus(
+        t,
+        'trainSelection',
+        selectedJobTarget.value.latest_analysis_status,
+      );
+    }
+    if (activeJobTarget.value) {
+      return describeJobTargetStatus(
+        t,
+        'trainFallback',
+        activeJobTarget.value.latest_analysis_status,
+        {
+          name: activeJobTarget.value.title,
+        },
+      );
+    }
     return t('train.jobTargetUnavailable');
   }
 
