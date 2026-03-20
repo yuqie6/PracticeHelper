@@ -12,7 +12,9 @@ from app.config import Settings
 from app.llm_client import ModelClientError, OpenAICompatibleModelClient
 from app.repo_context import collect_repo_analysis_bundle
 from app.runtime_prompts import (
+    AnalyzeJobTargetDraft,
     AnalyzeRepoDraft,
+    analyze_job_target_prompt_bundle,
     analyze_repo_prompt_bundle,
     evaluate_prompt_bundle,
     question_prompt_bundle,
@@ -25,6 +27,8 @@ from app.runtime_support import (
     validate_json_response,
 )
 from app.schemas import (
+    AnalyzeJobTargetRequest,
+    AnalyzeJobTargetResponse,
     AnalyzeRepoRequest,
     AnalyzeRepoResponse,
     EvaluateAnswerRequest,
@@ -83,6 +87,31 @@ class AgentRuntime:
         )
         return response
 
+    def analyze_job_target(self, request: AnalyzeJobTargetRequest) -> AnalyzeJobTargetResponse:
+        started_at = time.perf_counter()
+        logger.info("analyze_job_target started title=%s", request.title)
+        self._require_model_client()
+        system_prompt, user_prompt, tools = analyze_job_target_prompt_bundle(request)
+        draft = self._run_task(
+            response_model=AnalyzeJobTargetDraft,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            tools=tools,
+        )
+        response = AnalyzeJobTargetResponse(
+            summary=draft.summary,
+            must_have_skills=draft.must_have_skills,
+            bonus_skills=draft.bonus_skills,
+            responsibilities=draft.responsibilities,
+            evaluation_focus=draft.evaluation_focus,
+        )
+        logger.info(
+            "analyze_job_target completed title=%s duration_ms=%.2f",
+            request.title,
+            (time.perf_counter() - started_at) * 1000,
+        )
+        return response
+
     def generate_question(self, request: GenerateQuestionRequest) -> GenerateQuestionResponse:
         started_at = time.perf_counter()
         logger.info("generate_question started mode=%s topic=%s", request.mode, request.topic)
@@ -136,9 +165,7 @@ class AgentRuntime:
         )
         return response
 
-    def stream_evaluate_answer(
-        self, request: EvaluateAnswerRequest
-    ) -> Iterator[dict[str, Any]]:
+    def stream_evaluate_answer(self, request: EvaluateAnswerRequest) -> Iterator[dict[str, Any]]:
         system_prompt, user_prompt, tools = evaluate_prompt_bundle(request)
         yield from self._stream_single_shot_task(
             response_model=EvaluationResult,
@@ -164,9 +191,7 @@ class AgentRuntime:
         )
         return response
 
-    def stream_generate_review(
-        self, request: GenerateReviewRequest
-    ) -> Iterator[dict[str, Any]]:
+    def stream_generate_review(self, request: GenerateReviewRequest) -> Iterator[dict[str, Any]]:
         system_prompt, user_prompt, tools = review_prompt_bundle(request)
         yield from self._stream_single_shot_task(
             response_model=ReviewCard,

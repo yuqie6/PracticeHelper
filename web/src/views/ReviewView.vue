@@ -42,6 +42,24 @@
     <div v-if="review" class="neo-grid lg:grid-cols-[0.9fr_1.1fr]">
       <div class="neo-panel space-y-4">
         <div class="space-y-4">
+          <p class="neo-kicker bg-[var(--neo-yellow)]">
+            {{ t('review.jobTargetTitle') }}
+          </p>
+          <div
+            class="space-y-3 border-2 border-black bg-white px-4 py-4 md:border-4"
+          >
+            <p class="text-base font-black">
+              {{
+                review.job_target?.title ?? t('train.genericJobTargetOption')
+              }}
+            </p>
+            <p v-if="review.job_target" class="neo-note">
+              {{ t('review.jobTargetDescription') }}
+            </p>
+          </div>
+        </div>
+
+        <div class="space-y-4">
           <p class="neo-kicker bg-[var(--neo-red)]">
             {{ t('review.topFixTitle') }}
           </p>
@@ -189,6 +207,9 @@ const continueTarget = computed(() => {
   }
   if (recommended.project_id) {
     params.set('project_id', recommended.project_id);
+  }
+  if (review.value?.job_target_id) {
+    params.set('job_target_id', review.value.job_target_id);
   }
 
   const query = params.toString();

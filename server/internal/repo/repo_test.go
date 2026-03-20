@@ -483,6 +483,256 @@ func TestRelieveWeaknessesMatchingTextUsesNormalizedQuestionText(t *testing.T) {
 	}
 }
 
+func TestJobTargetAnalysisLifecycleAndStaleStatus(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	target, err := store.CreateJobTarget(ctx, domain.JobTargetInput{
+		Title:       "后端工程师 - Example",
+		CompanyName: "Example",
+		SourceText:  "负责高并发后端服务开发，要求 Go、Redis、Kafka 经验。",
+	})
+	if err != nil {
+		t.Fatalf("CreateJobTarget() error = %v", err)
+	}
+
+	run, err := store.StartJobTargetAnalysis(ctx, target.ID, target.SourceText)
+	if err != nil {
+		t.Fatalf("StartJobTargetAnalysis() error = %v", err)
+	}
+	if run.Status != domain.JobTargetAnalysisRunning {
+		t.Fatalf("expected running status, got %s", run.Status)
+	}
+
+	if err := store.CompleteJobTargetAnalysis(ctx, target.ID, run.ID, &domain.AnalyzeJobTargetResponse{
+		Summary:          "核心是在招能独立推进高并发后端系统的人。",
+		MustHaveSkills:   []string{"Go", "Redis", "Kafka"},
+		BonusSkills:      []string{"Kubernetes"},
+		Responsibilities: []string{"负责核心服务设计"},
+		EvaluationFocus:  []string{"并发设计取舍"},
+	}); err != nil {
+		t.Fatalf("CompleteJobTargetAnalysis() error = %v", err)
+	}
+
+	saved, err := store.GetJobTarget(ctx, target.ID)
+	if err != nil {
+		t.Fatalf("GetJobTarget() error = %v", err)
+	}
+	if saved == nil {
+		t.Fatal("expected saved job target")
+	}
+	if saved.LatestAnalysisStatus != domain.JobTargetAnalysisSucceeded {
+		t.Fatalf("expected succeeded status, got %s", saved.LatestAnalysisStatus)
+	}
+	if saved.LatestSuccessfulAnalysis == nil {
+		t.Fatal("expected latest successful analysis to be attached")
+	}
+	if saved.LatestSuccessfulAnalysis.Summary == "" {
+		t.Fatal("expected latest successful analysis summary to be populated")
+	}
+
+	updated, err := store.UpdateJobTarget(ctx, target.ID, domain.JobTargetInput{
+		Title:       target.Title,
+		CompanyName: target.CompanyName,
+		SourceText:  target.SourceText + "\n额外补充：需要强故障排查能力。",
+	})
+	if err != nil {
+		t.Fatalf("UpdateJobTarget() error = %v", err)
+	}
+	if updated.LatestAnalysisStatus != domain.JobTargetAnalysisStale {
+		t.Fatalf("expected stale status after source change, got %s", updated.LatestAnalysisStatus)
+	}
+
+	runs, err := store.ListJobTargetAnalysisRuns(ctx, target.ID)
+	if err != nil {
+		t.Fatalf("ListJobTargetAnalysisRuns() error = %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("expected 1 analysis run, got %d", len(runs))
+	}
+}
+
+func TestCompleteJobTargetAnalysisDoesNotOverwriteStaleTargetState(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	target, err := store.CreateJobTarget(ctx, domain.JobTargetInput{
+		Title:       "后端工程师 - Example",
+		CompanyName: "Example",
+		SourceText:  "要求 Go、Redis、Kafka 经验。",
+	})
+	if err != nil {
+		t.Fatalf("CreateJobTarget() error = %v", err)
+	}
+
+	run, err := store.StartJobTargetAnalysis(ctx, target.ID, target.SourceText)
+	if err != nil {
+		t.Fatalf("StartJobTargetAnalysis() error = %v", err)
+	}
+
+	if _, err := store.UpdateJobTarget(ctx, target.ID, domain.JobTargetInput{
+		Title:       target.Title,
+		CompanyName: target.CompanyName,
+		SourceText:  target.SourceText + "\n额外补充：需要强故障排查能力。",
+	}); err != nil {
+		t.Fatalf("UpdateJobTarget() error = %v", err)
+	}
+
+	if err := store.CompleteJobTargetAnalysis(ctx, target.ID, run.ID, &domain.AnalyzeJobTargetResponse{
+		Summary:          "偏高并发后端。",
+		MustHaveSkills:   []string{"Go"},
+		Responsibilities: []string{"负责核心服务设计"},
+		EvaluationFocus:  []string{"缓存一致性"},
+	}); err != nil {
+		t.Fatalf("CompleteJobTargetAnalysis() error = %v", err)
+	}
+
+	saved, err := store.GetJobTarget(ctx, target.ID)
+	if err != nil {
+		t.Fatalf("GetJobTarget() error = %v", err)
+	}
+	if saved == nil {
+		t.Fatal("expected saved job target")
+	}
+	if saved.LatestAnalysisStatus != domain.JobTargetAnalysisStale {
+		t.Fatalf("expected stale status to be preserved, got %s", saved.LatestAnalysisStatus)
+	}
+}
+
+func TestOlderFailedJobTargetAnalysisDoesNotClobberNewerRunState(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	target, err := store.CreateJobTarget(ctx, domain.JobTargetInput{
+		Title:       "后端工程师 - Example",
+		CompanyName: "Example",
+		SourceText:  "要求 Go、Redis、Kafka 经验。",
+	})
+	if err != nil {
+		t.Fatalf("CreateJobTarget() error = %v", err)
+	}
+
+	firstRun, err := store.StartJobTargetAnalysis(ctx, target.ID, target.SourceText)
+	if err != nil {
+		t.Fatalf("StartJobTargetAnalysis() first error = %v", err)
+	}
+	secondRun, err := store.StartJobTargetAnalysis(ctx, target.ID, target.SourceText)
+	if err != nil {
+		t.Fatalf("StartJobTargetAnalysis() second error = %v", err)
+	}
+
+	if err := store.FailJobTargetAnalysis(ctx, target.ID, firstRun.ID, "boom"); err != nil {
+		t.Fatalf("FailJobTargetAnalysis() error = %v", err)
+	}
+
+	saved, err := store.GetJobTarget(ctx, target.ID)
+	if err != nil {
+		t.Fatalf("GetJobTarget() error = %v", err)
+	}
+	if saved == nil {
+		t.Fatal("expected saved job target")
+	}
+	if saved.LatestAnalysisID != secondRun.ID {
+		t.Fatalf("expected newer analysis id %q to remain current, got %q", secondRun.ID, saved.LatestAnalysisID)
+	}
+	if saved.LatestAnalysisStatus != domain.JobTargetAnalysisRunning {
+		t.Fatalf("expected newer running status to remain current, got %s", saved.LatestAnalysisStatus)
+	}
+}
+
+func TestGetReviewIncludesBoundJobTargetRef(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	target, err := store.CreateJobTarget(ctx, domain.JobTargetInput{
+		Title:       "后端工程师 - Example",
+		CompanyName: "Example",
+		SourceText:  "要求 Go、Redis、Kafka 经验。",
+	})
+	if err != nil {
+		t.Fatalf("CreateJobTarget() error = %v", err)
+	}
+	run, err := store.StartJobTargetAnalysis(ctx, target.ID, target.SourceText)
+	if err != nil {
+		t.Fatalf("StartJobTargetAnalysis() error = %v", err)
+	}
+	if err := store.CompleteJobTargetAnalysis(ctx, target.ID, run.ID, &domain.AnalyzeJobTargetResponse{
+		Summary:          "偏高并发后端。",
+		MustHaveSkills:   []string{"Go"},
+		Responsibilities: []string{"负责核心服务设计"},
+		EvaluationFocus:  []string{"并发设计取舍"},
+	}); err != nil {
+		t.Fatalf("CompleteJobTargetAnalysis() error = %v", err)
+	}
+
+	session := &domain.TrainingSession{
+		ID:                  "sess_review_bound_target",
+		Mode:                domain.ModeBasics,
+		Topic:               "go",
+		JobTargetID:         target.ID,
+		JobTargetAnalysisID: run.ID,
+		Intensity:           "standard",
+		Status:              domain.StatusReviewPending,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_review_bound_target",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Go 的 goroutine 为什么轻量？",
+		ExpectedPoints: []string{"调度", "栈"},
+		Answer:         "因为调度和栈更轻。",
+		FollowupAnswer: "因为上下文切换成本更低。",
+	}
+	if err := store.CreateSession(ctx, session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	review := &domain.ReviewCard{
+		ID:                "review_bound_target",
+		SessionID:         session.ID,
+		Overall:           "整体还行。",
+		Highlights:        []string{"先给结论"},
+		Gaps:              []string{"缺取舍"},
+		SuggestedTopics:   []string{"go"},
+		NextTrainingFocus: []string{"补 trade-off"},
+		ScoreBreakdown:    map[string]float64{"准确性": 80},
+	}
+	if err := store.CreateReview(ctx, review); err != nil {
+		t.Fatalf("CreateReview() error = %v", err)
+	}
+
+	saved, err := store.GetReview(ctx, review.ID)
+	if err != nil {
+		t.Fatalf("GetReview() error = %v", err)
+	}
+	if saved == nil {
+		t.Fatal("expected saved review")
+	}
+	if saved.JobTarget == nil {
+		t.Fatal("expected bound job target ref on review")
+	}
+	if saved.JobTarget.Title != target.Title {
+		t.Fatalf("expected job target title %q, got %q", target.Title, saved.JobTarget.Title)
+	}
+}
+
 func openTestStore(t *testing.T) (*Store, error) {
 	t.Helper()
 

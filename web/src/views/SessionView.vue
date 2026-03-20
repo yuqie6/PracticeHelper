@@ -7,6 +7,21 @@
       </p>
     </header>
 
+    <div class="neo-panel space-y-2 bg-white">
+      <p class="neo-kicker bg-[var(--neo-blue)]">
+        {{ t('session.jobTargetTitle') }}
+      </p>
+      <p v-if="session?.job_target" class="text-base font-black">
+        {{ session.job_target.title }}
+      </p>
+      <p v-else class="text-sm font-semibold">
+        {{ t('session.jobTargetEmpty') }}
+      </p>
+      <p v-if="session?.job_target" class="neo-note">
+        {{ t('session.jobTargetDescription') }}
+      </p>
+    </div>
+
     <ProgressPanel
       v-if="showProgressPanel"
       :kicker="t('session.processingKicker')"

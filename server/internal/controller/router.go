@@ -37,6 +37,14 @@ func NewRouter(svc *service.Service) *gin.Engine {
 		api.POST("/profile", handler.saveProfile)
 		api.PATCH("/profile", handler.saveProfile)
 
+		api.GET("/job-targets", handler.listJobTargets)
+		api.POST("/job-targets", handler.createJobTarget)
+		api.GET("/job-targets/analysis-runs/:id", handler.getJobTargetAnalysisRun)
+		api.GET("/job-targets/:id", handler.getJobTarget)
+		api.PATCH("/job-targets/:id", handler.updateJobTarget)
+		api.POST("/job-targets/:id/analyze", handler.analyzeJobTarget)
+		api.GET("/job-targets/:id/analysis-runs", handler.listJobTargetAnalysisRuns)
+
 		api.POST("/projects/import", handler.importProject)
 		api.GET("/projects", handler.listProjects)
 		api.GET("/projects/:id", handler.getProject)
@@ -87,6 +95,106 @@ func (h *Handler) saveProfile(c *gin.Context) {
 	data, err := h.service.SaveProfile(c.Request.Context(), request)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) listJobTargets(c *gin.Context) {
+	data, err := h.service.ListJobTargets(c.Request.Context())
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) createJobTarget(c *gin.Context) {
+	var request domain.JobTargetInput
+	if err := c.ShouldBindJSON(&request); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	data, err := h.service.CreateJobTarget(c.Request.Context(), request)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": data})
+}
+
+func (h *Handler) getJobTarget(c *gin.Context) {
+	data, err := h.service.GetJobTarget(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrJobTargetNotFound):
+			writeError(c, http.StatusNotFound, err)
+		default:
+			writeError(c, http.StatusInternalServerError, err)
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) updateJobTarget(c *gin.Context) {
+	var request domain.JobTargetInput
+	if err := c.ShouldBindJSON(&request); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	data, err := h.service.UpdateJobTarget(c.Request.Context(), c.Param("id"), request)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrJobTargetNotFound):
+			writeError(c, http.StatusNotFound, err)
+		default:
+			writeError(c, http.StatusInternalServerError, err)
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) analyzeJobTarget(c *gin.Context) {
+	data, err := h.service.AnalyzeJobTarget(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrJobTargetNotFound):
+			writeError(c, http.StatusNotFound, err)
+		default:
+			writeError(c, http.StatusBadGateway, err)
+		}
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": data})
+}
+
+func (h *Handler) listJobTargetAnalysisRuns(c *gin.Context) {
+	data, err := h.service.ListJobTargetAnalysisRuns(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrJobTargetNotFound):
+			writeError(c, http.StatusNotFound, err)
+		default:
+			writeError(c, http.StatusInternalServerError, err)
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) getJobTargetAnalysisRun(c *gin.Context) {
+	data, err := h.service.GetJobTargetAnalysisRun(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrJobTargetAnalysisNotFound):
+			writeError(c, http.StatusNotFound, err)
+		default:
+			writeError(c, http.StatusInternalServerError, err)
+		}
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": data})
@@ -200,6 +308,10 @@ func (h *Handler) createSession(c *gin.Context) {
 			writeError(c, http.StatusBadRequest, err)
 		case errors.Is(err, service.ErrProjectNotFound):
 			writeError(c, http.StatusNotFound, err)
+		case errors.Is(err, service.ErrJobTargetNotFound):
+			writeError(c, http.StatusNotFound, err)
+		case errors.Is(err, service.ErrJobTargetNotReady):
+			writeError(c, http.StatusConflict, err)
 		default:
 			writeError(c, http.StatusBadGateway, err)
 		}
@@ -413,6 +525,12 @@ func errorCode(err error) string {
 		return "invalid_mode"
 	case errors.Is(err, service.ErrProjectNotFound):
 		return "project_not_found"
+	case errors.Is(err, service.ErrJobTargetNotFound):
+		return "job_target_not_found"
+	case errors.Is(err, service.ErrJobTargetNotReady):
+		return "job_target_not_ready"
+	case errors.Is(err, service.ErrJobTargetAnalysisNotFound):
+		return "job_target_analysis_not_found"
 	case errors.Is(err, service.ErrSessionNotFound):
 		return "session_not_found"
 	case errors.Is(err, service.ErrImportJobNotFound):

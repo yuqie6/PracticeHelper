@@ -19,6 +19,12 @@ const (
 	ProjectImportStatusCompleted = "completed"
 	ProjectImportStatusFailed    = "failed"
 
+	JobTargetAnalysisIdle      = "idle"
+	JobTargetAnalysisRunning   = "running"
+	JobTargetAnalysisSucceeded = "succeeded"
+	JobTargetAnalysisFailed    = "failed"
+	JobTargetAnalysisStale     = "stale"
+
 	ProjectImportStageQueued     = "queued"
 	ProjectImportStageAnalyzing  = "analyzing_repository"
 	ProjectImportStagePersisting = "persisting_project"
@@ -65,6 +71,46 @@ type ProjectProfile struct {
 	ImportStatus    string    `json:"import_status"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+type JobTargetRef struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	CompanyName string `json:"company_name,omitempty"`
+}
+
+type JobTarget struct {
+	ID                       string                `json:"id"`
+	Title                    string                `json:"title"`
+	CompanyName              string                `json:"company_name,omitempty"`
+	SourceText               string                `json:"source_text"`
+	LatestAnalysisID         string                `json:"latest_analysis_id,omitempty"`
+	LatestAnalysisStatus     string                `json:"latest_analysis_status"`
+	LastUsedAt               *time.Time            `json:"last_used_at,omitempty"`
+	CreatedAt                time.Time             `json:"created_at"`
+	UpdatedAt                time.Time             `json:"updated_at"`
+	LatestSuccessfulAnalysis *JobTargetAnalysisRun `json:"latest_successful_analysis,omitempty"`
+}
+
+type JobTargetInput struct {
+	Title       string `json:"title" binding:"required"`
+	CompanyName string `json:"company_name"`
+	SourceText  string `json:"source_text" binding:"required"`
+}
+
+type JobTargetAnalysisRun struct {
+	ID                 string     `json:"id"`
+	JobTargetID        string     `json:"job_target_id"`
+	SourceTextSnapshot string     `json:"source_text_snapshot"`
+	Status             string     `json:"status"`
+	ErrorMessage       string     `json:"error_message,omitempty"`
+	Summary            string     `json:"summary,omitempty"`
+	MustHaveSkills     []string   `json:"must_have_skills,omitempty"`
+	BonusSkills        []string   `json:"bonus_skills,omitempty"`
+	Responsibilities   []string   `json:"responsibilities,omitempty"`
+	EvaluationFocus    []string   `json:"evaluation_focus,omitempty"`
+	CreatedAt          time.Time  `json:"created_at"`
+	FinishedAt         *time.Time `json:"finished_at,omitempty"`
 }
 
 type ProjectImportRequest struct {
@@ -120,20 +166,23 @@ type QuestionTemplate struct {
 }
 
 type TrainingSession struct {
-	ID         string          `json:"id"`
-	Mode       string          `json:"mode"`
-	Topic      string          `json:"topic,omitempty"`
-	ProjectID  string          `json:"project_id,omitempty"`
-	Intensity  string          `json:"intensity"`
-	Status     string          `json:"status"`
-	TotalScore float64         `json:"total_score"`
-	StartedAt  *time.Time      `json:"started_at,omitempty"`
-	EndedAt    *time.Time      `json:"ended_at,omitempty"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
-	ReviewID   string          `json:"review_id,omitempty"`
-	Turns      []TrainingTurn  `json:"turns,omitempty"`
-	Project    *ProjectProfile `json:"project,omitempty"`
+	ID                  string          `json:"id"`
+	Mode                string          `json:"mode"`
+	Topic               string          `json:"topic,omitempty"`
+	ProjectID           string          `json:"project_id,omitempty"`
+	JobTargetID         string          `json:"job_target_id,omitempty"`
+	JobTargetAnalysisID string          `json:"job_target_analysis_id,omitempty"`
+	Intensity           string          `json:"intensity"`
+	Status              string          `json:"status"`
+	TotalScore          float64         `json:"total_score"`
+	StartedAt           *time.Time      `json:"started_at,omitempty"`
+	EndedAt             *time.Time      `json:"ended_at,omitempty"`
+	CreatedAt           time.Time       `json:"created_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
+	ReviewID            string          `json:"review_id,omitempty"`
+	Turns               []TrainingTurn  `json:"turns,omitempty"`
+	Project             *ProjectProfile `json:"project,omitempty"`
+	JobTarget           *JobTargetRef   `json:"job_target,omitempty"`
 }
 
 type TrainingTurn struct {
@@ -184,18 +233,21 @@ type WeaknessTag struct {
 }
 
 type ReviewCard struct {
-	ID                string             `json:"id"`
-	SessionID         string             `json:"session_id"`
-	Overall           string             `json:"overall"`
-	TopFix            string             `json:"top_fix,omitempty"`
-	TopFixReason      string             `json:"top_fix_reason,omitempty"`
-	Highlights        []string           `json:"highlights"`
-	Gaps              []string           `json:"gaps"`
-	SuggestedTopics   []string           `json:"suggested_topics"`
-	NextTrainingFocus []string           `json:"next_training_focus"`
-	RecommendedNext   *NextSession       `json:"recommended_next,omitempty"`
-	ScoreBreakdown    map[string]float64 `json:"score_breakdown"`
-	CreatedAt         time.Time          `json:"created_at"`
+	ID                  string             `json:"id"`
+	SessionID           string             `json:"session_id"`
+	JobTargetID         string             `json:"job_target_id,omitempty"`
+	JobTargetAnalysisID string             `json:"job_target_analysis_id,omitempty"`
+	Overall             string             `json:"overall"`
+	TopFix              string             `json:"top_fix,omitempty"`
+	TopFixReason        string             `json:"top_fix_reason,omitempty"`
+	Highlights          []string           `json:"highlights"`
+	Gaps                []string           `json:"gaps"`
+	SuggestedTopics     []string           `json:"suggested_topics"`
+	NextTrainingFocus   []string           `json:"next_training_focus"`
+	RecommendedNext     *NextSession       `json:"recommended_next,omitempty"`
+	ScoreBreakdown      map[string]float64 `json:"score_breakdown"`
+	CreatedAt           time.Time          `json:"created_at"`
+	JobTarget           *JobTargetRef      `json:"job_target,omitempty"`
 }
 
 type NextSession struct {
@@ -227,10 +279,11 @@ type Dashboard struct {
 }
 
 type CreateSessionRequest struct {
-	Mode      string `json:"mode" binding:"required"`
-	Topic     string `json:"topic"`
-	ProjectID string `json:"project_id"`
-	Intensity string `json:"intensity" binding:"required"`
+	Mode        string `json:"mode" binding:"required"`
+	Topic       string `json:"topic"`
+	ProjectID   string `json:"project_id"`
+	JobTargetID string `json:"job_target_id"`
+	Intensity   string `json:"intensity" binding:"required"`
 }
 
 type SubmitAnswerRequest struct {
@@ -251,6 +304,20 @@ type AnalyzeRepoRequest struct {
 	RepoURL string `json:"repo_url"`
 }
 
+type AnalyzeJobTargetRequest struct {
+	Title       string `json:"title,omitempty"`
+	CompanyName string `json:"company_name,omitempty"`
+	SourceText  string `json:"source_text"`
+}
+
+type AnalyzeJobTargetResponse struct {
+	Summary          string   `json:"summary"`
+	MustHaveSkills   []string `json:"must_have_skills"`
+	BonusSkills      []string `json:"bonus_skills"`
+	Responsibilities []string `json:"responsibilities"`
+	EvaluationFocus  []string `json:"evaluation_focus"`
+}
+
 type AnalyzeRepoResponse struct {
 	RepoURL         string      `json:"repo_url"`
 	Name            string      `json:"name"`
@@ -267,13 +334,14 @@ type AnalyzeRepoResponse struct {
 }
 
 type GenerateQuestionRequest struct {
-	Mode          string             `json:"mode"`
-	Topic         string             `json:"topic,omitempty"`
-	Intensity     string             `json:"intensity"`
-	Project       *ProjectProfile    `json:"project,omitempty"`
-	Templates     []QuestionTemplate `json:"templates,omitempty"`
-	ContextChunks []RepoChunk        `json:"context_chunks,omitempty"`
-	Weaknesses    []WeaknessTag      `json:"weaknesses,omitempty"`
+	Mode              string                    `json:"mode"`
+	Topic             string                    `json:"topic,omitempty"`
+	Intensity         string                    `json:"intensity"`
+	Project           *ProjectProfile           `json:"project,omitempty"`
+	Templates         []QuestionTemplate        `json:"templates,omitempty"`
+	ContextChunks     []RepoChunk               `json:"context_chunks,omitempty"`
+	Weaknesses        []WeaknessTag             `json:"weaknesses,omitempty"`
+	JobTargetAnalysis *AnalyzeJobTargetResponse `json:"job_target_analysis,omitempty"`
 }
 
 type GenerateQuestionResponse struct {
@@ -282,19 +350,21 @@ type GenerateQuestionResponse struct {
 }
 
 type EvaluateAnswerRequest struct {
-	Mode           string             `json:"mode"`
-	Topic          string             `json:"topic,omitempty"`
-	Project        *ProjectProfile    `json:"project,omitempty"`
-	Question       string             `json:"question"`
-	ExpectedPoints []string           `json:"expected_points"`
-	Answer         string             `json:"answer"`
-	ContextChunks  []RepoChunk        `json:"context_chunks,omitempty"`
-	IsFollowup     bool               `json:"is_followup"`
-	ScoreWeights   map[string]float64 `json:"score_weights,omitempty"`
+	Mode              string                    `json:"mode"`
+	Topic             string                    `json:"topic,omitempty"`
+	Project           *ProjectProfile           `json:"project,omitempty"`
+	Question          string                    `json:"question"`
+	ExpectedPoints    []string                  `json:"expected_points"`
+	Answer            string                    `json:"answer"`
+	ContextChunks     []RepoChunk               `json:"context_chunks,omitempty"`
+	IsFollowup        bool                      `json:"is_followup"`
+	ScoreWeights      map[string]float64        `json:"score_weights,omitempty"`
+	JobTargetAnalysis *AnalyzeJobTargetResponse `json:"job_target_analysis,omitempty"`
 }
 
 type GenerateReviewRequest struct {
-	Session *TrainingSession `json:"session"`
-	Project *ProjectProfile  `json:"project,omitempty"`
-	Turns   []TrainingTurn   `json:"turns"`
+	Session           *TrainingSession          `json:"session"`
+	Project           *ProjectProfile           `json:"project,omitempty"`
+	Turns             []TrainingTurn            `json:"turns"`
+	JobTargetAnalysis *AnalyzeJobTargetResponse `json:"job_target_analysis,omitempty"`
 }

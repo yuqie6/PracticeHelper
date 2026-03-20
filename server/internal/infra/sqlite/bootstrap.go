@@ -66,6 +66,31 @@ func migrate(db *sql.DB) error {
 			started_at TEXT NOT NULL DEFAULT '',
 			finished_at TEXT NOT NULL DEFAULT ''
 		);`,
+		`CREATE TABLE IF NOT EXISTS job_targets (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL,
+			company_name TEXT NOT NULL DEFAULT '',
+			source_text TEXT NOT NULL,
+			latest_analysis_id TEXT NOT NULL DEFAULT '',
+			latest_analysis_status TEXT NOT NULL DEFAULT 'idle',
+			last_used_at TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS job_target_analysis_runs (
+			id TEXT PRIMARY KEY,
+			job_target_id TEXT NOT NULL REFERENCES job_targets(id) ON DELETE CASCADE,
+			source_text_snapshot TEXT NOT NULL,
+			status TEXT NOT NULL,
+			error_message TEXT NOT NULL DEFAULT '',
+			summary TEXT NOT NULL DEFAULT '',
+			must_have_skills_json TEXT NOT NULL DEFAULT '[]',
+			bonus_skills_json TEXT NOT NULL DEFAULT '[]',
+			responsibilities_json TEXT NOT NULL DEFAULT '[]',
+			evaluation_focus_json TEXT NOT NULL DEFAULT '[]',
+			created_at TEXT NOT NULL,
+			finished_at TEXT NOT NULL DEFAULT ''
+		);`,
 		`CREATE TABLE IF NOT EXISTS repo_chunks (
 			id TEXT PRIMARY KEY,
 			project_id TEXT NOT NULL REFERENCES project_profiles(id) ON DELETE CASCADE,
@@ -98,6 +123,8 @@ func migrate(db *sql.DB) error {
 			mode TEXT NOT NULL,
 			topic TEXT NOT NULL DEFAULT '',
 			project_id TEXT NOT NULL DEFAULT '',
+			job_target_id TEXT NOT NULL DEFAULT '',
+			job_target_analysis_id TEXT NOT NULL DEFAULT '',
 			intensity TEXT NOT NULL,
 			status TEXT NOT NULL,
 			total_score REAL NOT NULL DEFAULT 0,
@@ -160,6 +187,12 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 	if err := ensureColumn(db, "review_cards", "recommended_next_json", "TEXT NOT NULL DEFAULT 'null'"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "training_sessions", "job_target_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "training_sessions", "job_target_analysis_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 

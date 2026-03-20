@@ -108,7 +108,29 @@
         </select>
       </label>
 
-      <button type="submit" class="neo-button-dark" :disabled="isStarting">
+      <label class="space-y-2">
+        <span class="neo-subheading">{{ t('train.fields.jobTarget') }}</span>
+        <select v-model="form.job_target_id" class="neo-select">
+          <option value="">{{ t('train.genericJobTargetOption') }}</option>
+          <option
+            v-for="jobTarget in jobTargets ?? []"
+            :key="jobTarget.id"
+            :value="jobTarget.id"
+          >
+            {{ jobTarget.title }}
+          </option>
+        </select>
+      </label>
+
+      <p v-if="jobTargetBlockedReason" class="neo-note text-[var(--neo-red)]">
+        {{ jobTargetBlockedReason }}
+      </p>
+
+      <button
+        type="submit"
+        class="neo-button-dark"
+        :disabled="isStarting || Boolean(jobTargetBlockedReason)"
+      >
         {{ isStarting ? t('common.starting') : t('train.startAction') }}
       </button>
     </form>
@@ -122,8 +144,10 @@ import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 
 import {
+  ApiError,
   createSessionStream,
   getDashboard,
+  listJobTargets,
   listProjects,
   type StreamEvent,
   type TrainingSessionSummary,
@@ -148,6 +172,7 @@ const form = reactive({
   mode: 'basics' as 'basics' | 'project',
   topic: 'go',
   project_id: '',
+  job_target_id: '',
   intensity: 'standard',
 });
 const streamSections = ref<StreamSection[]>([]);
@@ -159,18 +184,38 @@ const { data: projects } = useQuery({
   queryFn: listProjects,
 });
 
+const { data: jobTargets } = useQuery({
+  queryKey: ['job-targets'],
+  queryFn: listJobTargets,
+});
+
 const { data: dashboard } = useQuery({
   queryKey: ['dashboard'],
   queryFn: getDashboard,
 });
 
 const currentSession = computed(() => dashboard.value?.current_session ?? null);
+const selectedJobTarget = computed(
+  () =>
+    (jobTargets.value ?? []).find(
+      (target) => target.id === form.job_target_id,
+    ) ?? null,
+);
+const jobTargetBlockedReason = computed(() => {
+  if (!selectedJobTarget.value) {
+    return '';
+  }
+  return selectedJobTarget.value.latest_analysis_status === 'succeeded'
+    ? ''
+    : t('train.jobTargetUnavailable');
+});
 
 const mutation = useMutation({
   mutationFn: (payload: {
     mode: 'basics' | 'project';
     topic?: string;
     project_id?: string;
+    job_target_id?: string;
     intensity: string;
   }) => {
     streamSections.value = [];
@@ -182,8 +227,7 @@ const mutation = useMutation({
     await router.push(`/sessions/${session.id}`);
   },
   onError: (error) => {
-    startError.value =
-      error instanceof Error ? error.message : t('common.requestFailed');
+    startError.value = resolveStartErrorMessage(error);
   },
 });
 
@@ -217,6 +261,7 @@ watch(
     const mode = route.query.mode;
     const topic = route.query.topic;
     const projectId = route.query.project_id;
+    const jobTargetId = route.query.job_target_id;
 
     if (mode === 'basics' || mode === 'project') {
       form.mode = mode;
@@ -231,6 +276,11 @@ watch(
     } else if (form.mode === 'project' || mode === 'basics') {
       form.project_id = '';
     }
+    if (typeof jobTargetId === 'string') {
+      form.job_target_id = jobTargetId;
+    } else {
+      form.job_target_id = '';
+    }
   },
   { immediate: true },
 );
@@ -240,6 +290,7 @@ function submit() {
     mode: form.mode,
     topic: form.mode === 'basics' ? form.topic : undefined,
     project_id: form.mode === 'project' ? form.project_id : undefined,
+    job_target_id: form.job_target_id || undefined,
     intensity: form.intensity,
   });
 }
@@ -267,5 +318,13 @@ function buildSessionTarget(session: TrainingSessionSummary): string {
   }
 
   return `/sessions/${session.id}`;
+}
+
+function resolveStartErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.code === 'job_target_not_ready') {
+    return t('train.jobTargetUnavailable');
+  }
+
+  return error instanceof Error ? error.message : t('common.requestFailed');
 }
 </script>

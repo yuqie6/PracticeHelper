@@ -28,16 +28,31 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 		StartedAt:  &startedAt,
 	}
 
+	jobTarget, jobTargetAnalysis, err := s.resolveJobTargetBinding(ctx, request.JobTargetID)
+	if err != nil {
+		return nil, err
+	}
+	if jobTarget != nil {
+		session.JobTargetID = jobTarget.ID
+		session.JobTargetAnalysisID = jobTargetAnalysis.ID
+		session.JobTarget = &domain.JobTargetRef{
+			ID:          jobTarget.ID,
+			Title:       jobTarget.Title,
+			CompanyName: jobTarget.CompanyName,
+		}
+	}
+
 	weaknesses, err := s.repo.ListWeaknesses(ctx, 5)
 	if err != nil {
 		return nil, err
 	}
 
 	generateRequest := domain.GenerateQuestionRequest{
-		Mode:       request.Mode,
-		Topic:      session.Topic,
-		Intensity:  request.Intensity,
-		Weaknesses: weaknesses,
+		Mode:              request.Mode,
+		Topic:             session.Topic,
+		Intensity:         request.Intensity,
+		Weaknesses:        weaknesses,
+		JobTargetAnalysis: buildJobTargetAnalysisSnapshot(jobTargetAnalysis),
 	}
 
 	var project *domain.ProjectProfile
@@ -112,16 +127,31 @@ func (s *Service) CreateSessionStream(
 		StartedAt:  &startedAt,
 	}
 
+	jobTarget, jobTargetAnalysis, err := s.resolveJobTargetBinding(ctx, request.JobTargetID)
+	if err != nil {
+		return nil, err
+	}
+	if jobTarget != nil {
+		session.JobTargetID = jobTarget.ID
+		session.JobTargetAnalysisID = jobTargetAnalysis.ID
+		session.JobTarget = &domain.JobTargetRef{
+			ID:          jobTarget.ID,
+			Title:       jobTarget.Title,
+			CompanyName: jobTarget.CompanyName,
+		}
+	}
+
 	weaknesses, err := s.repo.ListWeaknesses(ctx, 5)
 	if err != nil {
 		return nil, err
 	}
 
 	generateRequest := domain.GenerateQuestionRequest{
-		Mode:       request.Mode,
-		Topic:      session.Topic,
-		Intensity:  request.Intensity,
-		Weaknesses: weaknesses,
+		Mode:              request.Mode,
+		Topic:             session.Topic,
+		Intensity:         request.Intensity,
+		Weaknesses:        weaknesses,
+		JobTargetAnalysis: buildJobTargetAnalysisSnapshot(jobTargetAnalysis),
 	}
 
 	switch request.Mode {

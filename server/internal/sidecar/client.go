@@ -47,6 +47,18 @@ func (c *Client) AnalyzeRepo(ctx context.Context, request domain.AnalyzeRepoRequ
 	return &response, nil
 }
 
+func (c *Client) AnalyzeJobTarget(
+	ctx context.Context,
+	request domain.AnalyzeJobTargetRequest,
+) (*domain.AnalyzeJobTargetResponse, error) {
+	var response domain.AnalyzeJobTargetResponse
+	if err := c.postJSON(ctx, "/internal/analyze_job_target", request, &response); err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
 func (c *Client) GenerateQuestion(ctx context.Context, request domain.GenerateQuestionRequest) (*domain.GenerateQuestionResponse, error) {
 	var response domain.GenerateQuestionResponse
 	if err := c.postJSON(ctx, "/internal/generate_question", request, &response); err != nil {

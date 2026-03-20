@@ -50,9 +50,12 @@ func (s *Store) CreateReview(ctx context.Context, review *domain.ReviewCard) err
 
 func (s *Store) GetReview(ctx context.Context, reviewID string) (*domain.ReviewCard, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, session_id, overall, top_fix, top_fix_reason, highlights_json, gaps_json, suggested_topics_json, next_training_focus_json, recommended_next_json, score_breakdown_json, created_at
-		FROM review_cards
-		WHERE id = ?
+		SELECT rc.id, rc.session_id, ts.job_target_id, ts.job_target_analysis_id, rc.overall, rc.top_fix, rc.top_fix_reason,
+			rc.highlights_json, rc.gaps_json, rc.suggested_topics_json, rc.next_training_focus_json,
+			rc.recommended_next_json, rc.score_breakdown_json, rc.created_at
+		FROM review_cards rc
+		JOIN training_sessions ts ON ts.id = rc.session_id
+		WHERE rc.id = ?
 	`, reviewID)
 	review, err := scanReviewCard(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -60,6 +63,19 @@ func (s *Store) GetReview(ctx context.Context, reviewID string) (*domain.ReviewC
 	}
 	if err != nil {
 		return nil, err
+	}
+	if review.JobTargetID != "" {
+		target, err := s.getJobTargetRow(ctx, review.JobTargetID)
+		if err != nil {
+			return nil, err
+		}
+		if target != nil {
+			review.JobTarget = &domain.JobTargetRef{
+				ID:          target.ID,
+				Title:       target.Title,
+				CompanyName: target.CompanyName,
+			}
+		}
 	}
 
 	return review, nil

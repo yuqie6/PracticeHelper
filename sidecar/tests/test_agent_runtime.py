@@ -8,13 +8,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.agent_runtime import AgentRuntime
 from app.config import Settings
 from app.llm_client import ChatCompletionResult, ModelClientError
-from app.runtime_prompts import evaluate_prompt_bundle, question_prompt_bundle
+from app.runtime_prompts import (
+    evaluate_prompt_bundle,
+    question_prompt_bundle,
+    review_prompt_bundle,
+)
 from app.schemas import (
+    AnalyzeJobTargetRequest,
     AnalyzeRepoRequest,
     EvaluateAnswerRequest,
+    GenerateReviewRequest,
     GenerateQuestionRequest,
+    JobTargetAnalysisSnapshot,
     QuestionTemplate,
     ProjectProfile,
+    TrainingSession,
+    TrainingTurn,
     WeaknessHit,
 )
 
@@ -126,6 +135,54 @@ def test_generate_question_falls_back_to_single_shot_when_model_skips_tools() ->
     assert "read_project_brief" in client.calls[1]["messages"][1]["content"]
 
 
+def test_analyze_job_target_returns_structured_snapshot() -> None:
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=FakeModelClient(
+            [
+                ChatCompletionResult(
+                    content=(
+                        '{"summary":"核心是在招能独立推进高并发后端系统的人。",'
+                        '"must_have_skills":["Go","Redis","Kafka"],'
+                        '"bonus_skills":["Kubernetes"],'
+                        '"responsibilities":["负责核心服务设计"],'
+                        '"evaluation_focus":["并发设计取舍"]}'
+                    ),
+                    tool_calls=[],
+                ),
+                ChatCompletionResult(
+                    content=(
+                        '{"summary":"核心是在招能独立推进高并发后端系统的人。",'
+                        '"must_have_skills":["Go","Redis","Kafka"],'
+                        '"bonus_skills":["Kubernetes"],'
+                        '"responsibilities":["负责核心服务设计"],'
+                        '"evaluation_focus":["并发设计取舍"]}'
+                    ),
+                    tool_calls=[],
+                ),
+            ]
+        ),
+    )
+
+    response = runtime.analyze_job_target(
+        AnalyzeJobTargetRequest(
+            title="后端工程师",
+            company_name="Example",
+            source_text="负责高并发后端服务开发，要求 Go、Redis、Kafka 经验。",
+        )
+    )
+
+    assert response.summary
+    assert response.must_have_skills == ["Go", "Redis", "Kafka"]
+    assert response.evaluation_focus == ["并发设计取舍"]
+
+
 def test_question_prompt_bundle_includes_all_basics_templates() -> None:
     system_prompt, user_prompt, tools = question_prompt_bundle(
         GenerateQuestionRequest(
@@ -148,6 +205,25 @@ def test_question_prompt_bundle_includes_all_basics_templates() -> None:
     assert templates_payload["templates"][0]["prompt"] == "问题1"
 
 
+def test_question_prompt_bundle_includes_job_target_analysis_when_present() -> None:
+    _, user_prompt, tools = question_prompt_bundle(
+        GenerateQuestionRequest(
+            mode="basics",
+            topic="redis",
+            intensity="standard",
+            job_target_analysis=JobTargetAnalysisSnapshot(
+                summary="偏高并发后端",
+                must_have_skills=["Redis", "缓存一致性"],
+                evaluation_focus=["高并发缓存设计"],
+            ),
+        )
+    )
+
+    assert "是否绑定岗位 JD：有" in user_prompt
+    payload = tools[-1].handler({})
+    assert payload["job_target_analysis"]["must_have_skills"] == ["Redis", "缓存一致性"]
+
+
 def test_evaluate_prompt_bundle_requires_conservative_followup_when_evidence_is_thin() -> None:
     system_prompt, user_prompt, tools = evaluate_prompt_bundle(
         EvaluateAnswerRequest(
@@ -167,6 +243,27 @@ def test_evaluate_prompt_bundle_requires_conservative_followup_when_evidence_is_
     assert "是否为追问回答：否" in user_prompt
 
 
+def test_evaluate_prompt_bundle_includes_job_target_analysis_context() -> None:
+    _, user_prompt, tools = evaluate_prompt_bundle(
+        EvaluateAnswerRequest(
+            mode="project",
+            question="你怎么处理缓存一致性？",
+            expected_points=["先定义一致性目标"],
+            answer="我会先定策略，再看写路径。",
+            job_target_analysis=JobTargetAnalysisSnapshot(
+                summary="看重高并发缓存架构",
+                must_have_skills=["缓存一致性"],
+                responsibilities=["负责核心链路稳定性"],
+                evaluation_focus=["故障排查闭环"],
+            ),
+        )
+    )
+
+    assert "是否绑定岗位 JD：有" in user_prompt
+    payload = tools[0].handler({})
+    assert payload["job_target_analysis"]["evaluation_focus"] == ["故障排查闭环"]
+
+
 def test_evaluate_prompt_bundle_marks_followup_requests() -> None:
     _, user_prompt, tools = evaluate_prompt_bundle(
         EvaluateAnswerRequest(
@@ -182,6 +279,36 @@ def test_evaluate_prompt_bundle_marks_followup_requests() -> None:
     payload = tools[0].handler({})
     assert payload["is_followup"] is True
     assert "是否为追问回答：是" in user_prompt
+
+
+def test_review_prompt_bundle_includes_job_target_analysis_context() -> None:
+    _, user_prompt, tools = review_prompt_bundle(
+        GenerateReviewRequest(
+            session=TrainingSession(
+                id="sess_1",
+                mode="project",
+                project_id="proj_1",
+                job_target_id="jt_1",
+                job_target_analysis_id="jta_1",
+            ),
+            turns=[
+                TrainingTurn(
+                    question="你怎么处理缓存一致性？",
+                    expected_points=["一致性目标", "失败兜底"],
+                    answer="我会先定目标，再看写路径。",
+                )
+            ],
+            job_target_analysis=JobTargetAnalysisSnapshot(
+                summary="看重高并发缓存架构",
+                must_have_skills=["缓存一致性"],
+                evaluation_focus=["故障排查闭环"],
+            ),
+        )
+    )
+
+    assert "是否绑定岗位 JD：有" in user_prompt
+    payload = tools[0].handler({})
+    assert payload["job_target_analysis"]["must_have_skills"] == ["缓存一致性"]
 
 
 def test_runtime_raises_when_llm_is_disabled() -> None:
@@ -220,6 +347,26 @@ def test_analyze_repo_requires_llm_when_no_model_client_is_configured() -> None:
 
     with pytest.raises(ModelClientError):
         runtime.analyze_repo(AnalyzeRepoRequest(repo_url="https://github.com/example/repo"))
+
+
+def test_analyze_job_target_requires_llm_when_no_model_client_is_configured() -> None:
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="",
+            openai_base_url="",
+            openai_api_key="",
+            llm_timeout_seconds=10,
+        )
+    )
+
+    with pytest.raises(ModelClientError):
+        runtime.analyze_job_target(
+            AnalyzeJobTargetRequest(
+                title="后端工程师",
+                source_text="要求 Go、Redis、Kafka 经验。",
+            )
+        )
 
 
 @pytest.mark.parametrize(

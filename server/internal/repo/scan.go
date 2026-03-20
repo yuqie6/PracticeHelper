@@ -73,6 +73,79 @@ func scanProjectProfile(scanner interface{ Scan(dest ...any) error }) (*domain.P
 	return project, nil
 }
 
+func scanJobTarget(scanner interface{ Scan(dest ...any) error }) (*domain.JobTarget, error) {
+	var (
+		id, title, companyName, sourceText, latestAnalysisID, latestAnalysisStatus string
+		lastUsedAt, createdAt, updatedAt                                           string
+	)
+
+	if err := scanner.Scan(
+		&id,
+		&title,
+		&companyName,
+		&sourceText,
+		&latestAnalysisID,
+		&latestAnalysisStatus,
+		&lastUsedAt,
+		&createdAt,
+		&updatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return &domain.JobTarget{
+		ID:                   id,
+		Title:                title,
+		CompanyName:          companyName,
+		SourceText:           sourceText,
+		LatestAnalysisID:     latestAnalysisID,
+		LatestAnalysisStatus: latestAnalysisStatus,
+		LastUsedAt:           parseNullableTime(lastUsedAt),
+		CreatedAt:            parseTime(createdAt),
+		UpdatedAt:            parseTime(updatedAt),
+	}, nil
+}
+
+func scanJobTargetAnalysisRun(scanner interface{ Scan(dest ...any) error }) (*domain.JobTargetAnalysisRun, error) {
+	var (
+		id, jobTargetID, sourceTextSnapshot, status, errorMessage, summary string
+		mustHaveSkillsJSON, bonusSkillsJSON, responsibilitiesJSON          string
+		evaluationFocusJSON, createdAt, finishedAt                         string
+	)
+
+	if err := scanner.Scan(
+		&id,
+		&jobTargetID,
+		&sourceTextSnapshot,
+		&status,
+		&errorMessage,
+		&summary,
+		&mustHaveSkillsJSON,
+		&bonusSkillsJSON,
+		&responsibilitiesJSON,
+		&evaluationFocusJSON,
+		&createdAt,
+		&finishedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return &domain.JobTargetAnalysisRun{
+		ID:                 id,
+		JobTargetID:        jobTargetID,
+		SourceTextSnapshot: sourceTextSnapshot,
+		Status:             status,
+		ErrorMessage:       errorMessage,
+		Summary:            summary,
+		MustHaveSkills:     parseStringList(mustHaveSkillsJSON),
+		BonusSkills:        parseStringList(bonusSkillsJSON),
+		Responsibilities:   parseStringList(responsibilitiesJSON),
+		EvaluationFocus:    parseStringList(evaluationFocusJSON),
+		CreatedAt:          parseTime(createdAt),
+		FinishedAt:         parseNullableTime(finishedAt),
+	}, nil
+}
+
 func scanProjectImportJob(scanner interface{ Scan(dest ...any) error }) (*domain.ProjectImportJob, error) {
 	var id, repoURL, status, stage, message, errorMessage, projectID, projectName, createdAt, updatedAt, startedAt, finishedAt string
 	if err := scanner.Scan(&id, &repoURL, &status, &stage, &message, &errorMessage, &projectID, &projectName, &createdAt, &updatedAt, &startedAt, &finishedAt); err != nil {
@@ -136,25 +209,46 @@ func scanQuestionTemplate(scanner interface{ Scan(dest ...any) error }) (*domain
 }
 
 func scanTrainingSession(scanner interface{ Scan(dest ...any) error }) (*domain.TrainingSession, error) {
-	var id, mode, topic, projectID, intensity, status, startedAt, endedAt, reviewID, createdAt, updatedAt string
+	var (
+		id, mode, topic, projectID, jobTargetID, jobTargetAnalysisID string
+		intensity, status, startedAt, endedAt, reviewID              string
+		createdAt, updatedAt                                         string
+	)
 	var totalScore float64
-	if err := scanner.Scan(&id, &mode, &topic, &projectID, &intensity, &status, &totalScore, &startedAt, &endedAt, &reviewID, &createdAt, &updatedAt); err != nil {
+	if err := scanner.Scan(
+		&id,
+		&mode,
+		&topic,
+		&projectID,
+		&jobTargetID,
+		&jobTargetAnalysisID,
+		&intensity,
+		&status,
+		&totalScore,
+		&startedAt,
+		&endedAt,
+		&reviewID,
+		&createdAt,
+		&updatedAt,
+	); err != nil {
 		return nil, err
 	}
 
 	return &domain.TrainingSession{
-		ID:         id,
-		Mode:       mode,
-		Topic:      topic,
-		ProjectID:  projectID,
-		Intensity:  intensity,
-		Status:     status,
-		TotalScore: totalScore,
-		StartedAt:  parseNullableTime(startedAt),
-		EndedAt:    parseNullableTime(endedAt),
-		ReviewID:   reviewID,
-		CreatedAt:  parseTime(createdAt),
-		UpdatedAt:  parseTime(updatedAt),
+		ID:                  id,
+		Mode:                mode,
+		Topic:               topic,
+		ProjectID:           projectID,
+		JobTargetID:         jobTargetID,
+		JobTargetAnalysisID: jobTargetAnalysisID,
+		Intensity:           intensity,
+		Status:              status,
+		TotalScore:          totalScore,
+		StartedAt:           parseNullableTime(startedAt),
+		EndedAt:             parseNullableTime(endedAt),
+		ReviewID:            reviewID,
+		CreatedAt:           parseTime(createdAt),
+		UpdatedAt:           parseTime(updatedAt),
 	}, nil
 }
 
@@ -202,11 +296,26 @@ func scanTrainingTurn(scanner interface{ Scan(dest ...any) error }) (*domain.Tra
 
 func scanReviewCard(scanner interface{ Scan(dest ...any) error }) (*domain.ReviewCard, error) {
 	var (
-		id, sessionID, overall, topFix, topFixReason, highlightsJSON, gapsJSON string
-		suggestedTopicsJSON, nextTrainingFocusJSON, recommendedNextJSON        string
-		scoreBreakdownJSON, createdAt                                          string
+		id, sessionID, jobTargetID, jobTargetAnalysisID, overall, topFix, topFixReason string
+		highlightsJSON, gapsJSON, suggestedTopicsJSON, nextTrainingFocusJSON           string
+		recommendedNextJSON, scoreBreakdownJSON, createdAt                             string
 	)
-	if err := scanner.Scan(&id, &sessionID, &overall, &topFix, &topFixReason, &highlightsJSON, &gapsJSON, &suggestedTopicsJSON, &nextTrainingFocusJSON, &recommendedNextJSON, &scoreBreakdownJSON, &createdAt); err != nil {
+	if err := scanner.Scan(
+		&id,
+		&sessionID,
+		&jobTargetID,
+		&jobTargetAnalysisID,
+		&overall,
+		&topFix,
+		&topFixReason,
+		&highlightsJSON,
+		&gapsJSON,
+		&suggestedTopicsJSON,
+		&nextTrainingFocusJSON,
+		&recommendedNextJSON,
+		&scoreBreakdownJSON,
+		&createdAt,
+	); err != nil {
 		return nil, err
 	}
 
@@ -222,18 +331,20 @@ func scanReviewCard(scanner interface{ Scan(dest ...any) error }) (*domain.Revie
 	}
 
 	return &domain.ReviewCard{
-		ID:                id,
-		SessionID:         sessionID,
-		Overall:           overall,
-		TopFix:            topFix,
-		TopFixReason:      topFixReason,
-		Highlights:        parseStringList(highlightsJSON),
-		Gaps:              parseStringList(gapsJSON),
-		SuggestedTopics:   parseStringList(suggestedTopicsJSON),
-		NextTrainingFocus: parseStringList(nextTrainingFocusJSON),
-		RecommendedNext:   recommendedNext,
-		ScoreBreakdown:    breakdown,
-		CreatedAt:         parseTime(createdAt),
+		ID:                  id,
+		SessionID:           sessionID,
+		JobTargetID:         jobTargetID,
+		JobTargetAnalysisID: jobTargetAnalysisID,
+		Overall:             overall,
+		TopFix:              topFix,
+		TopFixReason:        topFixReason,
+		Highlights:          parseStringList(highlightsJSON),
+		Gaps:                parseStringList(gapsJSON),
+		SuggestedTopics:     parseStringList(suggestedTopicsJSON),
+		NextTrainingFocus:   parseStringList(nextTrainingFocusJSON),
+		RecommendedNext:     recommendedNext,
+		ScoreBreakdown:      breakdown,
+		CreatedAt:           parseTime(createdAt),
 	}, nil
 }
 

@@ -7,6 +7,8 @@ from langgraph.graph import END, START, StateGraph
 from app.agent_runtime import AgentRuntime
 from app.config import Settings
 from app.schemas import (
+    AnalyzeJobTargetRequest,
+    AnalyzeJobTargetResponse,
     AnalyzeRepoRequest,
     AnalyzeRepoResponse,
     EvaluateAnswerRequest,
@@ -21,6 +23,11 @@ from app.schemas import (
 class AnalyzeRepoState(TypedDict):
     request: AnalyzeRepoRequest
     result: AnalyzeRepoResponse
+
+
+class AnalyzeJobTargetState(TypedDict):
+    request: AnalyzeJobTargetRequest
+    result: AnalyzeJobTargetResponse
 
 
 class GenerateQuestionState(TypedDict):
@@ -44,6 +51,7 @@ def build_flows(settings: Settings) -> dict[str, object]:
     # 是为了先把 FastAPI 入口固定成 graph.invoke 边界，后续再按需插入检索、审查或缓存节点。
     return {
         "analyze_repo": build_analyze_repo_graph(runtime),
+        "analyze_job_target": build_analyze_job_target_graph(runtime),
         "generate_question": build_generate_question_graph(runtime),
         "evaluate_answer": build_evaluate_answer_graph(runtime),
         "generate_review": build_generate_review_graph(runtime),
@@ -56,6 +64,21 @@ def build_analyze_repo_graph(runtime: AgentRuntime):
         return {"request": state["request"], "result": AnalyzeRepoResponse.model_validate(result)}
 
     graph = StateGraph(AnalyzeRepoState)
+    graph.add_node("run", run)
+    graph.add_edge(START, "run")
+    graph.add_edge("run", END)
+    return graph.compile()
+
+
+def build_analyze_job_target_graph(runtime: AgentRuntime):
+    def run(state: AnalyzeJobTargetState) -> AnalyzeJobTargetState:
+        result = runtime.analyze_job_target(state["request"])
+        return {
+            "request": state["request"],
+            "result": AnalyzeJobTargetResponse.model_validate(result),
+        }
+
+    graph = StateGraph(AnalyzeJobTargetState)
     graph.add_node("run", run)
     graph.add_edge(START, "run")
     graph.add_edge("run", END)

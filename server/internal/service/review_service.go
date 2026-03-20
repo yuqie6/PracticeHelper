@@ -16,11 +16,16 @@ func (s *Service) finalizeReview(ctx context.Context, sessionID string) (*domain
 	if updatedSession == nil {
 		return nil, ErrSessionNotFound
 	}
+	jobTargetAnalysis, err := s.getJobTargetAnalysisSnapshotForSession(ctx, updatedSession)
+	if err != nil {
+		return nil, err
+	}
 
 	review, err := s.sidecar.GenerateReview(ctx, domain.GenerateReviewRequest{
-		Session: updatedSession,
-		Project: updatedSession.Project,
-		Turns:   updatedSession.Turns,
+		Session:           updatedSession,
+		Project:           updatedSession.Project,
+		Turns:             updatedSession.Turns,
+		JobTargetAnalysis: jobTargetAnalysis,
 	})
 	if err != nil {
 		return nil, err
@@ -41,11 +46,16 @@ func (s *Service) finalizeReviewStream(
 	if updatedSession == nil {
 		return nil, ErrSessionNotFound
 	}
+	jobTargetAnalysis, err := s.getJobTargetAnalysisSnapshotForSession(ctx, updatedSession)
+	if err != nil {
+		return nil, err
+	}
 
 	review, err := s.sidecar.GenerateReviewStream(ctx, domain.GenerateReviewRequest{
-		Session: updatedSession,
-		Project: updatedSession.Project,
-		Turns:   updatedSession.Turns,
+		Session:           updatedSession,
+		Project:           updatedSession.Project,
+		Turns:             updatedSession.Turns,
+		JobTargetAnalysis: jobTargetAnalysis,
 	}, emit)
 	if err != nil {
 		return nil, err

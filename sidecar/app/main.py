@@ -13,6 +13,8 @@ from app.config import load_settings
 from app.langgraph_flows import build_flows
 from app.llm_client import ModelClientError
 from app.schemas import (
+    AnalyzeJobTargetRequest,
+    AnalyzeJobTargetResponse,
     AnalyzeRepoRequest,
     AnalyzeRepoResponse,
     EvaluateAnswerRequest,
@@ -94,6 +96,11 @@ def healthcheck() -> dict[str, str]:
 @app.post("/internal/analyze_repo", response_model=AnalyzeRepoResponse)
 def analyze_repo_endpoint(request: AnalyzeRepoRequest) -> AnalyzeRepoResponse:
     return flows["analyze_repo"].invoke({"request": request})["result"]
+
+
+@app.post("/internal/analyze_job_target", response_model=AnalyzeJobTargetResponse)
+def analyze_job_target_endpoint(request: AnalyzeJobTargetRequest) -> AnalyzeJobTargetResponse:
+    return flows["analyze_job_target"].invoke({"request": request})["result"]
 
 
 @app.post("/internal/generate_question", response_model=GenerateQuestionResponse)

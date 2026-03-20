@@ -8,7 +8,12 @@ from pydantic import BaseModel, Field
 from app.prompt_loader import load_prompt, render_prompt
 from app.repo_context import RepoAnalysisBundle
 from app.runtime_support import RuntimeTool, compact_chunks, repo_overview_payload
-from app.schemas import EvaluateAnswerRequest, GenerateQuestionRequest, GenerateReviewRequest
+from app.schemas import (
+    AnalyzeJobTargetRequest,
+    EvaluateAnswerRequest,
+    GenerateQuestionRequest,
+    GenerateReviewRequest,
+)
 
 
 class AnalyzeRepoDraft(BaseModel):
@@ -18,6 +23,14 @@ class AnalyzeRepoDraft(BaseModel):
     tradeoffs: list[str] = Field(default_factory=list)
     ownership_points: list[str] = Field(default_factory=list)
     followup_points: list[str] = Field(default_factory=list)
+
+
+class AnalyzeJobTargetDraft(BaseModel):
+    summary: str
+    must_have_skills: list[str] = Field(default_factory=list)
+    bonus_skills: list[str] = Field(default_factory=list)
+    responsibilities: list[str] = Field(default_factory=list)
+    evaluation_focus: list[str] = Field(default_factory=list)
 
 
 _DEFAULT_SCORE_WEIGHTS: dict[str, float] = {
@@ -43,8 +56,25 @@ def analyze_repo_prompt_bundle(
         RuntimeTool(
             name="read_repo_chunks",
             description="Read the top repo chunks ranked by importance.",
+            handler=lambda _: {"chunks": compact_chunks(bundle.chunks, limit=8, max_chars=520)},
+        ),
+    ]
+    return system_prompt, user_prompt, tools
+
+
+def analyze_job_target_prompt_bundle(
+    request: AnalyzeJobTargetRequest,
+) -> tuple[str, str, list[RuntimeTool]]:
+    system_prompt = load_prompt("analyze_job_target_system.md")
+    user_prompt = "请根据当前岗位 JD 生成结构化岗位要求。"
+    tools = [
+        RuntimeTool(
+            name="read_job_target_source",
+            description="Read the current job target metadata and original JD text.",
             handler=lambda _: {
-                "chunks": compact_chunks(bundle.chunks, limit=8, max_chars=520)
+                "title": request.title,
+                "company_name": request.company_name,
+                "source_text": request.source_text,
             },
         ),
     ]
@@ -55,9 +85,10 @@ def question_prompt_bundle(
     request: GenerateQuestionRequest,
 ) -> tuple[str, str, list[RuntimeTool]]:
     system_prompt = load_prompt("generate_question_system.md")
+    jd_label = "有" if request.job_target_analysis else "无"
     user_prompt = (
         f"请生成本轮训练的主问题。\n"
-        f"当前模式：{request.mode}，主题：{request.topic}\n\n"
+        f"当前模式：{request.mode}，主题：{request.topic}，是否绑定岗位 JD：{jd_label}\n\n"
         '最终答案必须匹配：{{"question": "string", "expected_points": ["string"]}}'
     )
     tools = [
@@ -87,6 +118,17 @@ def question_prompt_bundle(
                 "weaknesses": [item.model_dump(mode="json") for item in request.weaknesses],
             },
         ),
+        RuntimeTool(
+            name="read_job_target_analysis",
+            description="Read the bound job target analysis snapshot for this training session.",
+            handler=lambda _: {
+                "job_target_analysis": (
+                    request.job_target_analysis.model_dump(mode="json")
+                    if request.job_target_analysis
+                    else None
+                ),
+            },
+        ),
     ]
     return system_prompt, user_prompt, tools
 
@@ -105,10 +147,11 @@ def evaluate_prompt_bundle(
         },
     )
     followup_label = "是" if request.is_followup else "否"
+    jd_label = "有" if request.job_target_analysis else "无"
     user_prompt = (
         f"请评估这次回答，并决定下一刀追问。\n"
         f"当前模式：{request.mode}，主题：{request.topic}，"
-        f"是否为追问回答：{followup_label}"
+        f"是否为追问回答：{followup_label}，是否绑定岗位 JD：{jd_label}"
     )
     tools = [
         RuntimeTool(
@@ -125,6 +168,11 @@ def evaluate_prompt_bundle(
                 "project": request.project.model_dump(mode="json") if request.project else None,
                 "context_chunks": compact_chunks(request.context_chunks),
                 "is_followup": request.is_followup,
+                "job_target_analysis": (
+                    request.job_target_analysis.model_dump(mode="json")
+                    if request.job_target_analysis
+                    else None
+                ),
             },
         ),
     ]
@@ -135,7 +183,8 @@ def review_prompt_bundle(
     request: GenerateReviewRequest,
 ) -> tuple[str, str, list[RuntimeTool]]:
     system_prompt = load_prompt("generate_review_system.md")
-    user_prompt = "请根据整轮训练历史生成最终复盘卡。"
+    jd_label = "有" if request.job_target_analysis else "无"
+    user_prompt = f"请根据整轮训练历史生成最终复盘卡。是否绑定岗位 JD：{jd_label}"
     tools = [
         RuntimeTool(
             name="read_session_summary",
@@ -143,6 +192,11 @@ def review_prompt_bundle(
             handler=lambda _: {
                 "session": request.session.model_dump(mode="json"),
                 "project": request.project.model_dump(mode="json") if request.project else None,
+                "job_target_analysis": (
+                    request.job_target_analysis.model_dump(mode="json")
+                    if request.job_target_analysis
+                    else None
+                ),
             },
         ),
         RuntimeTool(

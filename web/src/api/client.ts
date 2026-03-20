@@ -48,6 +48,40 @@ export interface ProjectProfile {
   import_status: string;
 }
 
+export interface JobTargetRef {
+  id: string;
+  title: string;
+  company_name?: string;
+}
+
+export interface JobTargetAnalysisRun {
+  id: string;
+  job_target_id: string;
+  source_text_snapshot: string;
+  status: 'running' | 'succeeded' | 'failed';
+  error_message?: string;
+  summary?: string;
+  must_have_skills: string[];
+  bonus_skills: string[];
+  responsibilities: string[];
+  evaluation_focus: string[];
+  created_at: string;
+  finished_at?: string;
+}
+
+export interface JobTarget {
+  id: string;
+  title: string;
+  company_name?: string;
+  source_text: string;
+  latest_analysis_id?: string;
+  latest_analysis_status: 'idle' | 'running' | 'succeeded' | 'failed' | 'stale';
+  last_used_at?: string;
+  created_at: string;
+  updated_at: string;
+  latest_successful_analysis?: JobTargetAnalysisRun | null;
+}
+
 export interface ProjectImportJob {
   id: string;
   repo_url: string;
@@ -107,12 +141,15 @@ export interface TrainingSession {
   mode: 'basics' | 'project';
   topic?: string;
   project_id?: string;
+  job_target_id?: string;
+  job_target_analysis_id?: string;
   intensity: string;
   status: string;
   total_score: number;
   review_id?: string;
   turns: TrainingTurn[];
   project?: ProjectProfile;
+  job_target?: JobTargetRef | null;
 }
 
 export interface TrainingSessionSummary {
@@ -129,6 +166,8 @@ export interface TrainingSessionSummary {
 export interface ReviewCard {
   id: string;
   session_id: string;
+  job_target_id?: string;
+  job_target_analysis_id?: string;
   overall: string;
   top_fix?: string;
   top_fix_reason?: string;
@@ -143,6 +182,7 @@ export interface ReviewCard {
     reason?: string;
   } | null;
   score_breakdown: Record<string, number>;
+  job_target?: JobTargetRef | null;
 }
 
 export interface Dashboard {
@@ -317,6 +357,59 @@ export function listProjects(): Promise<ProjectProfile[]> {
   return request('/api/projects');
 }
 
+export function listJobTargets(): Promise<JobTarget[]> {
+  return request('/api/job-targets');
+}
+
+export function createJobTarget(payload: {
+  title: string;
+  company_name?: string;
+  source_text: string;
+}): Promise<JobTarget> {
+  return request('/api/job-targets', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getJobTarget(jobTargetId: string): Promise<JobTarget> {
+  return request(`/api/job-targets/${jobTargetId}`);
+}
+
+export function updateJobTarget(
+  jobTargetId: string,
+  payload: {
+    title: string;
+    company_name?: string;
+    source_text: string;
+  },
+): Promise<JobTarget> {
+  return request(`/api/job-targets/${jobTargetId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function analyzeJobTarget(
+  jobTargetId: string,
+): Promise<JobTargetAnalysisRun> {
+  return request(`/api/job-targets/${jobTargetId}/analyze`, {
+    method: 'POST',
+  });
+}
+
+export function listJobTargetAnalysisRuns(
+  jobTargetId: string,
+): Promise<JobTargetAnalysisRun[]> {
+  return request(`/api/job-targets/${jobTargetId}/analysis-runs`);
+}
+
+export function getJobTargetAnalysisRun(
+  runId: string,
+): Promise<JobTargetAnalysisRun> {
+  return request(`/api/job-targets/analysis-runs/${runId}`);
+}
+
 export function updateProject(
   projectId: string,
   payload: Partial<ProjectProfile>,
@@ -331,6 +424,7 @@ export function createSession(payload: {
   mode: 'basics' | 'project';
   topic?: string;
   project_id?: string;
+  job_target_id?: string;
   intensity: string;
 }): Promise<TrainingSession> {
   return request('/api/sessions', {
@@ -344,6 +438,7 @@ export function createSessionStream(
     mode: 'basics' | 'project';
     topic?: string;
     project_id?: string;
+    job_target_id?: string;
     intensity: string;
   },
   onEvent: (event: StreamEvent) => void,

@@ -117,5 +117,7 @@ def tool_summary(tool_name: str) -> str:
         "read_turn_history": "已读取所有问答记录，正在归纳亮点、漏洞和下一步建议。",
         "read_repo_overview": "已读取仓库概览，正在判断项目主线与技术栈。",
         "read_repo_chunks": "已读取关键源码片段，正在提炼项目亮点与难点。",
+        "read_job_target_source": "已读取岗位 JD 原文，正在提炼岗位重点能力。",
+        "read_job_target_analysis": "已读取岗位要求快照，正在把问题和判断对齐到目标岗位。",
     }
     return summaries.get(tool_name, "")

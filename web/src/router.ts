@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
 import HomeView from './views/HomeView.vue';
+import JobTargetsView from './views/JobTargetsView.vue';
 import ProfileView from './views/ProfileView.vue';
 import ProjectsView from './views/ProjectsView.vue';
 import ReviewView from './views/ReviewView.vue';
@@ -12,6 +13,7 @@ const router = createRouter({
   routes: [
     { path: '/', component: HomeView },
     { path: '/profile', component: ProfileView },
+    { path: '/job-targets', component: JobTargetsView },
     { path: '/projects', component: ProjectsView },
     { path: '/train', component: TrainView },
     { path: '/sessions/:id', component: SessionView, props: true },

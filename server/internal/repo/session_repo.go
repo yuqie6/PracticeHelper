@@ -18,13 +18,15 @@ func (s *Store) CreateSession(ctx context.Context, session *domain.TrainingSessi
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO training_sessions (id, mode, topic, project_id, intensity, status, total_score, started_at, ended_at, review_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO training_sessions (id, mode, topic, project_id, job_target_id, job_target_analysis_id, intensity, status, total_score, started_at, ended_at, review_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		session.ID,
 		session.Mode,
 		session.Topic,
 		session.ProjectID,
+		session.JobTargetID,
+		session.JobTargetAnalysisID,
 		session.Intensity,
 		session.Status,
 		session.TotalScore,
@@ -46,7 +48,7 @@ func (s *Store) CreateSession(ctx context.Context, session *domain.TrainingSessi
 
 func (s *Store) GetSession(ctx context.Context, sessionID string) (*domain.TrainingSession, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, mode, topic, project_id, intensity, status, total_score, started_at, ended_at, review_id, created_at, updated_at
+		SELECT id, mode, topic, project_id, job_target_id, job_target_analysis_id, intensity, status, total_score, started_at, ended_at, review_id, created_at, updated_at
 		FROM training_sessions
 		WHERE id = ?
 	`, sessionID)
@@ -70,6 +72,19 @@ func (s *Store) GetSession(ctx context.Context, sessionID string) (*domain.Train
 			return nil, err
 		}
 		session.Project = project
+	}
+	if session.JobTargetID != "" {
+		target, err := s.getJobTargetRow(ctx, session.JobTargetID)
+		if err != nil {
+			return nil, err
+		}
+		if target != nil {
+			session.JobTarget = &domain.JobTargetRef{
+				ID:          target.ID,
+				Title:       target.Title,
+				CompanyName: target.CompanyName,
+			}
+		}
 	}
 
 	return session, nil

@@ -36,21 +36,27 @@ func (s *Service) SubmitAnswer(ctx context.Context, sessionID string, request do
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
 			return nil, err
 		}
+		jobTargetAnalysis, err := s.getJobTargetAnalysisSnapshotForSession(ctx, session)
+		if err != nil {
+			s.restoreSessionStatus(ctx, session.ID, previousStatus)
+			return nil, err
+		}
 		scoreWeights, err := s.resolveScoreWeights(ctx, session)
 		if err != nil {
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
 			return nil, err
 		}
 		evaluation, err := s.sidecar.EvaluateAnswer(ctx, domain.EvaluateAnswerRequest{
-			Mode:           session.Mode,
-			Topic:          session.Topic,
-			Project:        session.Project,
-			Question:       turn.Question,
-			ExpectedPoints: turn.ExpectedPoints,
-			Answer:         request.Answer,
-			ContextChunks:  contextChunks,
-			IsFollowup:     false,
-			ScoreWeights:   scoreWeights,
+			Mode:              session.Mode,
+			Topic:             session.Topic,
+			Project:           session.Project,
+			Question:          turn.Question,
+			ExpectedPoints:    turn.ExpectedPoints,
+			Answer:            request.Answer,
+			ContextChunks:     contextChunks,
+			IsFollowup:        false,
+			ScoreWeights:      scoreWeights,
+			JobTargetAnalysis: jobTargetAnalysis,
 		})
 		if err != nil {
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
@@ -94,21 +100,27 @@ func (s *Service) SubmitAnswer(ctx context.Context, sessionID string, request do
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
 			return nil, err
 		}
+		jobTargetAnalysis, err := s.getJobTargetAnalysisSnapshotForSession(ctx, session)
+		if err != nil {
+			s.restoreSessionStatus(ctx, session.ID, previousStatus)
+			return nil, err
+		}
 		scoreWeights, err := s.resolveScoreWeights(ctx, session)
 		if err != nil {
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
 			return nil, err
 		}
 		evaluation, err := s.sidecar.EvaluateAnswer(ctx, domain.EvaluateAnswerRequest{
-			Mode:           session.Mode,
-			Topic:          session.Topic,
-			Project:        session.Project,
-			Question:       turn.FollowupQuestion,
-			ExpectedPoints: turn.FollowupExpectedPoint,
-			Answer:         request.Answer,
-			ContextChunks:  contextChunks,
-			IsFollowup:     true,
-			ScoreWeights:   scoreWeights,
+			Mode:              session.Mode,
+			Topic:             session.Topic,
+			Project:           session.Project,
+			Question:          turn.FollowupQuestion,
+			ExpectedPoints:    turn.FollowupExpectedPoint,
+			Answer:            request.Answer,
+			ContextChunks:     contextChunks,
+			IsFollowup:        true,
+			ScoreWeights:      scoreWeights,
+			JobTargetAnalysis: jobTargetAnalysis,
 		})
 		if err != nil {
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
@@ -186,6 +198,11 @@ func (s *Service) SubmitAnswerStream(
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
 			return nil, err
 		}
+		jobTargetAnalysis, err := s.getJobTargetAnalysisSnapshotForSession(ctx, session)
+		if err != nil {
+			s.restoreSessionStatus(ctx, session.ID, previousStatus)
+			return nil, err
+		}
 		scoreWeights, err := s.resolveScoreWeights(ctx, session)
 		if err != nil {
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
@@ -195,15 +212,16 @@ func (s *Service) SubmitAnswerStream(
 		emitStatus(emit, "evaluation_started")
 
 		evaluation, err := s.sidecar.EvaluateAnswerStream(ctx, domain.EvaluateAnswerRequest{
-			Mode:           session.Mode,
-			Topic:          session.Topic,
-			Project:        session.Project,
-			Question:       turn.Question,
-			ExpectedPoints: turn.ExpectedPoints,
-			Answer:         request.Answer,
-			ContextChunks:  contextChunks,
-			IsFollowup:     false,
-			ScoreWeights:   scoreWeights,
+			Mode:              session.Mode,
+			Topic:             session.Topic,
+			Project:           session.Project,
+			Question:          turn.Question,
+			ExpectedPoints:    turn.ExpectedPoints,
+			Answer:            request.Answer,
+			ContextChunks:     contextChunks,
+			IsFollowup:        false,
+			ScoreWeights:      scoreWeights,
+			JobTargetAnalysis: jobTargetAnalysis,
 		}, emit)
 		if err != nil {
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
@@ -249,6 +267,11 @@ func (s *Service) SubmitAnswerStream(
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
 			return nil, err
 		}
+		jobTargetAnalysis, err := s.getJobTargetAnalysisSnapshotForSession(ctx, session)
+		if err != nil {
+			s.restoreSessionStatus(ctx, session.ID, previousStatus)
+			return nil, err
+		}
 		scoreWeights, err := s.resolveScoreWeights(ctx, session)
 		if err != nil {
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)
@@ -257,15 +280,16 @@ func (s *Service) SubmitAnswerStream(
 		emitStatus(emit, "evaluation_started")
 
 		evaluation, err := s.sidecar.EvaluateAnswerStream(ctx, domain.EvaluateAnswerRequest{
-			Mode:           session.Mode,
-			Topic:          session.Topic,
-			Project:        session.Project,
-			Question:       turn.FollowupQuestion,
-			ExpectedPoints: turn.FollowupExpectedPoint,
-			Answer:         request.Answer,
-			ContextChunks:  contextChunks,
-			IsFollowup:     true,
-			ScoreWeights:   scoreWeights,
+			Mode:              session.Mode,
+			Topic:             session.Topic,
+			Project:           session.Project,
+			Question:          turn.FollowupQuestion,
+			ExpectedPoints:    turn.FollowupExpectedPoint,
+			Answer:            request.Answer,
+			ContextChunks:     contextChunks,
+			IsFollowup:        true,
+			ScoreWeights:      scoreWeights,
+			JobTargetAnalysis: jobTargetAnalysis,
 		}, emit)
 		if err != nil {
 			s.restoreSessionStatus(ctx, session.ID, previousStatus)

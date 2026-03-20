@@ -1,10 +1,14 @@
 <template>
   <div class="min-h-screen bg-[var(--neo-bg)] text-[var(--neo-black)]">
     <header class="border-b-2 border-black bg-[var(--neo-red)] md:border-b-4">
-      <div class="neo-page flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div
+        class="neo-page flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
+      >
         <div>
           <p class="neo-kicker bg-[var(--neo-yellow)]">{{ t('app.name') }}</p>
-          <h1 class="text-2xl font-black uppercase tracking-[0.08em] md:text-4xl">
+          <h1
+            class="text-2xl font-black uppercase tracking-[0.08em] md:text-4xl"
+          >
             {{ t('app.title') }}
           </h1>
           <RouterLink
@@ -76,12 +80,16 @@ const { data: importJobsData } = useQuery({
   queryFn: listImportJobs,
   refetchInterval: (query) => {
     const jobs = (query.state.data as ProjectImportJob[] | undefined) ?? [];
-    return jobs.some((job) => ['queued', 'running'].includes(job.status)) ? 3000 : false;
+    return jobs.some((job) => ['queued', 'running'].includes(job.status))
+      ? 3000
+      : false;
   },
 });
 
 const activeImportSummary = computed(() => {
-  const job = (importJobsData.value ?? []).find((item) => ['queued', 'running'].includes(item.status));
+  const job = (importJobsData.value ?? []).find((item) =>
+    ['queued', 'running'].includes(item.status),
+  );
   if (!job) {
     return '';
   }
@@ -94,6 +102,7 @@ const activeImportSummary = computed(() => {
 const navItems = computed(() => [
   { label: t('app.nav.home'), to: '/' },
   { label: t('app.nav.profile'), to: '/profile' },
+  { label: t('app.nav.jobs'), to: '/job-targets' },
   { label: t('app.nav.projects'), to: '/projects' },
   { label: t('app.nav.train'), to: '/train' },
 ]);

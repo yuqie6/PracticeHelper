@@ -12,6 +12,7 @@ export const messages = {
       nav: {
         home: '首页',
         profile: '画像',
+        jobs: '岗位',
         projects: '项目',
         train: '训练',
       },
@@ -81,6 +82,13 @@ export const messages = {
         persisting_project: '写入项目材料',
         completed: '导入完成',
         failed: '导入失败',
+      },
+      jobTargetAnalysisStatus: {
+        idle: '待分析',
+        running: '分析中',
+        succeeded: '可用于训练',
+        failed: '分析失败',
+        stale: '原文已变更',
       },
       weaknessKind: {
         topic: '知识点',
@@ -238,6 +246,48 @@ export const messages = {
       saveAction: '保存项目信息',
       saveErrorTitle: '保存失败',
     },
+    jobs: {
+      hero: {
+        kicker: '岗位材料',
+        description:
+          '先把目标岗位 JD 存下来，再生成结构化要求，后续训练才会真正带岗位视角。',
+      },
+      listTitle: 'JD 列表',
+      emptyList: '还没有岗位 JD，先新建一份。',
+      createTitle: '新建岗位 JD',
+      editorTitle: '岗位详情',
+      latestAnalysisTitle: '最新成功分析',
+      historyTitle: '分析历史',
+      historyEmpty: '还没有分析记录。',
+      noLatestAnalysis: '这份 JD 还没有成功分析结果。',
+      noSelectionTitle: '先选择一份 JD',
+      noSelectionDescription: '左侧选中一份 JD，或直接新建一份新的岗位目标。',
+      createErrorTitle: '创建 JD 失败',
+      saveErrorTitle: '保存 JD 失败',
+      analyzeErrorTitle: '分析 JD 失败',
+      saveAction: '保存 JD',
+      analyzeAction: '开始分析',
+      reanalyzeAction: '重新分析',
+      createAction: '新建 JD',
+      analyzing: '分析中...',
+      fields: {
+        title: '岗位标题',
+        companyName: '公司名',
+        sourceText: 'JD 原文',
+        summary: '岗位摘要',
+        mustHaveSkills: '必备能力',
+        bonusSkills: '加分项',
+        responsibilities: '岗位职责',
+        evaluationFocus: '面试重点',
+      },
+      placeholders: {
+        title: '例如：后端工程师 - 某创业公司',
+        companyName: '例如：某创业公司',
+        sourceText: '直接粘贴岗位 JD 原文',
+      },
+      runStatus: '状态：{status}',
+      runError: '失败原因：{message}',
+    },
     train: {
       hero: {
         kicker: '训练设置',
@@ -250,10 +300,15 @@ export const messages = {
         intensity: '训练强度',
         topic: '主题',
         project: '选择项目',
+        jobTarget: '参考岗位 JD',
       },
       resumeTitle: '继续当前训练',
       resumeDescription: '{name} · {status}',
       chooseProject: '请选择项目',
+      chooseJobTarget: '请选择岗位 JD',
+      genericJobTargetOption: '不使用 JD（通用训练）',
+      jobTargetUnavailable:
+        '这份 JD 还没有可用分析结果，暂时不能开始本轮训练。',
       startAction: '开始这一轮训练',
       startErrorTitle: '启动失败',
     },
@@ -311,6 +366,9 @@ export const messages = {
       retryReviewAction: '重试生成复盘',
       reviewWrapUpTitle: '本轮问答已完成',
       reviewWrapUpDescription: '系统正在整理复盘卡，马上带你进入总结页面。',
+      jobTargetTitle: '本轮参考岗位',
+      jobTargetDescription: '这轮问题、评分和复盘都会围绕这份 JD 的要求。',
+      jobTargetEmpty: '本轮未绑定岗位 JD，当前仍按通用训练处理。',
       streamPending: '模型已经开始返回内容，但还在整理成结构化结果，请稍候。',
       streamSectionCounter: '过程片段 {index}',
       streamKinds: {
@@ -337,6 +395,8 @@ export const messages = {
         read_turn_history: '已读取历史问答记录',
         read_repo_overview: '已读取仓库概览',
         read_repo_chunks: '已读取关键源码片段',
+        read_job_target_source: '已读取岗位 JD 原文',
+        read_job_target_analysis: '已读取岗位要求快照',
       },
     },
     progress: {
@@ -378,6 +438,8 @@ export const messages = {
       recommendedNextMode: '建议直接开始一轮 {mode}',
       continueAction: '继续下一轮',
       startRecommendedAction: '立即开始推荐下一轮',
+      jobTargetTitle: '本轮参考岗位',
+      jobTargetDescription: '这轮复盘是按这份岗位 JD 的视角整理的。',
     },
   },
   en: {
@@ -393,6 +455,7 @@ export const messages = {
       nav: {
         home: 'Home',
         profile: 'Profile',
+        jobs: 'Jobs',
         projects: 'Projects',
         train: 'Train',
       },
@@ -466,6 +529,13 @@ export const messages = {
         persisting_project: 'Persisting project data',
         completed: 'Import completed',
         failed: 'Import failed',
+      },
+      jobTargetAnalysisStatus: {
+        idle: 'Needs analysis',
+        running: 'Analyzing',
+        succeeded: 'Ready for training',
+        failed: 'Analysis failed',
+        stale: 'Source changed',
       },
       weaknessKind: {
         topic: 'Knowledge area',
@@ -634,6 +704,49 @@ export const messages = {
       saveAction: 'Save project details',
       saveErrorTitle: 'Save failed',
     },
+    jobs: {
+      hero: {
+        kicker: 'Job targets',
+        description:
+          'Save target JDs first, then analyze them into structured requirements so later training can stay role-specific.',
+      },
+      listTitle: 'JD list',
+      emptyList: 'No JD yet. Create one first.',
+      createTitle: 'Create JD',
+      editorTitle: 'JD details',
+      latestAnalysisTitle: 'Latest successful analysis',
+      historyTitle: 'Analysis history',
+      historyEmpty: 'No analysis history yet.',
+      noLatestAnalysis: 'This JD has no successful analysis yet.',
+      noSelectionTitle: 'Choose a JD first',
+      noSelectionDescription:
+        'Select a JD from the list on the left, or create a new one.',
+      createErrorTitle: 'Failed to create JD',
+      saveErrorTitle: 'Failed to save JD',
+      analyzeErrorTitle: 'Failed to analyze JD',
+      saveAction: 'Save JD',
+      analyzeAction: 'Analyze',
+      reanalyzeAction: 'Re-analyze',
+      createAction: 'Create JD',
+      analyzing: 'Analyzing...',
+      fields: {
+        title: 'Job title',
+        companyName: 'Company',
+        sourceText: 'Original JD',
+        summary: 'Role summary',
+        mustHaveSkills: 'Must-have skills',
+        bonusSkills: 'Bonus skills',
+        responsibilities: 'Responsibilities',
+        evaluationFocus: 'Evaluation focus',
+      },
+      placeholders: {
+        title: 'For example: Backend Engineer - Startup',
+        companyName: 'For example: Startup Inc.',
+        sourceText: 'Paste the original JD text here',
+      },
+      runStatus: 'Status: {status}',
+      runError: 'Failure reason: {message}',
+    },
     train: {
       hero: {
         kicker: 'Training',
@@ -646,10 +759,15 @@ export const messages = {
         intensity: 'Intensity',
         topic: 'Topic',
         project: 'Project',
+        jobTarget: 'Job target JD',
       },
       resumeTitle: 'Resume current session',
       resumeDescription: '{name} · {status}',
       chooseProject: 'Select a project',
+      chooseJobTarget: 'Select a JD',
+      genericJobTargetOption: 'No JD (generic training)',
+      jobTargetUnavailable:
+        'This JD does not have a usable analysis result yet, so this session cannot start.',
       startAction: 'Start this session',
       startErrorTitle: 'Start failed',
     },
@@ -715,6 +833,11 @@ export const messages = {
       reviewWrapUpTitle: 'This round is complete',
       reviewWrapUpDescription:
         'The system is organizing your review card and will take you there in a moment.',
+      jobTargetTitle: 'Bound job target',
+      jobTargetDescription:
+        'This round uses the requirements from this JD for the question, scoring, and review.',
+      jobTargetEmpty:
+        'This round is not bound to a job target JD and is still running in generic mode.',
       streamPending:
         'The model is already returning content, but the structured result is still being assembled.',
       streamSectionCounter: 'Stream block {index}',
@@ -742,6 +865,8 @@ export const messages = {
         read_turn_history: 'Turn history loaded',
         read_repo_overview: 'Repository overview loaded',
         read_repo_chunks: 'Key source chunks loaded',
+        read_job_target_source: 'Job target JD loaded',
+        read_job_target_analysis: 'Job target requirements loaded',
       },
     },
     progress: {
@@ -801,6 +926,9 @@ export const messages = {
       recommendedNextMode: 'Start a {mode} round next',
       continueAction: 'Continue training',
       startRecommendedAction: 'Start recommended round',
+      jobTargetTitle: 'Bound job target',
+      jobTargetDescription:
+        'This review was written from the perspective of this JD.',
     },
   },
 } as const;

@@ -52,6 +52,14 @@ class ProjectProfile(BaseModel):
     import_status: str = "ready"
 
 
+class JobTargetAnalysisSnapshot(BaseModel):
+    summary: str = ""
+    must_have_skills: list[str] = Field(default_factory=list)
+    bonus_skills: list[str] = Field(default_factory=list)
+    responsibilities: list[str] = Field(default_factory=list)
+    evaluation_focus: list[str] = Field(default_factory=list)
+
+
 class WeaknessHit(BaseModel):
     kind: WeaknessKind
     label: str
@@ -108,6 +116,16 @@ class AnalyzeRepoResponse(BaseModel):
     chunks: list[RepoChunk] = Field(default_factory=list)
 
 
+class AnalyzeJobTargetRequest(BaseModel):
+    title: str = ""
+    company_name: str = ""
+    source_text: str
+
+
+class AnalyzeJobTargetResponse(JobTargetAnalysisSnapshot):
+    pass
+
+
 class GenerateQuestionRequest(BaseModel):
     mode: Literal["basics", "project"]
     topic: str = ""
@@ -116,6 +134,7 @@ class GenerateQuestionRequest(BaseModel):
     templates: list[QuestionTemplate] = Field(default_factory=list)
     context_chunks: list[RepoChunk] = Field(default_factory=list)
     weaknesses: list[WeaknessTag] = Field(default_factory=list)
+    job_target_analysis: JobTargetAnalysisSnapshot | None = None
 
 
 class GenerateQuestionResponse(BaseModel):
@@ -133,6 +152,7 @@ class EvaluateAnswerRequest(BaseModel):
     context_chunks: list[RepoChunk] = Field(default_factory=list)
     is_followup: bool = False
     score_weights: dict[str, float] = Field(default_factory=dict)
+    job_target_analysis: JobTargetAnalysisSnapshot | None = None
 
 
 class EvaluationResult(BaseModel):
@@ -165,6 +185,8 @@ class TrainingSession(BaseModel):
     mode: Literal["basics", "project"]
     topic: str = ""
     project_id: str = ""
+    job_target_id: str = ""
+    job_target_analysis_id: str = ""
     intensity: str = "standard"
     status: str = ""
     total_score: float = 0.0
@@ -174,6 +196,7 @@ class GenerateReviewRequest(BaseModel):
     session: TrainingSession
     project: ProjectProfile | None = None
     turns: list[TrainingTurn] = Field(default_factory=list)
+    job_target_analysis: JobTargetAnalysisSnapshot | None = None
 
 
 class NextSession(BaseModel):
