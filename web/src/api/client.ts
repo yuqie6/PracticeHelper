@@ -321,6 +321,12 @@ export function submitAnswerStream(
   }, onEvent);
 }
 
+export function retrySessionReview(sessionId: string): Promise<TrainingSession> {
+  return request(`/api/sessions/${sessionId}/retry-review`, {
+    method: 'POST',
+  });
+}
+
 export function getReview(reviewId: string): Promise<ReviewCard> {
   return request(`/api/reviews/${reviewId}`);
 }

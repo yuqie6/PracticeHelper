@@ -240,6 +240,9 @@ export const messages = {
       placeholderInitial: '先说结论，再解释原因，最后给一个真实项目或场景例子。',
       placeholderFollowup: '直接回应追问，补充关键信息，不要重复上一次的回答。',
       submitErrorTitle: '提交失败',
+      reviewPendingTitle: '复盘还没收口',
+      reviewPendingDescription: '上一轮回答已经保存，但复盘生成没有完成。你可以直接重试复盘，不需要重新回答。',
+      retryReviewAction: '重试生成复盘',
       streamPending: '模型已经开始返回内容，但还在整理成结构化结果，请稍候。',
       streamSectionCounter: '过程片段 {index}',
       streamKinds: {
@@ -546,6 +549,9 @@ export const messages = {
       placeholderInitial: 'State your conclusion first, explain why, then give a real example.',
       placeholderFollowup: 'Answer the follow-up directly and add the missing detail without repeating yourself.',
       submitErrorTitle: 'Submit failed',
+      reviewPendingTitle: 'Review is not finished yet',
+      reviewPendingDescription: 'Your answer is already saved, but review generation did not finish. You can retry the review directly without answering again.',
+      retryReviewAction: 'Retry review generation',
       streamPending: 'The model is already returning content, but the structured result is still being assembled.',
       streamSectionCounter: 'Stream block {index}',
       streamKinds: {

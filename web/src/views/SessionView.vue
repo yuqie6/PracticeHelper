@@ -33,6 +33,24 @@
       :message="submitError"
     />
 
+    <div
+      v-if="showReviewRecovery"
+      class="neo-panel space-y-3 bg-[var(--neo-yellow)]"
+    >
+      <p class="neo-kicker bg-white">{{ t('session.reviewPendingTitle') }}</p>
+      <p class="text-sm font-semibold">
+        {{ t('session.reviewPendingDescription') }}
+      </p>
+      <button
+        type="button"
+        class="neo-button-dark"
+        :disabled="isRetryingReview"
+        @click="retryReview"
+      >
+        {{ isRetryingReview ? t('common.starting') : t('session.retryReviewAction') }}
+      </button>
+    </div>
+
     <div v-else-if="session && activePrompt" class="neo-grid lg:grid-cols-[1.1fr_0.9fr]">
       <div class="neo-panel space-y-4">
         <p class="neo-kicker bg-[var(--neo-red)]">{{ t('session.currentQuestion') }}</p>
@@ -81,7 +99,12 @@ import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
-import { getSession, submitAnswerStream, type StreamEvent } from '../api/client';
+import {
+  getSession,
+  retrySessionReview,
+  submitAnswerStream,
+  type StreamEvent,
+} from '../api/client';
 import NoticePanel from '../components/NoticePanel.vue';
 import ProgressPanel from '../components/ProgressPanel.vue';
 import StreamTracePanel from '../components/StreamTracePanel.vue';
@@ -159,17 +182,32 @@ const mutation = useMutation({
   },
 });
 
+const retryReviewMutation = useMutation({
+  mutationFn: () => retrySessionReview(sessionId.value),
+  onSuccess: async (updated) => {
+    queryClient.setQueryData(['session', sessionId], updated);
+    await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+  },
+  onError: (error) => {
+    submitError.value = error instanceof Error ? error.message : t('common.requestFailed');
+  },
+});
+
 const isSubmitting = computed(() => mutation.isPending.value);
+const isRetryingReview = computed(() => retryReviewMutation.isPending.value);
 const isBackgroundProcessing = computed(() =>
-  ['generating_question', 'evaluating', 'review_pending'].includes(session.value?.status ?? ''),
+  ['generating_question', 'evaluating'].includes(session.value?.status ?? ''),
 );
-const showProgressPanel = computed(() => isSubmitting.value || isBackgroundProcessing.value);
+const showProgressPanel = computed(() => isSubmitting.value || isRetryingReview.value || isBackgroundProcessing.value);
+const showReviewRecovery = computed(
+  () => session.value?.status === 'review_pending' && !isRetryingReview.value && !isSubmitting.value,
+);
 const progressMode = computed(() => {
   const turns = session.value?.turns ?? [];
   const latestTurn = turns[turns.length - 1];
 
-  if (session.value?.status === 'review_pending') {
-    return 'review';
+  if (session.value?.status === 'review_pending' || isRetryingReview.value) {
+      return 'review';
   }
 
   if (session.value?.status === 'generating_question') {
@@ -244,6 +282,11 @@ function submit() {
     return;
   }
   mutation.mutate(answer.value);
+}
+
+function retryReview() {
+  submitError.value = '';
+  retryReviewMutation.mutate();
 }
 
 function handleStreamEvent(event: StreamEvent) {
