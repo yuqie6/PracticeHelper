@@ -113,7 +113,8 @@ export const messages = {
         weaknessKicker: 'Top Issue',
         weaknessTitle: '当前短板',
         weaknessEmpty: '还没有薄弱点记录，完成第一轮训练后这里会开始沉淀。',
-        weaknessDescription: '当前最需要补的是 {kind} / {label}，建议优先围绕这个点练习。',
+        weaknessDescription:
+          '当前最需要补的是 {kind} / {label}，建议优先围绕这个点练习。',
         sessionKicker: 'Recent',
         sessionTitle: '最近训练',
         sessionEmpty: '还没有历史训练记录，完成第一轮后这里会显示最近结果。',
@@ -128,16 +129,33 @@ export const messages = {
       sections: {
         weaknesses: '薄弱点',
         sessions: '训练记录',
-        weaknessesEmpty: '还没有历史薄弱点，完成第一轮训练后这里会显示重点问题。',
+        weaknessesEmpty:
+          '还没有历史薄弱点，完成第一轮训练后这里会显示重点问题。',
         sessionsEmpty: '还没有训练记录，开始第一轮后这里会看到最近结果。',
       },
     },
     profile: {
       hero: {
         kicker: '画像设置',
-        title: '先完善求职画像，再开始训练。',
-        description:
-          '这里记录目标岗位、阶段、技术栈和核心项目，后续推荐与追问都会以这份信息为基础。',
+        newUserTitle: '先让我了解你的情况',
+        newUserDescription:
+          '后面的训练内容、追问方向和推荐都会以这份信息为基础。',
+        returningTitle: '你的训练画像',
+        returningDescription: '{role} · {company} · {stage}',
+      },
+      summaryStats: {
+        deadline: '距投递 {days} 天',
+        techCount: '技术栈 {count} 项',
+        weaknessCount: '薄弱点 {count} 项',
+        sessionCount: '已完成 {count} 轮训练',
+      },
+      sections: {
+        directionTitle: '你想面什么方向？',
+        directionHint: '这决定了训练时问题的行业语境和深度预期。',
+        stageTitle: '你现在在什么阶段？',
+        stageHint: '不同阶段的训练侧重不同，系统会据此调整难度。',
+        techTitle: '你的技术准备',
+        techHint: '技术栈和薄弱点直接影响出题方向和追问重点。',
       },
       fields: {
         targetRole: '目标岗位',
@@ -145,21 +163,44 @@ export const messages = {
         currentStage: '当前阶段',
         applicationDeadline: '目标投递时间',
         techStacks: '技术栈',
-        primaryProjects: '主讲项目',
-        weaknesses: '当前薄弱点',
+        weaknesses: '自报薄弱点',
+        systemWeaknesses: '系统追踪的薄弱点',
+        linkedProjects: '已关联项目',
       },
       placeholders: {
         targetRole: '例如：Go 后端工程师 / Agent 工程师',
-        targetCompanyType: '例如：AI 应用公司 / 创业团队 / 中大型公司',
-        currentStage: '例如：校招准备期 / 实习前 / 在职求职',
-        techStacks: '例如：Go, Redis, Kafka, LangGraph',
-        primaryProjects: '例如：Mirror, SneakerFlash, OfferPilot',
-        weaknesses: '例如：项目取舍说明不够具体、Kafka 幂等问题回答不稳定',
+        techStacks: '输入后回车添加，例如 Go',
+        weaknesses: '输入后回车添加，例如 Kafka 幂等',
       },
-      saveSuccess: '画像已更新，后续推荐会基于这份信息生成。',
+      presets: {
+        companyType: {
+          ai: 'AI 应用公司',
+          bigTech: '互联网大厂',
+          startup: '创业团队',
+          midsize: '中小型公司',
+          other: '其他',
+        },
+        stage: {
+          campus: '校招准备期',
+          newGrad: '应届求职',
+          preIntern: '实习前准备',
+          jobSwitch: '在职跳槽',
+          other: '其他',
+        },
+      },
+      deadlineHint: '设置后首页会显示倒计时',
+      noProjects: '还没有导入项目',
+      goImportProject: '去导入',
+      noSystemWeaknesses: '完成训练后，系统会自动追踪你的薄弱点',
+      validation: {
+        targetRoleRequired: '请填写目标岗位',
+      },
+      saveSuccess: '画像已更新',
       saveAction: '保存画像',
+      saveAndTrain: '保存并开始训练',
       emptyTitle: '还没有保存画像',
-      emptyDescription: '先填写这份表单并保存，首页推荐和训练上下文才会更准确。',
+      emptyDescription:
+        '先填写这份表单并保存，首页推荐和训练上下文才会更准确。',
       loadErrorTitle: '画像加载失败',
       saveErrorTitle: '画像保存失败',
     },
@@ -220,7 +261,8 @@ export const messages = {
       hero: {
         kicker: '训练过程',
         title: '先按真实面试场景作答。',
-        description: '当前状态：{status}。系统会先评估主问题，再决定是否继续追问。',
+        description:
+          '当前状态：{status}。系统会先评估主问题，再决定是否继续追问。',
       },
       currentQuestion: '当前问题',
       feedback: '过程反馈',
@@ -232,22 +274,30 @@ export const messages = {
       reasoningTitle: '推理摘要',
       contentTitle: '模型输出',
       processingGeneratingQuestionTitle: '正在准备本轮问题',
-      processingGeneratingQuestionDescription: '系统正在整理上下文并生成问题，请稍候。',
+      processingGeneratingQuestionDescription:
+        '系统正在整理上下文并生成问题，请稍候。',
       processingEvaluatingTitle: '正在评估你的回答',
       processingEvaluatingDescription: '系统正在分析本轮答案并组织下一步反馈。',
       processingReviewTitle: '正在生成复盘',
       processingReviewDescription: '系统正在汇总整轮表现并整理复盘卡。',
-      placeholderInitial: '先说结论，再解释原因，最后给一个真实项目或场景例子。',
+      placeholderInitial:
+        '先说结论，再解释原因，最后给一个真实项目或场景例子。',
       placeholderFollowup: '直接回应追问，补充关键信息，不要重复上一次的回答。',
       submitErrorTitle: '提交失败',
       conflictBusy: '上一轮提交还在处理中，请等待当前评估或复盘完成。',
-      conflictReviewPending: '上一轮回答已经保存，当前只差复盘。请直接使用“重试生成复盘”。',
+      conflictReviewPending:
+        '上一轮回答已经保存，当前只差复盘。请直接使用“重试生成复盘”。',
       conflictCompleted: '这轮训练已经完成，页面会跳转到复盘结果。',
       conflictInvalidStatus: '当前状态不能继续提交，请等待页面刷新到最新状态。',
-      retryReviewNotRecoverable: '这轮训练已经不在可恢复状态，请刷新页面确认最新结果。',
-      answerLockedWhileProcessing: '系统正在处理中，当前输入区已锁定，避免重复提交。',
+      retryReviewNotRecoverable:
+        '这轮训练已经不在可恢复状态，请刷新页面确认最新结果。',
+      reviewGenerationRetry:
+        '回答已经保存，但复盘生成失败了。页面会切到可恢复状态，你可以直接重试复盘。',
+      answerLockedWhileProcessing:
+        '系统正在处理中，当前输入区已锁定，避免重复提交。',
       reviewPendingTitle: '复盘还没收口',
-      reviewPendingDescription: '上一轮回答已经保存，但复盘生成没有完成。你可以直接重试复盘，不需要重新回答。',
+      reviewPendingDescription:
+        '上一轮回答已经保存，但复盘生成没有完成。你可以直接重试复盘，不需要重新回答。',
       retryReviewAction: '重试生成复盘',
       streamPending: '模型已经开始返回内容，但还在整理成结构化结果，请稍候。',
       streamSectionCounter: '过程片段 {index}',
@@ -349,10 +399,14 @@ export const messages = {
       severity: 'Severity {value}',
       daysRemainingLabel: 'Days left before your target application date',
       lastUpdated: 'Last updated {value}',
-      firstTrainingHint: 'Complete your profile first, then start the first session.',
-      nextRecommendationHint: 'Complete your profile to get the next recommendation.',
-      noRecommendation: 'No recommendation yet. Finish the first session to generate one.',
-      setDeadlineHint: 'Set your target application date in the profile page to show the countdown here.',
+      firstTrainingHint:
+        'Complete your profile first, then start the first session.',
+      nextRecommendationHint:
+        'Complete your profile to get the next recommendation.',
+      noRecommendation:
+        'No recommendation yet. Finish the first session to generate one.',
+      setDeadlineHint:
+        'Set your target application date in the profile page to show the countdown here.',
     },
     enums: {
       mode: {
@@ -420,38 +474,64 @@ export const messages = {
         title: 'You have a training session in progress',
         description: '{name} · {status}',
         emptyTitle: 'No active session right now',
-        emptyDescription: 'Start a new fundamentals or project session when you are ready.',
+        emptyDescription:
+          'Start a new fundamentals or project session when you are ready.',
       },
       cards: {
         weaknessKicker: 'Top Issue',
         weaknessTitle: 'Current weakness',
-        weaknessEmpty: 'No weakness data yet. Complete your first session to build a history.',
+        weaknessEmpty:
+          'No weakness data yet. Complete your first session to build a history.',
         weaknessDescription:
           'The top area to improve right now is {kind} / {label}. Start there first.',
         sessionKicker: 'Recent',
         sessionTitle: 'Recent session',
-        sessionEmpty: 'No training history yet. Your latest result will appear here after the first session.',
-        sessionDescription: 'Your latest session is {name}, and its current status is {status}.',
+        sessionEmpty:
+          'No training history yet. Your latest result will appear here after the first session.',
+        sessionDescription:
+          'Your latest session is {name}, and its current status is {status}.',
         trackKicker: 'Focus',
         trackTitle: 'Recommended focus',
         profileKicker: 'Profile',
         profileTitle: 'Target profile',
-        profileEmpty: 'Your profile is not set up yet, so recommendations are still generic.',
+        profileEmpty:
+          'Your profile is not set up yet, so recommendations are still generic.',
         profileDescription: '{role} / {stage}, primary projects: {projects}.',
       },
       sections: {
         weaknesses: 'Weaknesses',
         sessions: 'Training history',
-        weaknessesEmpty: 'No historical weaknesses yet. They will appear after the first session.',
-        sessionsEmpty: 'No sessions yet. Start one to see your latest results here.',
+        weaknessesEmpty:
+          'No historical weaknesses yet. They will appear after the first session.',
+        sessionsEmpty:
+          'No sessions yet. Start one to see your latest results here.',
       },
     },
     profile: {
       hero: {
         kicker: 'Profile',
-        title: 'Complete your target profile before training.',
-        description:
-          'This stores your target role, current stage, tech stack, and primary projects. Later recommendations use this as context.',
+        newUserTitle: 'Tell me about yourself first',
+        newUserDescription:
+          'Training content, follow-up directions, and recommendations will all be based on this.',
+        returningTitle: 'Your training profile',
+        returningDescription: '{role} · {company} · {stage}',
+      },
+      summaryStats: {
+        deadline: '{days} days left',
+        techCount: '{count} tech stacks',
+        weaknessCount: '{count} weaknesses',
+        sessionCount: '{count} sessions done',
+      },
+      sections: {
+        directionTitle: 'What role are you targeting?',
+        directionHint:
+          'This determines the industry context and depth of training questions.',
+        stageTitle: 'Where are you in your job search?',
+        stageHint:
+          'Training priorities differ by stage. The system adjusts difficulty accordingly.',
+        techTitle: 'Your technical preparation',
+        techHint:
+          'Tech stacks and weaknesses directly influence question topics and follow-up focus.',
       },
       fields: {
         targetRole: 'Target role',
@@ -459,22 +539,45 @@ export const messages = {
         currentStage: 'Current stage',
         applicationDeadline: 'Target application date',
         techStacks: 'Tech stack',
-        primaryProjects: 'Primary projects',
-        weaknesses: 'Current weaknesses',
+        weaknesses: 'Self-reported weaknesses',
+        systemWeaknesses: 'System-tracked weaknesses',
+        linkedProjects: 'Linked projects',
       },
       placeholders: {
         targetRole: 'For example: Go Backend Engineer / Agent Engineer',
-        targetCompanyType: 'For example: AI product company / startup / larger company',
-        currentStage: 'For example: campus hiring prep / before internship / job switch',
-        techStacks: 'For example: Go, Redis, Kafka, LangGraph',
-        primaryProjects: 'For example: Mirror, SneakerFlash, OfferPilot',
-        weaknesses:
-          'For example: trade-off explanations are vague, Kafka idempotency answers are unstable',
+        techStacks: 'Type and press Enter to add, e.g. Go',
+        weaknesses: 'Type and press Enter to add, e.g. Kafka idempotency',
       },
-      saveSuccess: 'Profile updated. Future recommendations will use this information.',
+      presets: {
+        companyType: {
+          ai: 'AI product company',
+          bigTech: 'Big tech',
+          startup: 'Startup',
+          midsize: 'Mid-size company',
+          other: 'Other',
+        },
+        stage: {
+          campus: 'Campus hiring prep',
+          newGrad: 'New grad job search',
+          preIntern: 'Before internship',
+          jobSwitch: 'Job switch',
+          other: 'Other',
+        },
+      },
+      deadlineHint: 'A countdown will appear on the home page once set',
+      noProjects: 'No imported projects yet',
+      goImportProject: 'Import one',
+      noSystemWeaknesses:
+        'System-tracked weaknesses will appear after your first training session',
+      validation: {
+        targetRoleRequired: 'Please enter your target role',
+      },
+      saveSuccess: 'Profile updated',
       saveAction: 'Save profile',
+      saveAndTrain: 'Save and start training',
       emptyTitle: 'No saved profile yet',
-      emptyDescription: 'Fill out this form and save it first so recommendations and training context become more accurate.',
+      emptyDescription:
+        'Fill out this form and save it first so recommendations and training context become more accurate.',
       loadErrorTitle: 'Failed to load profile',
       saveErrorTitle: 'Failed to save profile',
     },
@@ -491,7 +594,8 @@ export const messages = {
       retryAction: 'Retry import',
       retryErrorTitle: 'Retry failed',
       jobsTitle: 'Background import jobs',
-      jobsEmpty: 'No import jobs yet. Submit a repository to see progress here.',
+      jobsEmpty:
+        'No import jobs yet. Submit a repository to see progress here.',
       jobRepo: 'Repository',
       jobStage: 'Current stage',
       jobResult: 'Import result',
@@ -535,36 +639,53 @@ export const messages = {
       hero: {
         kicker: 'Session',
         title: 'Answer as if you were in a real interview.',
-        description: 'Current status: {status}. The system will evaluate the main answer first and then decide whether a follow-up is needed.',
+        description:
+          'Current status: {status}. The system will evaluate the main answer first and then decide whether a follow-up is needed.',
       },
       currentQuestion: 'Current question',
       feedback: 'Feedback',
       mainScore: 'Main question score: {score}',
       strengths: 'Strengths',
       gaps: 'Gaps',
-      feedbackEmpty: 'Answer the current question first. Feedback will appear here.',
+      feedbackEmpty:
+        'Answer the current question first. Feedback will appear here.',
       processingKicker: 'Processing',
       reasoningTitle: 'Reasoning Summary',
       contentTitle: 'Model Output',
       processingGeneratingQuestionTitle: 'Preparing the session question',
-      processingGeneratingQuestionDescription: 'The system is reading context and generating the question.',
+      processingGeneratingQuestionDescription:
+        'The system is reading context and generating the question.',
       processingEvaluatingTitle: 'Evaluating your answer',
-      processingEvaluatingDescription: 'The system is analyzing the answer and preparing the next step.',
+      processingEvaluatingDescription:
+        'The system is analyzing the answer and preparing the next step.',
       processingReviewTitle: 'Generating the review',
-      processingReviewDescription: 'The system is summarizing the session and preparing the review card.',
-      placeholderInitial: 'State your conclusion first, explain why, then give a real example.',
-      placeholderFollowup: 'Answer the follow-up directly and add the missing detail without repeating yourself.',
+      processingReviewDescription:
+        'The system is summarizing the session and preparing the review card.',
+      placeholderInitial:
+        'State your conclusion first, explain why, then give a real example.',
+      placeholderFollowup:
+        'Answer the follow-up directly and add the missing detail without repeating yourself.',
       submitErrorTitle: 'Submit failed',
-      conflictBusy: 'A previous submission is still being processed. Wait for the current evaluation or review to finish.',
-      conflictReviewPending: 'Your last answer is already saved. Only review generation is left, so use "Retry review generation".',
-      conflictCompleted: 'This session is already completed. The page will move to the review result.',
-      conflictInvalidStatus: 'This session cannot accept another answer right now. Refresh to sync the latest state.',
-      retryReviewNotRecoverable: 'This session is no longer recoverable. Refresh to confirm the latest result.',
-      answerLockedWhileProcessing: 'The system is still processing, so the answer box is locked to avoid duplicate submissions.',
+      conflictBusy:
+        'A previous submission is still being processed. Wait for the current evaluation or review to finish.',
+      conflictReviewPending:
+        'Your last answer is already saved. Only review generation is left, so use "Retry review generation".',
+      conflictCompleted:
+        'This session is already completed. The page will move to the review result.',
+      conflictInvalidStatus:
+        'This session cannot accept another answer right now. Refresh to sync the latest state.',
+      retryReviewNotRecoverable:
+        'This session is no longer recoverable. Refresh to confirm the latest result.',
+      reviewGenerationRetry:
+        'Your answer is already saved, but review generation failed. The page will switch to a recoverable state so you can retry the review directly.',
+      answerLockedWhileProcessing:
+        'The system is still processing, so the answer box is locked to avoid duplicate submissions.',
       reviewPendingTitle: 'Review is not finished yet',
-      reviewPendingDescription: 'Your answer is already saved, but review generation did not finish. You can retry the review directly without answering again.',
+      reviewPendingDescription:
+        'Your answer is already saved, but review generation did not finish. You can retry the review directly without answering again.',
       retryReviewAction: 'Retry review generation',
-      streamPending: 'The model is already returning content, but the structured result is still being assembled.',
+      streamPending:
+        'The model is already returning content, but the structured result is still being assembled.',
       streamSectionCounter: 'Stream block {index}',
       streamKinds: {
         prepare: 'Preparing context',
@@ -595,31 +716,48 @@ export const messages = {
     progress: {
       createSession: {
         title: 'Preparing your session',
-        description: 'The system reads context first and then generates the question.',
-        steps: ['Read training context', 'Call the model', 'Prepare the session view'],
+        description:
+          'The system reads context first and then generates the question.',
+        steps: [
+          'Read training context',
+          'Call the model',
+          'Prepare the session view',
+        ],
       },
       evaluateMain: {
         title: 'Evaluating the main answer',
-        description: 'The system evaluates the answer first and then prepares the follow-up.',
-        steps: ['Save your answer', 'Call the model', 'Prepare the follow-up and feedback'],
+        description:
+          'The system evaluates the answer first and then prepares the follow-up.',
+        steps: [
+          'Save your answer',
+          'Call the model',
+          'Prepare the follow-up and feedback',
+        ],
       },
       evaluateFollowup: {
         title: 'Generating the review',
-        description: 'The system completes the follow-up evaluation and then prepares the review card.',
-        steps: ['Save the follow-up answer', 'Complete the final evaluation', 'Generate the review card'],
+        description:
+          'The system completes the follow-up evaluation and then prepares the review card.',
+        steps: [
+          'Save the follow-up answer',
+          'Complete the final evaluation',
+          'Generate the review card',
+        ],
       },
     },
     review: {
       hero: {
         kicker: 'Review',
-        title: 'The review summarizes this session and highlights what to practice next.',
+        title:
+          'The review summarizes this session and highlights what to practice next.',
         loading: 'Loading review...',
       },
       headerError: 'The review is temporarily unavailable.',
       loadingTitle: 'Loading review',
       loadErrorTitle: 'Failed to load review',
       emptyTitle: 'This review is not ready yet',
-      emptyDescription: 'It may still be generating, or the session did not finish successfully.',
+      emptyDescription:
+        'It may still be generating, or the session did not finish successfully.',
       scoreBreakdown: 'Score breakdown',
       highlights: 'Highlights',
       gaps: 'Needs improvement',

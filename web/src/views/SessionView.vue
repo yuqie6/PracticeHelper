@@ -328,6 +328,7 @@ function shouldRefreshSession(error: unknown): boolean {
       'session_completed',
       'session_not_recoverable',
       'session_answer_conflict',
+      'review_generation_retry',
     ].includes(error.code ?? '')
   );
 }
@@ -345,6 +346,8 @@ function resolveSessionErrorMessage(error: unknown): string {
         return t('session.retryReviewNotRecoverable');
       case 'session_answer_conflict':
         return t('session.conflictInvalidStatus');
+      case 'review_generation_retry':
+        return t('session.reviewGenerationRetry');
       default:
         return error.message;
     }
