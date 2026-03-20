@@ -30,6 +30,8 @@ export interface UserProfile {
   tech_stacks: string[];
   primary_projects: string[];
   self_reported_weaknesses: string[];
+  active_job_target_id?: string;
+  active_job_target?: JobTargetRef | null;
 }
 
 export interface ProjectProfile {
@@ -52,6 +54,12 @@ export interface JobTargetRef {
   id: string;
   title: string;
   company_name?: string;
+  latest_analysis_status?:
+    | 'idle'
+    | 'running'
+    | 'succeeded'
+    | 'failed'
+    | 'stale';
 }
 
 export interface JobTargetAnalysisRun {
@@ -161,6 +169,7 @@ export interface TrainingSessionSummary {
   total_score: number;
   review_id?: string;
   updated_at: string;
+  job_target?: JobTargetRef | null;
 }
 
 export interface ReviewCard {
@@ -192,6 +201,8 @@ export interface Dashboard {
   current_session?: TrainingSessionSummary | null;
   today_focus: string;
   recommended_track: string;
+  active_job_target?: JobTargetRef | null;
+  recommendation_scope: 'generic' | 'job_target';
   days_until_deadline?: number;
 }
 
@@ -398,6 +409,18 @@ export function analyzeJobTarget(
   });
 }
 
+export function activateJobTarget(jobTargetId: string): Promise<UserProfile> {
+  return request(`/api/job-targets/${jobTargetId}/activate`, {
+    method: 'POST',
+  });
+}
+
+export function clearActiveJobTarget(): Promise<UserProfile> {
+  return request('/api/job-targets/clear-active', {
+    method: 'POST',
+  });
+}
+
 export function listJobTargetAnalysisRuns(
   jobTargetId: string,
 ): Promise<JobTargetAnalysisRun[]> {
@@ -425,6 +448,7 @@ export function createSession(payload: {
   topic?: string;
   project_id?: string;
   job_target_id?: string;
+  ignore_active_job_target?: boolean;
   intensity: string;
 }): Promise<TrainingSession> {
   return request('/api/sessions', {
@@ -439,6 +463,7 @@ export function createSessionStream(
     topic?: string;
     project_id?: string;
     job_target_id?: string;
+    ignore_active_job_target?: boolean;
     intensity: string;
   },
   onEvent: (event: StreamEvent) => void,

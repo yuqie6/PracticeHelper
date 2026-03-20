@@ -23,29 +23,56 @@
             {{ t('home.deadline.title') }}
           </h3>
           <div class="mt-4 space-y-3">
-            <p class="text-6xl font-black">{{ dashboard?.days_until_deadline ?? '--' }}</p>
+            <p class="text-6xl font-black">
+              {{ dashboard?.days_until_deadline ?? '--' }}
+            </p>
             <p class="text-sm font-bold uppercase tracking-[0.08em]">
               {{ t('common.daysRemainingLabel') }}
             </p>
             <p class="neo-note">
-              {{ dashboard?.days_until_deadline == null ? t('common.setDeadlineHint') : dashboard?.recommended_track }}
+              {{
+                dashboard?.days_until_deadline == null
+                  ? t('common.setDeadlineHint')
+                  : dashboard?.recommended_track
+              }}
             </p>
           </div>
         </div>
 
         <div class="neo-panel">
-          <p class="neo-kicker bg-[var(--neo-green)]">{{ t('home.currentSession.kicker') }}</p>
+          <p class="neo-kicker bg-[var(--neo-green)]">
+            {{ t('home.currentSession.kicker') }}
+          </p>
           <template v-if="currentSession">
             <h3 class="text-xl font-black uppercase tracking-[0.06em]">
               {{ t('home.currentSession.title') }}
             </h3>
             <p class="mt-3 text-base font-semibold">
-              {{ t('home.currentSession.description', { name: formatSessionName(currentSession), status: formatStatusLabel(t, currentSession.status) }) }}
+              {{
+                t('home.currentSession.description', {
+                  name: formatSessionName(currentSession),
+                  status: formatStatusLabel(t, currentSession.status),
+                })
+              }}
             </p>
             <p class="neo-note mt-3">
-              {{ t('common.lastUpdated', { value: formatUpdatedAt(currentSession.updated_at) }) }}
+              {{
+                t('common.lastUpdated', {
+                  value: formatUpdatedAt(currentSession.updated_at),
+                })
+              }}
             </p>
-            <RouterLink :to="buildSessionTarget(currentSession)" class="neo-button-dark mt-4">
+            <p v-if="currentSession.job_target" class="neo-note mt-2">
+              {{
+                t('home.currentSession.jobTargetDescription', {
+                  name: currentSession.job_target.title,
+                })
+              }}
+            </p>
+            <RouterLink
+              :to="buildSessionTarget(currentSession)"
+              class="neo-button-dark mt-4"
+            >
               {{ t('common.resume') }}
             </RouterLink>
           </template>
@@ -53,7 +80,7 @@
             <h3 class="text-xl font-black uppercase tracking-[0.06em]">
               {{ t('home.currentSession.emptyTitle') }}
             </h3>
-            <p class="mt-3 neo-note">
+            <p class="neo-note mt-3">
               {{ t('home.currentSession.emptyDescription') }}
             </p>
           </template>
@@ -61,7 +88,7 @@
       </div>
     </div>
 
-    <div class="neo-grid md:grid-cols-3">
+    <div class="neo-grid md:grid-cols-2 xl:grid-cols-4">
       <StatCard
         :kicker="t('home.cards.weaknessKicker')"
         kicker-class="bg-[var(--neo-red)]"
@@ -72,7 +99,15 @@
         :kicker="t('home.cards.trackKicker')"
         kicker-class="bg-[var(--neo-yellow)]"
         :title="t('home.cards.trackTitle')"
-        :description="dashboard?.recommended_track ?? t('common.noRecommendation')"
+        :description="
+          dashboard?.recommended_track ?? t('common.noRecommendation')
+        "
+      />
+      <StatCard
+        :kicker="t('home.cards.jobTargetKicker')"
+        kicker-class="bg-[var(--neo-green)]"
+        :title="t('home.cards.jobTargetTitle')"
+        :description="jobTargetSummary"
       />
       <StatCard
         :kicker="t('home.cards.profileKicker')"
@@ -84,7 +119,9 @@
 
     <div class="neo-grid lg:grid-cols-[0.9fr_1.1fr]">
       <div class="neo-panel">
-        <p class="neo-kicker bg-[var(--neo-red)]">{{ t('home.sections.weaknesses') }}</p>
+        <p class="neo-kicker bg-[var(--neo-red)]">
+          {{ t('home.sections.weaknesses') }}
+        </p>
         <ul class="space-y-3">
           <li
             v-for="item in dashboard?.weaknesses ?? []"
@@ -92,7 +129,9 @@
             class="flex items-center justify-between border-2 border-black bg-white px-3 py-3 md:border-4"
           >
             <div>
-              <p class="text-sm font-black uppercase">{{ formatWeaknessKindLabel(t, item.kind) }}</p>
+              <p class="text-sm font-black uppercase">
+                {{ formatWeaknessKindLabel(t, item.kind) }}
+              </p>
               <p class="text-lg font-bold">{{ item.label }}</p>
             </div>
             <span class="neo-badge bg-[var(--neo-yellow)]">
@@ -107,11 +146,16 @@
 
       <div class="neo-panel">
         <div class="flex items-center justify-between gap-3">
-          <p class="neo-kicker bg-[var(--neo-green)]">{{ t('home.sections.sessions') }}</p>
+          <p class="neo-kicker bg-[var(--neo-green)]">
+            {{ t('home.sections.sessions') }}
+          </p>
           <p class="text-sm font-semibold">{{ sessionSummary }}</p>
         </div>
         <ul class="space-y-3">
-          <li v-for="session in dashboard?.recent_sessions ?? []" :key="session.id">
+          <li
+            v-for="session in dashboard?.recent_sessions ?? []"
+            :key="session.id"
+          >
             <RouterLink :to="buildSessionTarget(session)" class="neo-link-card">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -122,12 +166,23 @@
                     {{ formatSessionName(session) }}
                   </p>
                 </div>
-                <span class="neo-badge bg-[var(--neo-blue)]">{{ session.total_score.toFixed(1) }}</span>
+                <span class="neo-badge bg-[var(--neo-blue)]">{{
+                  session.total_score.toFixed(1)
+                }}</span>
               </div>
-              <div class="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm font-semibold">
+              <div
+                class="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm font-semibold"
+              >
                 <span>{{ formatStatusLabel(t, session.status) }}</span>
                 <span>{{ formatUpdatedAt(session.updated_at) }}</span>
               </div>
+              <p v-if="session.job_target" class="neo-note mt-2">
+                {{
+                  t('home.sessions.jobTargetDescription', {
+                    name: session.job_target.title,
+                  })
+                }}
+              </p>
             </RouterLink>
           </li>
           <li v-if="!dashboard?.recent_sessions.length" class="neo-note">
@@ -147,7 +202,11 @@ import { RouterLink } from 'vue-router';
 
 import { getDashboard, type TrainingSessionSummary } from '../api/client';
 import StatCard from '../components/StatCard.vue';
-import { describeProfile, describeSession, describeWeakness } from '../lib/dashboard';
+import {
+  describeProfile,
+  describeSession,
+  describeWeakness,
+} from '../lib/dashboard';
 import {
   formatModeLabel,
   formatStatusLabel,
@@ -175,6 +234,16 @@ const sessionSummary = computed(() => {
 const profileSummary = computed(() => {
   locale.value;
   return describeProfile(dashboard.value, t);
+});
+const jobTargetSummary = computed(() => {
+  const active = dashboard.value?.active_job_target;
+  if (!active) {
+    return t('home.cards.jobTargetEmpty');
+  }
+  if (dashboard.value?.recommendation_scope === 'job_target') {
+    return t('home.cards.jobTargetScoped', { name: active.title });
+  }
+  return t('home.cards.jobTargetUnavailable', { name: active.title });
 });
 
 function formatSessionName(session: TrainingSessionSummary): string {

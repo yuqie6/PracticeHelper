@@ -421,7 +421,7 @@ const loadError = computed(() =>
   error.value instanceof Error ? error.value.message : '',
 );
 
-const isReturningUser = computed(() => !!data.value);
+const isReturningUser = computed(() => hasMeaningfulProfile(data.value));
 
 watchEffect(() => {
   const profile = data.value;
@@ -473,5 +473,22 @@ function submit() {
     primary_projects: data.value?.primary_projects ?? [],
     self_reported_weaknesses: weaknesses.value,
   });
+}
+
+function hasMeaningfulProfile(
+  profile: typeof data.value | null | undefined,
+): boolean {
+  if (!profile) {
+    return false;
+  }
+  return Boolean(
+    profile.target_role ||
+    profile.target_company_type ||
+    profile.current_stage ||
+    profile.application_deadline ||
+    profile.tech_stacks?.length ||
+    profile.primary_projects?.length ||
+    profile.self_reported_weaknesses?.length,
+  );
 }
 </script>

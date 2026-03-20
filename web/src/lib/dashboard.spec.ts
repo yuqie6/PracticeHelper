@@ -1,4 +1,8 @@
-import { describeProfile, describeSession, describeWeakness } from './dashboard';
+import {
+  describeProfile,
+  describeSession,
+  describeWeakness,
+} from './dashboard';
 import { messages } from '../i18n/messages';
 
 function createTranslator(locale: 'zh-CN' | 'en' = 'zh-CN') {
@@ -15,7 +19,9 @@ function createTranslator(locale: 'zh-CN' | 'en' = 'zh-CN') {
       return key;
     }
 
-    return value.replace(/\{(\w+)\}/g, (_, token) => String(named?.[token] ?? ''));
+    return value.replace(/\{(\w+)\}/g, (_, token) =>
+      String(named?.[token] ?? ''),
+    );
   };
 }
 
@@ -64,6 +70,7 @@ describe('dashboard helpers', () => {
       ],
       today_focus: '先补 Redis',
       recommended_track: 'Redis 专项',
+      recommendation_scope: 'generic' as const,
       days_until_deadline: 13,
     };
 

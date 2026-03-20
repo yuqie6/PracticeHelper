@@ -114,6 +114,7 @@ export const messages = {
         kicker: '继续训练',
         title: '你有一轮训练还没结束',
         description: '{name} · {status}',
+        jobTargetDescription: '这轮绑定了岗位 JD：{name}',
         emptyTitle: '还没有进行中的训练',
         emptyDescription: '从基础训练或项目训练开始一轮新的练习。',
       },
@@ -129,6 +130,13 @@ export const messages = {
         sessionDescription: '最近一轮是 {name}，当前状态为 {status}。',
         trackKicker: 'Focus',
         trackTitle: '推荐专项',
+        jobTargetKicker: 'JD',
+        jobTargetTitle: '当前岗位上下文',
+        jobTargetEmpty: '当前没有默认 JD，推荐和训练默认都会按通用口径处理。',
+        jobTargetScoped:
+          '当前默认 JD 是 {name}，首页推荐和训练默认已切到岗位视角。',
+        jobTargetUnavailable:
+          '当前默认 JD 是 {name}，但分析结果暂不可用，系统先退回通用口径。',
         profileKicker: 'Profile',
         profileTitle: '目标画像',
         profileEmpty: '画像还没初始化，系统暂时无法给出更准确的建议。',
@@ -137,6 +145,7 @@ export const messages = {
       sections: {
         weaknesses: '薄弱点',
         sessions: '训练记录',
+        jobTargetDescription: '本轮绑定岗位：{name}',
         weaknessesEmpty:
           '还没有历史薄弱点，完成第一轮训练后这里会显示重点问题。',
         sessionsEmpty: '还没有训练记录，开始第一轮后这里会看到最近结果。',
@@ -265,10 +274,18 @@ export const messages = {
       createErrorTitle: '创建 JD 失败',
       saveErrorTitle: '保存 JD 失败',
       analyzeErrorTitle: '分析 JD 失败',
+      activeErrorTitle: '设置默认 JD 失败',
       saveAction: '保存 JD',
       analyzeAction: '开始分析',
       reanalyzeAction: '重新分析',
       createAction: '新建 JD',
+      activateAction: '设为默认 JD',
+      clearActiveAction: '取消默认 JD',
+      activeBadge: '当前默认 JD',
+      activeReadyDescription:
+        '这份 JD 已作为默认岗位，首页推荐和训练默认都会围绕它展开。',
+      activeNotReadyDescription:
+        '这份 JD 已设为默认岗位，但当前分析结果不可直接用于默认训练，系统会暂时退回通用口径。',
       analyzing: '分析中...',
       fields: {
         title: '岗位标题',
@@ -309,6 +326,8 @@ export const messages = {
       genericJobTargetOption: '不使用 JD（通用训练）',
       jobTargetUnavailable:
         '这份 JD 还没有可用分析结果，暂时不能开始本轮训练。',
+      activeJobTargetUnavailable:
+        '当前默认 JD「{name}」暂不可用，所以这轮先退回通用训练。你也可以手动换一份 JD。',
       startAction: '开始这一轮训练',
       startErrorTitle: '启动失败',
     },
@@ -561,6 +580,7 @@ export const messages = {
         kicker: 'Resume',
         title: 'You have a training session in progress',
         description: '{name} · {status}',
+        jobTargetDescription: 'This session is bound to JD: {name}',
         emptyTitle: 'No active session right now',
         emptyDescription:
           'Start a new fundamentals or project session when you are ready.',
@@ -580,6 +600,14 @@ export const messages = {
           'Your latest session is {name}, and its current status is {status}.',
         trackKicker: 'Focus',
         trackTitle: 'Recommended focus',
+        jobTargetKicker: 'JD',
+        jobTargetTitle: 'Current job context',
+        jobTargetEmpty:
+          'There is no default JD right now, so recommendations and default training stay generic.',
+        jobTargetScoped:
+          'The current default JD is {name}, and recommendations now follow that role context.',
+        jobTargetUnavailable:
+          'The current default JD is {name}, but its analysis is not usable right now, so the product falls back to generic mode.',
         profileKicker: 'Profile',
         profileTitle: 'Target profile',
         profileEmpty:
@@ -589,6 +617,7 @@ export const messages = {
       sections: {
         weaknesses: 'Weaknesses',
         sessions: 'Training history',
+        jobTargetDescription: 'Bound job target: {name}',
         weaknessesEmpty:
           'No historical weaknesses yet. They will appear after the first session.',
         sessionsEmpty:
@@ -724,10 +753,18 @@ export const messages = {
       createErrorTitle: 'Failed to create JD',
       saveErrorTitle: 'Failed to save JD',
       analyzeErrorTitle: 'Failed to analyze JD',
+      activeErrorTitle: 'Failed to update default JD',
       saveAction: 'Save JD',
       analyzeAction: 'Analyze',
       reanalyzeAction: 'Re-analyze',
       createAction: 'Create JD',
+      activateAction: 'Set as default JD',
+      clearActiveAction: 'Clear default JD',
+      activeBadge: 'Current default JD',
+      activeReadyDescription:
+        'This JD is now the default role context, so home recommendations and default training will follow it.',
+      activeNotReadyDescription:
+        'This JD is set as default, but its analysis is not usable yet. The product will temporarily fall back to generic mode.',
       analyzing: 'Analyzing...',
       fields: {
         title: 'Job title',
@@ -768,6 +805,8 @@ export const messages = {
       genericJobTargetOption: 'No JD (generic training)',
       jobTargetUnavailable:
         'This JD does not have a usable analysis result yet, so this session cannot start.',
+      activeJobTargetUnavailable:
+        'The current default JD "{name}" is not usable right now, so this session falls back to generic mode unless you pick another JD.',
       startAction: 'Start this session',
       startErrorTitle: 'Start failed',
     },

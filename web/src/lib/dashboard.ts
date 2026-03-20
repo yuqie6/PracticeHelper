@@ -8,7 +8,10 @@ import {
   type Translate,
 } from './labels';
 
-export function describeWeakness(dashboard: Dashboard | null, t: Translate): string {
+export function describeWeakness(
+  dashboard: Dashboard | null,
+  t: Translate,
+): string {
   const weakness = dashboard?.weaknesses?.[0];
   if (!weakness) {
     return t('home.cards.weaknessEmpty');
@@ -20,7 +23,10 @@ export function describeWeakness(dashboard: Dashboard | null, t: Translate): str
   });
 }
 
-export function describeSession(dashboard: Dashboard | null, t: Translate): string {
+export function describeSession(
+  dashboard: Dashboard | null,
+  t: Translate,
+): string {
   const session = dashboard?.recent_sessions?.[0];
   if (!session) {
     return t('home.cards.sessionEmpty');
@@ -28,7 +34,9 @@ export function describeSession(dashboard: Dashboard | null, t: Translate): stri
 
   const name =
     session.project_name ||
-    (session.topic ? formatTopicLabel(t, session.topic) : formatModeLabel(t, session.mode));
+    (session.topic
+      ? formatTopicLabel(t, session.topic)
+      : formatModeLabel(t, session.mode));
 
   return t('home.cards.sessionDescription', {
     name,
@@ -36,17 +44,36 @@ export function describeSession(dashboard: Dashboard | null, t: Translate): stri
   });
 }
 
-export function describeProfile(dashboard: Dashboard | null, t: Translate): string {
+export function describeProfile(
+  dashboard: Dashboard | null,
+  t: Translate,
+): string {
   const profile = dashboard?.profile;
-  if (!profile) {
+  if (!profile || !hasMeaningfulProfile(profile)) {
     return t('home.cards.profileEmpty');
   }
 
-  const projects = profile.primary_projects.join(', ') || t('common.notProvided');
+  const projects =
+    profile.primary_projects.join(', ') || t('common.notProvided');
 
   return t('home.cards.profileDescription', {
     role: profile.target_role || t('common.notProvided'),
     stage: profile.current_stage || t('common.notProvided'),
     projects,
   });
+}
+
+function hasMeaningfulProfile(profile: Dashboard['profile']): boolean {
+  if (!profile) {
+    return false;
+  }
+  return Boolean(
+    profile.target_role ||
+    profile.target_company_type ||
+    profile.current_stage ||
+    profile.application_deadline ||
+    profile.tech_stacks.length ||
+    profile.primary_projects.length ||
+    profile.self_reported_weaknesses.length,
+  );
 }

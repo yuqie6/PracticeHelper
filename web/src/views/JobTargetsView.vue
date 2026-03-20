@@ -25,6 +25,12 @@
       :title="t('jobs.analyzeErrorTitle')"
       :message="analyzeError"
     />
+    <NoticePanel
+      v-if="activeError"
+      tone="error"
+      :title="t('jobs.activeErrorTitle')"
+      :message="activeError"
+    />
 
     <div class="neo-grid lg:grid-cols-[0.78fr_1.22fr]">
       <div class="neo-panel space-y-4">
@@ -66,6 +72,12 @@
                 }}
               </span>
             </div>
+            <p
+              v-if="activeJobTargetId === target.id"
+              class="mt-2 text-xs font-black uppercase tracking-[0.08em]"
+            >
+              {{ t('jobs.activeBadge') }}
+            </p>
             <p class="mt-2 text-xs font-semibold text-black/80">
               {{
                 t('common.lastUpdated', {
@@ -88,22 +100,43 @@
                   : t('jobs.createTitle')
               }}
             </p>
-            <button
-              v-if="selectedJobTarget"
-              type="button"
-              class="neo-button-dark"
-              :disabled="isAnalyzing"
-              @click="runAnalysis"
-            >
-              {{
-                isAnalyzing
-                  ? t('jobs.analyzing')
-                  : selectedLatestAnalysis
-                    ? t('jobs.reanalyzeAction')
-                    : t('jobs.analyzeAction')
-              }}
-            </button>
+            <div v-if="selectedJobTarget" class="flex flex-wrap gap-3">
+              <button
+                type="button"
+                class="neo-button bg-white"
+                :disabled="isActivating"
+                @click="toggleActiveJobTarget"
+              >
+                {{
+                  isActiveSelection
+                    ? t('jobs.clearActiveAction')
+                    : t('jobs.activateAction')
+                }}
+              </button>
+              <button
+                type="button"
+                class="neo-button-dark"
+                :disabled="isAnalyzing"
+                @click="runAnalysis"
+              >
+                {{
+                  isAnalyzing
+                    ? t('jobs.analyzing')
+                    : selectedLatestAnalysis
+                      ? t('jobs.reanalyzeAction')
+                      : t('jobs.analyzeAction')
+                }}
+              </button>
+            </div>
           </div>
+
+          <p v-if="selectedJobTarget && isActiveSelection" class="neo-note">
+            {{
+              selectedJobTarget.latest_analysis_status === 'succeeded'
+                ? t('jobs.activeReadyDescription')
+                : t('jobs.activeNotReadyDescription')
+            }}
+          </p>
 
           <form class="space-y-4" @submit.prevent="submit">
             <label class="space-y-2">
@@ -284,9 +317,12 @@ import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import {
+  activateJobTarget,
   analyzeJobTarget,
+  clearActiveJobTarget,
   createJobTarget,
   getJobTarget,
+  getProfile,
   listJobTargetAnalysisRuns,
   listJobTargets,
   updateJobTarget,
@@ -302,6 +338,7 @@ const isCreatingNew = ref(false);
 const createError = ref('');
 const saveError = ref('');
 const analyzeError = ref('');
+const activeError = ref('');
 
 const editor = reactive({
   title: '',
@@ -314,7 +351,15 @@ const { data: jobTargetsData } = useQuery({
   queryFn: listJobTargets,
 });
 
+const { data: profileData } = useQuery({
+  queryKey: ['profile'],
+  queryFn: getProfile,
+});
+
 const jobTargets = computed(() => jobTargetsData.value ?? []);
+const activeJobTargetId = computed(
+  () => profileData.value?.active_job_target_id ?? '',
+);
 
 const { data: selectedJobTargetData } = useQuery({
   queryKey: ['job-targets', selectedJobTargetId],
@@ -331,6 +376,11 @@ const { data: analysisRunsData } = useQuery({
 const selectedJobTarget = computed(() => selectedJobTargetData.value ?? null);
 const selectedLatestAnalysis = computed(
   () => selectedJobTarget.value?.latest_successful_analysis ?? null,
+);
+const isActiveSelection = computed(
+  () =>
+    Boolean(selectedJobTarget.value) &&
+    activeJobTargetId.value === selectedJobTarget.value?.id,
 );
 const analysisRuns = computed(() => analysisRunsData.value ?? []);
 const showEditor = computed(
@@ -418,9 +468,39 @@ const analyzeMutation = useMutation({
   },
 });
 
+const activateMutation = useMutation({
+  mutationFn: (jobTargetId: string) => activateJobTarget(jobTargetId),
+  onSuccess: async (profile) => {
+    activeError.value = '';
+    queryClient.setQueryData(['profile'], profile);
+    await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    await queryClient.invalidateQueries({ queryKey: ['job-targets'] });
+  },
+  onError: (error) => {
+    activeError.value =
+      error instanceof Error ? error.message : t('common.requestFailed');
+  },
+});
+
+const clearActiveMutation = useMutation({
+  mutationFn: clearActiveJobTarget,
+  onSuccess: async (profile) => {
+    activeError.value = '';
+    queryClient.setQueryData(['profile'], profile);
+    await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+  },
+  onError: (error) => {
+    activeError.value =
+      error instanceof Error ? error.message : t('common.requestFailed');
+  },
+});
+
 const isCreating = computed(() => createMutation.isPending.value);
 const isSaving = computed(() => updateMutation.isPending.value);
 const isAnalyzing = computed(() => analyzeMutation.isPending.value);
+const isActivating = computed(
+  () => activateMutation.isPending.value || clearActiveMutation.isPending.value,
+);
 
 function startCreate() {
   isCreatingNew.value = true;
@@ -428,6 +508,7 @@ function startCreate() {
   createError.value = '';
   saveError.value = '';
   analyzeError.value = '';
+  activeError.value = '';
   editor.title = '';
   editor.company_name = '';
   editor.source_text = '';
@@ -438,6 +519,7 @@ function selectTarget(jobTargetId: string) {
   createError.value = '';
   saveError.value = '';
   analyzeError.value = '';
+  activeError.value = '';
 }
 
 function submit() {
@@ -467,6 +549,18 @@ function runAnalysis() {
   }
   analyzeError.value = '';
   analyzeMutation.mutate(selectedJobTarget.value.id);
+}
+
+function toggleActiveJobTarget() {
+  if (!selectedJobTarget.value) {
+    return;
+  }
+  activeError.value = '';
+  if (isActiveSelection.value) {
+    clearActiveMutation.mutate();
+    return;
+  }
+  activateMutation.mutate(selectedJobTarget.value.id);
 }
 
 function formatDateTime(value?: string) {

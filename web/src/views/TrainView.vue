@@ -110,7 +110,11 @@
 
       <label class="space-y-2">
         <span class="neo-subheading">{{ t('train.fields.jobTarget') }}</span>
-        <select v-model="form.job_target_id" class="neo-select">
+        <select
+          v-model="form.job_target_id"
+          class="neo-select"
+          @change="markJobTargetSelectionTouched"
+        >
           <option value="">{{ t('train.genericJobTargetOption') }}</option>
           <option
             v-for="jobTarget in jobTargets ?? []"
@@ -124,6 +128,12 @@
 
       <p v-if="jobTargetBlockedReason" class="neo-note text-[var(--neo-red)]">
         {{ jobTargetBlockedReason }}
+      </p>
+      <p
+        v-else-if="activeJobTargetFallbackNotice"
+        class="neo-note text-[var(--neo-red)]"
+      >
+        {{ activeJobTargetFallbackNotice }}
       </p>
 
       <button
@@ -175,6 +185,7 @@ const form = reactive({
   job_target_id: '',
   intensity: 'standard',
 });
+const jobTargetSelectionTouched = ref(false);
 const streamSections = ref<StreamSection[]>([]);
 const streamEvents = ref<StreamEvent[]>([]);
 const startError = ref('');
@@ -195,6 +206,9 @@ const { data: dashboard } = useQuery({
 });
 
 const currentSession = computed(() => dashboard.value?.current_session ?? null);
+const activeJobTarget = computed(
+  () => dashboard.value?.active_job_target ?? null,
+);
 const selectedJobTarget = computed(
   () =>
     (jobTargets.value ?? []).find(
@@ -209,6 +223,19 @@ const jobTargetBlockedReason = computed(() => {
     ? ''
     : t('train.jobTargetUnavailable');
 });
+const activeJobTargetFallbackNotice = computed(() => {
+  if (
+    route.query.job_target_id ||
+    !activeJobTarget.value ||
+    form.job_target_id ||
+    dashboard.value?.recommendation_scope === 'job_target'
+  ) {
+    return '';
+  }
+  return t('train.activeJobTargetUnavailable', {
+    name: activeJobTarget.value.title,
+  });
+});
 
 const mutation = useMutation({
   mutationFn: (payload: {
@@ -216,6 +243,7 @@ const mutation = useMutation({
     topic?: string;
     project_id?: string;
     job_target_id?: string;
+    ignore_active_job_target?: boolean;
     intensity: string;
   }) => {
     streamSections.value = [];
@@ -258,6 +286,7 @@ const { activeIndex: createSessionStepIndex } = useProgressSteps(
 watch(
   () => route.query,
   () => {
+    jobTargetSelectionTouched.value = false;
     const mode = route.query.mode;
     const topic = route.query.topic;
     const projectId = route.query.project_id;
@@ -285,12 +314,29 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => dashboard.value?.active_job_target,
+  (active) => {
+    if (jobTargetSelectionTouched.value || route.query.job_target_id) {
+      return;
+    }
+    if (active?.latest_analysis_status === 'succeeded') {
+      form.job_target_id = active.id;
+      return;
+    }
+    form.job_target_id = '';
+  },
+  { immediate: true },
+);
+
 function submit() {
   mutation.mutate({
     mode: form.mode,
     topic: form.mode === 'basics' ? form.topic : undefined,
     project_id: form.mode === 'project' ? form.project_id : undefined,
     job_target_id: form.job_target_id || undefined,
+    ignore_active_job_target:
+      !form.job_target_id && Boolean(activeJobTarget.value),
     intensity: form.intensity,
   });
 }
@@ -326,5 +372,9 @@ function resolveStartErrorMessage(error: unknown): string {
   }
 
   return error instanceof Error ? error.message : t('common.requestFailed');
+}
+
+function markJobTargetSelectionTouched() {
+  jobTargetSelectionTouched.value = true;
 }
 </script>
