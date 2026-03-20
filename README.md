@@ -108,6 +108,7 @@ make help
 | `make test` | 运行三端测试 |
 | `make build` | 构建前端产物和编译 Go 后端 |
 | `make check` | 顺序执行 `lint`、`test`、`build` 完整校验 |
+| `make e2e-live` | 对当前运行中的 API 跑一轮真实端到端 smoke |
 
 兼容旧习惯时，`make web-dev` / `make server-dev` / `make sidecar-dev` 仍然可用，但推荐统一切到 `dev-*` 这一组命名。
 
@@ -131,6 +132,7 @@ cd server && GOCACHE=/tmp/go-build go run -tags sqlite_fts5 ./cmd/api
 - [x] 请求级结构化日志、日志落盘、训练恢复入口、日期倒计时修复
 - [x] 训练创建 / 回答提交阶段的可见等待态
 - [x] 训练创建 / 回答提交的流式输出与推理摘要展示
+- [x] 可回放的真实端到端 smoke 脚本（`scripts/e2e_live.py` / `make e2e-live`）
 - [ ] 端到端验证（配置真实 LLM 后跑通完整流程）
 - [ ] 错误处理与健壮性
 - [ ] 训练质量调优（prompt 优化、种子题目扩充）

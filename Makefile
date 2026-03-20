@@ -17,7 +17,8 @@ GOLANGCI_LINT_VERSION := v2.11.3
 	lint lint-web lint-server lint-sidecar \
 	format format-web format-server format-sidecar \
 	test test-web test-server test-sidecar \
-	build build-web build-server
+	build build-web build-server \
+	e2e-live
 
 ##@ 通用
 
@@ -106,3 +107,6 @@ build-web: ## 构建前端产物
 
 build-server: ## 编译 Go 后端
 	$(ENV_LOADER); cd "$(SERVER_DIR)" && GOCACHE=/tmp/go-build go build -tags "$(GO_SQLITE_TAGS)" ./...
+
+e2e-live: ## 用真实运行中的 API 跑一轮端到端 smoke（需先启动 server/sidecar）
+	$(ENV_LOADER); python3 ./scripts/e2e_live.py
