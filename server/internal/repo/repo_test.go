@@ -546,6 +546,12 @@ func TestJobTargetAnalysisLifecycleAndStaleStatus(t *testing.T) {
 	if updated.LatestAnalysisStatus != domain.JobTargetAnalysisStale {
 		t.Fatalf("expected stale status after source change, got %s", updated.LatestAnalysisStatus)
 	}
+	if updated.LatestSuccessfulAnalysis == nil {
+		t.Fatal("expected latest successful analysis to remain attached after stale update")
+	}
+	if updated.LatestSuccessfulAnalysis.ID != run.ID {
+		t.Fatalf("expected latest successful analysis id %q, got %q", run.ID, updated.LatestSuccessfulAnalysis.ID)
+	}
 
 	runs, err := store.ListJobTargetAnalysisRuns(ctx, target.ID)
 	if err != nil {
@@ -605,6 +611,9 @@ func TestCompleteJobTargetAnalysisDoesNotOverwriteStaleTargetState(t *testing.T)
 	if saved.LatestAnalysisStatus != domain.JobTargetAnalysisStale {
 		t.Fatalf("expected stale status to be preserved, got %s", saved.LatestAnalysisStatus)
 	}
+	if saved.LatestSuccessfulAnalysis == nil || saved.LatestSuccessfulAnalysis.ID != run.ID {
+		t.Fatal("expected stale target to keep latest successful analysis attached")
+	}
 }
 
 func TestOlderFailedJobTargetAnalysisDoesNotClobberNewerRunState(t *testing.T) {
@@ -649,6 +658,62 @@ func TestOlderFailedJobTargetAnalysisDoesNotClobberNewerRunState(t *testing.T) {
 	}
 	if saved.LatestAnalysisStatus != domain.JobTargetAnalysisRunning {
 		t.Fatalf("expected newer running status to remain current, got %s", saved.LatestAnalysisStatus)
+	}
+}
+
+func TestFailedJobTargetAnalysisKeepsLatestSuccessfulSnapshotAttached(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	target, err := store.CreateJobTarget(ctx, domain.JobTargetInput{
+		Title:       "后端工程师 - Example",
+		CompanyName: "Example",
+		SourceText:  "要求 Go、Redis、Kafka 经验。",
+	})
+	if err != nil {
+		t.Fatalf("CreateJobTarget() error = %v", err)
+	}
+
+	firstRun, err := store.StartJobTargetAnalysis(ctx, target.ID, target.SourceText)
+	if err != nil {
+		t.Fatalf("StartJobTargetAnalysis() first error = %v", err)
+	}
+	if err := store.CompleteJobTargetAnalysis(ctx, target.ID, firstRun.ID, &domain.AnalyzeJobTargetResponse{
+		Summary:          "偏高并发后端。",
+		MustHaveSkills:   []string{"Go"},
+		Responsibilities: []string{"负责核心服务设计"},
+		EvaluationFocus:  []string{"缓存一致性"},
+	}); err != nil {
+		t.Fatalf("CompleteJobTargetAnalysis() error = %v", err)
+	}
+
+	secondRun, err := store.StartJobTargetAnalysis(ctx, target.ID, target.SourceText)
+	if err != nil {
+		t.Fatalf("StartJobTargetAnalysis() second error = %v", err)
+	}
+	if err := store.FailJobTargetAnalysis(ctx, target.ID, secondRun.ID, "boom"); err != nil {
+		t.Fatalf("FailJobTargetAnalysis() error = %v", err)
+	}
+
+	saved, err := store.GetJobTarget(ctx, target.ID)
+	if err != nil {
+		t.Fatalf("GetJobTarget() error = %v", err)
+	}
+	if saved == nil {
+		t.Fatal("expected saved job target")
+	}
+	if saved.LatestAnalysisStatus != domain.JobTargetAnalysisFailed {
+		t.Fatalf("expected failed status, got %s", saved.LatestAnalysisStatus)
+	}
+	if saved.LatestSuccessfulAnalysis == nil {
+		t.Fatal("expected latest successful analysis to remain attached after failed rerun")
+	}
+	if saved.LatestSuccessfulAnalysis.ID != firstRun.ID {
+		t.Fatalf("expected latest successful analysis id %q, got %q", firstRun.ID, saved.LatestSuccessfulAnalysis.ID)
 	}
 }
 

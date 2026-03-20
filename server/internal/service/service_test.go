@@ -348,6 +348,86 @@ func TestCreateSessionCanExplicitlyIgnoreActiveJobTarget(t *testing.T) {
 	}
 }
 
+func TestCreateSessionRejectsExplicitUnavailableJobTarget(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	target := seedReadyJobTarget(t, store)
+	updated, err := store.UpdateJobTarget(context.Background(), target.ID, domain.JobTargetInput{
+		Title:       target.Title,
+		CompanyName: target.CompanyName,
+		SourceText:  target.SourceText + "\n新增：强调稳定性值班与故障演练。",
+	})
+	if err != nil {
+		t.Fatalf("UpdateJobTarget() error = %v", err)
+	}
+	if updated.LatestAnalysisStatus != domain.JobTargetAnalysisStale {
+		t.Fatalf("expected stale status, got %s", updated.LatestAnalysisStatus)
+	}
+
+	svc := New(store, nil)
+	_, err = svc.CreateSession(context.Background(), domain.CreateSessionRequest{
+		Mode:        domain.ModeBasics,
+		Topic:       "redis",
+		Intensity:   "standard",
+		JobTargetID: target.ID,
+	})
+	if err == nil {
+		t.Fatal("expected CreateSession() to fail")
+	}
+	if !errors.Is(err, ErrJobTargetNotReady) {
+		t.Fatalf("expected ErrJobTargetNotReady, got %v", err)
+	}
+}
+
+func TestGetDashboardKeepsUnavailableActiveJobTargetVisible(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	target := seedReadyJobTarget(t, store)
+	if _, err := store.SetActiveJobTarget(context.Background(), target.ID); err != nil {
+		t.Fatalf("SetActiveJobTarget() error = %v", err)
+	}
+	if _, err := store.UpdateJobTarget(context.Background(), target.ID, domain.JobTargetInput{
+		Title:       target.Title,
+		CompanyName: target.CompanyName,
+		SourceText:  target.SourceText + "\n新增：强调稳定性值班与故障演练。",
+	}); err != nil {
+		t.Fatalf("UpdateJobTarget() error = %v", err)
+	}
+
+	svc := New(store, nil)
+	dashboard, err := svc.GetDashboard(context.Background())
+	if err != nil {
+		t.Fatalf("GetDashboard() error = %v", err)
+	}
+	if dashboard == nil {
+		t.Fatal("expected dashboard")
+	}
+	if dashboard.ActiveJobTarget == nil {
+		t.Fatal("expected dashboard to keep exposing active job target")
+	}
+	if dashboard.ActiveJobTarget.ID != target.ID {
+		t.Fatalf("expected active job target id %q, got %q", target.ID, dashboard.ActiveJobTarget.ID)
+	}
+	if dashboard.ActiveJobTarget.LatestAnalysisStatus != domain.JobTargetAnalysisStale {
+		t.Fatalf(
+			"expected active job target status %q, got %q",
+			domain.JobTargetAnalysisStale,
+			dashboard.ActiveJobTarget.LatestAnalysisStatus,
+		)
+	}
+	if dashboard.RecommendationScope != "generic" {
+		t.Fatalf("expected recommendation scope to fall back to generic, got %q", dashboard.RecommendationScope)
+	}
+}
+
 func TestRetrySessionReviewRejectsBusySession(t *testing.T) {
 	store, err := openTestStore(t)
 	if err != nil {
