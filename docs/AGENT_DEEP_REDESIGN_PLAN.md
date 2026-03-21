@@ -953,7 +953,8 @@ class ReviewVerdict(BaseModel):
 
 建议增加的验收场景：
 
-- retrieval trace 能说明为什么拿到这些材料
+- 第一版 retrieval trace 已能随 review/export 暴露 observations / session summaries
+  的命中原因、分数和 fallback 情况
 - stream / non-stream 在核心结果上保持一致
 - fallback 原因可以被日志明确定位
 - recommendation / learning path 在模型稀疏输出下仍然可解释
