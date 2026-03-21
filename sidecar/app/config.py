@@ -15,6 +15,7 @@ class Settings:
 
     @property
     def llm_enabled(self) -> bool:
+        # 三个配置缺一不可；半配状态统一按关闭处理，避免请求跑到不确定的降级分支。
         return bool(self.model and self.openai_base_url and self.openai_api_key)
 
 

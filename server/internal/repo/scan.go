@@ -213,6 +213,7 @@ func scanQuestionTemplate(scanner interface{ Scan(dest ...any) error }) (*domain
 func scanTrainingSession(scanner interface{ Scan(dest ...any) error }) (*domain.TrainingSession, error) {
 	var (
 		id, mode, topic, projectID, jobTargetID, jobTargetAnalysisID string
+		promptSetID, promptSetLabel, promptSetStatus                 string
 		intensity, status, startedAt, endedAt, reviewID              string
 		createdAt, updatedAt                                         string
 	)
@@ -225,6 +226,9 @@ func scanTrainingSession(scanner interface{ Scan(dest ...any) error }) (*domain.
 		&projectID,
 		&jobTargetID,
 		&jobTargetAnalysisID,
+		&promptSetID,
+		&promptSetLabel,
+		&promptSetStatus,
 		&intensity,
 		&status,
 		&maxTurns,
@@ -245,6 +249,7 @@ func scanTrainingSession(scanner interface{ Scan(dest ...any) error }) (*domain.
 		ProjectID:           projectID,
 		JobTargetID:         jobTargetID,
 		JobTargetAnalysisID: jobTargetAnalysisID,
+		PromptSetID:         promptSetID,
 		Intensity:           intensity,
 		Status:              status,
 		MaxTurns:            maxTurns,
@@ -254,6 +259,7 @@ func scanTrainingSession(scanner interface{ Scan(dest ...any) error }) (*domain.
 		ReviewID:            reviewID,
 		CreatedAt:           parseTime(createdAt),
 		UpdatedAt:           parseTime(updatedAt),
+		PromptSet:           parsePromptSetSummary(promptSetID, promptSetLabel, promptSetStatus),
 	}, nil
 }
 
@@ -294,6 +300,7 @@ func scanTrainingTurn(scanner interface{ Scan(dest ...any) error }) (*domain.Tra
 func scanReviewCard(scanner interface{ Scan(dest ...any) error }) (*domain.ReviewCard, error) {
 	var (
 		id, sessionID, jobTargetID, jobTargetAnalysisID, overall, topFix, topFixReason string
+		promptSetID, promptSetLabel, promptSetStatus                                    string
 		highlightsJSON, gapsJSON, suggestedTopicsJSON, nextTrainingFocusJSON           string
 		recommendedNextJSON, scoreBreakdownJSON, createdAt                             string
 	)
@@ -302,6 +309,9 @@ func scanReviewCard(scanner interface{ Scan(dest ...any) error }) (*domain.Revie
 		&sessionID,
 		&jobTargetID,
 		&jobTargetAnalysisID,
+		&promptSetID,
+		&promptSetLabel,
+		&promptSetStatus,
 		&overall,
 		&topFix,
 		&topFixReason,
@@ -332,6 +342,7 @@ func scanReviewCard(scanner interface{ Scan(dest ...any) error }) (*domain.Revie
 		SessionID:           sessionID,
 		JobTargetID:         jobTargetID,
 		JobTargetAnalysisID: jobTargetAnalysisID,
+		PromptSetID:         promptSetID,
 		Overall:             overall,
 		TopFix:              topFix,
 		TopFixReason:        topFixReason,
@@ -342,7 +353,20 @@ func scanReviewCard(scanner interface{ Scan(dest ...any) error }) (*domain.Revie
 		RecommendedNext:     recommendedNext,
 		ScoreBreakdown:      breakdown,
 		CreatedAt:           parseTime(createdAt),
+		PromptSet:           parsePromptSetSummary(promptSetID, promptSetLabel, promptSetStatus),
 	}, nil
+}
+
+func parsePromptSetSummary(id, label, status string) *domain.PromptSetSummary {
+	if strings.TrimSpace(id) == "" {
+		return nil
+	}
+
+	return &domain.PromptSetSummary{
+		ID:     id,
+		Label:  label,
+		Status: status,
+	}
 }
 
 func scanWeaknessTag(scanner interface{ Scan(dest ...any) error }) (*domain.WeaknessTag, error) {

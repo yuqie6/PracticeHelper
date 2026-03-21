@@ -56,11 +56,14 @@ func NewRouter(svc *service.Service) *gin.Engine {
 		api.GET("/import-jobs", handler.listImportJobs)
 		api.GET("/import-jobs/:id", handler.getImportJob)
 		api.POST("/import-jobs/:id/retry", handler.retryImportJob)
+		api.GET("/prompt-sets", handler.listPromptSets)
+		api.GET("/prompt-experiments", handler.getPromptExperiment)
 
 		api.GET("/sessions", handler.listSessions)
 		api.POST("/sessions", handler.createSession)
 		api.POST("/sessions/stream", handler.createSessionStream)
 		api.GET("/sessions/:id", handler.getSession)
+		api.GET("/sessions/:id/evaluation-logs", handler.listSessionEvaluationLogs)
 		api.GET("/sessions/:id/export", handler.exportSession)
 		api.POST("/sessions/:id/answer", handler.submitAnswer)
 		api.POST("/sessions/:id/answer/stream", handler.submitAnswerStream)
@@ -326,6 +329,36 @@ func (h *Handler) retryImportJob(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"data": data})
 }
 
+func (h *Handler) listPromptSets(c *gin.Context) {
+	data, err := h.service.ListPromptSets(c.Request.Context())
+	if err != nil {
+		writeError(c, http.StatusBadGateway, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) getPromptExperiment(c *gin.Context) {
+	var req domain.PromptExperimentRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	data, err := h.service.GetPromptExperiment(c.Request.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrPromptSetNotFound):
+			writeError(c, http.StatusNotFound, err)
+		default:
+			writeError(c, http.StatusBadRequest, err)
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
 func (h *Handler) createSession(c *gin.Context) {
 	var request domain.CreateSessionRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -381,6 +414,20 @@ func (h *Handler) listSessions(c *gin.Context) {
 
 func (h *Handler) getSession(c *gin.Context) {
 	data, err := h.service.GetSession(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrSessionNotFound):
+			writeError(c, http.StatusNotFound, err)
+		default:
+			writeError(c, http.StatusInternalServerError, err)
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) listSessionEvaluationLogs(c *gin.Context) {
+	data, err := h.service.ListSessionEvaluationLogs(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrSessionNotFound):
@@ -639,6 +686,8 @@ func errorCode(err error) string {
 		return "job_target_analysis_not_found"
 	case errors.Is(err, service.ErrSessionNotFound):
 		return "session_not_found"
+	case errors.Is(err, service.ErrPromptSetNotFound):
+		return "prompt_set_not_found"
 	case errors.Is(err, service.ErrUnsupportedExportFormat):
 		return "invalid_export_format"
 	case errors.Is(err, service.ErrImportJobNotFound):

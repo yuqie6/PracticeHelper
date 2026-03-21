@@ -44,6 +44,13 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 		StartedAt:  &startedAt,
 	}
 
+	promptSet, err := s.resolvePromptSet(ctx, request.PromptSetID)
+	if err != nil {
+		return nil, err
+	}
+	session.PromptSetID = promptSet.ID
+	session.PromptSet = promptSet
+
 	jobTarget, jobTargetAnalysis, err := s.resolveJobTargetBinding(ctx, request.JobTargetID, request.IgnoreActiveJobTarget)
 	if err != nil {
 		return nil, err
@@ -67,6 +74,7 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 		Mode:              request.Mode,
 		Topic:             session.Topic,
 		Intensity:         intensity,
+		PromptSetID:       session.PromptSetID,
 		Weaknesses:        weaknesses,
 		JobTargetAnalysis: buildJobTargetAnalysisSnapshot(jobTargetAnalysis),
 	}
@@ -102,11 +110,11 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 	}
 
 	questionStartedAt := time.Now()
-	question, err := s.sidecar.GenerateQuestion(ctx, generateRequest)
+	question, promptMeta, err := s.sidecar.GenerateQuestion(ctx, generateRequest)
 	if err != nil {
 		return nil, err
 	}
-	s.recordEvaluationLog(ctx, session.ID, "", "generate_question", questionStartedAt)
+	s.recordEvaluationLog(ctx, session.ID, "", "generate_question", questionStartedAt, promptMeta)
 
 	turn := &domain.TrainingTurn{
 		ID:             newID("turn"),
@@ -164,6 +172,13 @@ func (s *Service) CreateSessionStream(
 		StartedAt:  &startedAt,
 	}
 
+	promptSet, err := s.resolvePromptSet(ctx, request.PromptSetID)
+	if err != nil {
+		return nil, err
+	}
+	session.PromptSetID = promptSet.ID
+	session.PromptSet = promptSet
+
 	jobTarget, jobTargetAnalysis, err := s.resolveJobTargetBinding(ctx, request.JobTargetID, request.IgnoreActiveJobTarget)
 	if err != nil {
 		return nil, err
@@ -187,6 +202,7 @@ func (s *Service) CreateSessionStream(
 		Mode:              request.Mode,
 		Topic:             session.Topic,
 		Intensity:         intensity,
+		PromptSetID:       session.PromptSetID,
 		Weaknesses:        weaknesses,
 		JobTargetAnalysis: buildJobTargetAnalysisSnapshot(jobTargetAnalysis),
 	}
@@ -221,11 +237,11 @@ func (s *Service) CreateSessionStream(
 	}
 
 	questionStartedAt := time.Now()
-	question, err := s.sidecar.GenerateQuestionStream(ctx, generateRequest, emit)
+	question, promptMeta, err := s.sidecar.GenerateQuestionStream(ctx, generateRequest, emit)
 	if err != nil {
 		return nil, err
 	}
-	s.recordEvaluationLog(ctx, session.ID, "", "generate_question_stream", questionStartedAt)
+	s.recordEvaluationLog(ctx, session.ID, "", "generate_question_stream", questionStartedAt, promptMeta)
 
 	turn := &domain.TrainingTurn{
 		ID:             newID("turn"),

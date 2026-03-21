@@ -1,0 +1,18 @@
+{
+  "prompt_sets": [
+    {
+      "id": "stable-v1",
+      "label": "Stable v1",
+      "description": "Current default prompt set for production training.",
+      "status": "stable",
+      "is_default": true
+    },
+    {
+      "id": "candidate-v1",
+      "label": "Candidate v1",
+      "description": "Experiment prompt set for prompt A/B comparison.",
+      "status": "candidate",
+      "is_default": false
+    }
+  ]
+}

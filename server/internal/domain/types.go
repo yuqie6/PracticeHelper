@@ -180,6 +180,20 @@ type QuestionTemplate struct {
 	ScoreWeights      map[string]float64 `json:"score_weights"`
 }
 
+type PromptSetSummary struct {
+	ID          string `json:"id"`
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status"`
+	IsDefault   bool   `json:"is_default,omitempty"`
+}
+
+type PromptExecutionMeta struct {
+	ModelName   string `json:"model_name,omitempty"`
+	PromptSetID string `json:"prompt_set_id,omitempty"`
+	PromptHash  string `json:"prompt_hash,omitempty"`
+}
+
 type TrainingSession struct {
 	ID                  string          `json:"id"`
 	Mode                string          `json:"mode"`
@@ -187,6 +201,7 @@ type TrainingSession struct {
 	ProjectID           string          `json:"project_id,omitempty"`
 	JobTargetID         string          `json:"job_target_id,omitempty"`
 	JobTargetAnalysisID string          `json:"job_target_analysis_id,omitempty"`
+	PromptSetID         string          `json:"prompt_set_id,omitempty"`
 	Intensity           string          `json:"intensity"`
 	Status              string          `json:"status"`
 	MaxTurns            int             `json:"max_turns"`
@@ -199,6 +214,7 @@ type TrainingSession struct {
 	Turns               []TrainingTurn  `json:"turns,omitempty"`
 	Project             *ProjectProfile `json:"project,omitempty"`
 	JobTarget           *JobTargetRef   `json:"job_target,omitempty"`
+	PromptSet           *PromptSetSummary `json:"prompt_set,omitempty"`
 }
 
 type TrainingTurn struct {
@@ -274,6 +290,7 @@ type ReviewCard struct {
 	SessionID           string             `json:"session_id"`
 	JobTargetID         string             `json:"job_target_id,omitempty"`
 	JobTargetAnalysisID string             `json:"job_target_analysis_id,omitempty"`
+	PromptSetID         string             `json:"prompt_set_id,omitempty"`
 	Overall             string             `json:"overall"`
 	TopFix              string             `json:"top_fix,omitempty"`
 	TopFixReason        string             `json:"top_fix_reason,omitempty"`
@@ -285,6 +302,7 @@ type ReviewCard struct {
 	ScoreBreakdown      map[string]float64 `json:"score_breakdown"`
 	CreatedAt           time.Time          `json:"created_at"`
 	JobTarget           *JobTargetRef      `json:"job_target,omitempty"`
+	PromptSet           *PromptSetSummary  `json:"prompt_set,omitempty"`
 }
 
 type NextSession struct {
@@ -304,6 +322,8 @@ type TrainingSessionSummary struct {
 	ReviewID    string        `json:"review_id,omitempty"`
 	UpdatedAt   time.Time     `json:"updated_at"`
 	JobTarget   *JobTargetRef `json:"job_target,omitempty"`
+	PromptSetID string        `json:"prompt_set_id,omitempty"`
+	PromptSet   *PromptSetSummary `json:"prompt_set,omitempty"`
 }
 
 type ListSessionsRequest struct {
@@ -339,6 +359,7 @@ type CreateSessionRequest struct {
 	Topic                 string `json:"topic"`
 	ProjectID             string `json:"project_id"`
 	JobTargetID           string `json:"job_target_id"`
+	PromptSetID           string `json:"prompt_set_id"`
 	IgnoreActiveJobTarget bool   `json:"ignore_active_job_target,omitempty"`
 	Intensity             string `json:"intensity" binding:"required"`
 	MaxTurns              int    `json:"max_turns,omitempty"`
@@ -395,6 +416,7 @@ type GenerateQuestionRequest struct {
 	Mode              string                    `json:"mode"`
 	Topic             string                    `json:"topic,omitempty"`
 	CandidateTopics   []string                  `json:"candidate_topics,omitempty"`
+	PromptSetID       string                    `json:"prompt_set_id,omitempty"`
 	Intensity         string                    `json:"intensity"`
 	Project           *ProjectProfile           `json:"project,omitempty"`
 	Templates         []QuestionTemplate        `json:"templates,omitempty"`
@@ -411,6 +433,7 @@ type GenerateQuestionResponse struct {
 type EvaluateAnswerRequest struct {
 	Mode              string                    `json:"mode"`
 	Topic             string                    `json:"topic,omitempty"`
+	PromptSetID       string                    `json:"prompt_set_id,omitempty"`
 	Project           *ProjectProfile           `json:"project,omitempty"`
 	Question          string                    `json:"question"`
 	ExpectedPoints    []string                  `json:"expected_points"`
@@ -426,5 +449,62 @@ type GenerateReviewRequest struct {
 	Session           *TrainingSession          `json:"session"`
 	Project           *ProjectProfile           `json:"project,omitempty"`
 	Turns             []TrainingTurn            `json:"turns"`
+	PromptSetID       string                    `json:"prompt_set_id,omitempty"`
 	JobTargetAnalysis *AnalyzeJobTargetResponse `json:"job_target_analysis,omitempty"`
+}
+
+type EvaluationLogEntry struct {
+	ID          int64      `json:"id"`
+	SessionID   string     `json:"session_id"`
+	TurnID      string     `json:"turn_id,omitempty"`
+	FlowName    string     `json:"flow_name"`
+	ModelName   string     `json:"model_name,omitempty"`
+	PromptSetID string     `json:"prompt_set_id,omitempty"`
+	PromptHash  string     `json:"prompt_hash,omitempty"`
+	LatencyMs   float64    `json:"latency_ms"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
+type PromptExperimentRequest struct {
+	Left  string `form:"left"`
+	Right string `form:"right"`
+	Mode  string `form:"mode"`
+	Topic string `form:"topic"`
+	Limit int    `form:"limit"`
+}
+
+type PromptExperimentFilters struct {
+	Left  string `json:"left"`
+	Right string `json:"right"`
+	Mode  string `json:"mode,omitempty"`
+	Topic string `json:"topic,omitempty"`
+	Limit int    `json:"limit"`
+}
+
+type PromptExperimentMetrics struct {
+	PromptSet                    PromptSetSummary `json:"prompt_set"`
+	SessionCount                 int              `json:"session_count"`
+	CompletedCount               int              `json:"completed_count"`
+	AvgTotalScore                float64          `json:"avg_total_score"`
+	AvgGenerateQuestionLatencyMs float64          `json:"avg_generate_question_latency_ms"`
+	AvgEvaluateAnswerLatencyMs   float64          `json:"avg_evaluate_answer_latency_ms"`
+	AvgGenerateReviewLatencyMs   float64          `json:"avg_generate_review_latency_ms"`
+}
+
+type PromptExperimentSample struct {
+	SessionID  string           `json:"session_id"`
+	ReviewID   string           `json:"review_id,omitempty"`
+	Mode       string           `json:"mode"`
+	Topic      string           `json:"topic,omitempty"`
+	Status     string           `json:"status"`
+	TotalScore float64          `json:"total_score"`
+	UpdatedAt  time.Time        `json:"updated_at"`
+	PromptSet  PromptSetSummary `json:"prompt_set"`
+}
+
+type PromptExperimentReport struct {
+	Left           PromptExperimentMetrics  `json:"left"`
+	Right          PromptExperimentMetrics  `json:"right"`
+	RecentSamples  []PromptExperimentSample `json:"recent_samples"`
+	AppliedFilters PromptExperimentFilters  `json:"applied_filters"`
 }

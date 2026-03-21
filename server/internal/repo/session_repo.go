@@ -18,8 +18,8 @@ func (s *Store) CreateSession(ctx context.Context, session *domain.TrainingSessi
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO training_sessions (id, mode, topic, project_id, job_target_id, job_target_analysis_id, intensity, status, max_turns, total_score, started_at, ended_at, review_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO training_sessions (id, mode, topic, project_id, job_target_id, job_target_analysis_id, prompt_set_id, prompt_set_label, prompt_set_status, intensity, status, max_turns, total_score, started_at, ended_at, review_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		session.ID,
 		session.Mode,
@@ -27,6 +27,9 @@ func (s *Store) CreateSession(ctx context.Context, session *domain.TrainingSessi
 		session.ProjectID,
 		session.JobTargetID,
 		session.JobTargetAnalysisID,
+		session.PromptSetID,
+		promptSetLabel(session.PromptSet),
+		promptSetStatus(session.PromptSet),
 		session.Intensity,
 		session.Status,
 		session.MaxTurns,
@@ -49,7 +52,7 @@ func (s *Store) CreateSession(ctx context.Context, session *domain.TrainingSessi
 
 func (s *Store) GetSession(ctx context.Context, sessionID string) (*domain.TrainingSession, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, mode, topic, project_id, job_target_id, job_target_analysis_id, intensity, status, max_turns, total_score, started_at, ended_at, review_id, created_at, updated_at
+		SELECT id, mode, topic, project_id, job_target_id, job_target_analysis_id, prompt_set_id, prompt_set_label, prompt_set_status, intensity, status, max_turns, total_score, started_at, ended_at, review_id, created_at, updated_at
 		FROM training_sessions
 		WHERE id = ?
 	`, sessionID)
@@ -229,7 +232,8 @@ func (s *Store) ListSessions(ctx context.Context, req domain.ListSessionsRequest
 
 	query := fmt.Sprintf(`
 		SELECT ts.id, ts.mode, ts.topic, COALESCE(pp.name, ''), ts.status, ts.total_score, ts.review_id, ts.updated_at,
-			COALESCE(jt.id, ''), COALESCE(jt.title, ''), COALESCE(jt.company_name, '')
+			COALESCE(jt.id, ''), COALESCE(jt.title, ''), COALESCE(jt.company_name, ''),
+			COALESCE(ts.prompt_set_id, ''), COALESCE(ts.prompt_set_label, ''), COALESCE(ts.prompt_set_status, '')
 		FROM training_sessions ts
 		LEFT JOIN project_profiles pp ON ts.project_id = pp.id
 		LEFT JOIN job_targets jt ON ts.job_target_id = jt.id
@@ -266,8 +270,9 @@ func (s *Store) ListSessions(ctx context.Context, req domain.ListSessionsRequest
 func scanSessionSummaryRow(scanner interface{ Scan(dest ...any) error }) (*domain.TrainingSessionSummary, error) {
 	var id, mode, topic, projectName, status, reviewID, updatedAt string
 	var jobTargetID, jobTargetTitle, jobTargetCompanyName string
+	var promptSetID, promptSetLabel, promptSetStatus string
 	var totalScore float64
-	if err := scanner.Scan(&id, &mode, &topic, &projectName, &status, &totalScore, &reviewID, &updatedAt, &jobTargetID, &jobTargetTitle, &jobTargetCompanyName); err != nil {
+	if err := scanner.Scan(&id, &mode, &topic, &projectName, &status, &totalScore, &reviewID, &updatedAt, &jobTargetID, &jobTargetTitle, &jobTargetCompanyName, &promptSetID, &promptSetLabel, &promptSetStatus); err != nil {
 		return nil, fmt.Errorf("scan session summary: %w", err)
 	}
 
@@ -280,6 +285,8 @@ func scanSessionSummaryRow(scanner interface{ Scan(dest ...any) error }) (*domai
 		TotalScore:  totalScore,
 		ReviewID:    reviewID,
 		UpdatedAt:   parseTime(updatedAt),
+		PromptSetID: promptSetID,
+		PromptSet:   parsePromptSetSummary(promptSetID, promptSetLabel, promptSetStatus),
 	}
 	if jobTargetID != "" {
 		item.JobTarget = &domain.JobTargetRef{
@@ -298,7 +305,8 @@ func (s *Store) ListRecentSessions(ctx context.Context, limit int) ([]domain.Tra
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT ts.id, ts.mode, ts.topic, COALESCE(pp.name, ''), ts.status, ts.total_score, ts.review_id, ts.updated_at,
-			COALESCE(jt.id, ''), COALESCE(jt.title, ''), COALESCE(jt.company_name, '')
+			COALESCE(jt.id, ''), COALESCE(jt.title, ''), COALESCE(jt.company_name, ''),
+			COALESCE(ts.prompt_set_id, ''), COALESCE(ts.prompt_set_label, ''), COALESCE(ts.prompt_set_status, '')
 		FROM training_sessions ts
 		LEFT JOIN project_profiles pp ON ts.project_id = pp.id
 		LEFT JOIN job_targets jt ON ts.job_target_id = jt.id
@@ -314,8 +322,9 @@ func (s *Store) ListRecentSessions(ctx context.Context, limit int) ([]domain.Tra
 	for rows.Next() {
 		var id, mode, topic, projectName, status, reviewID, updatedAt string
 		var jobTargetID, jobTargetTitle, jobTargetCompanyName string
+		var promptSetID, promptSetLabel, promptSetStatus string
 		var totalScore float64
-		if err := rows.Scan(&id, &mode, &topic, &projectName, &status, &totalScore, &reviewID, &updatedAt, &jobTargetID, &jobTargetTitle, &jobTargetCompanyName); err != nil {
+		if err := rows.Scan(&id, &mode, &topic, &projectName, &status, &totalScore, &reviewID, &updatedAt, &jobTargetID, &jobTargetTitle, &jobTargetCompanyName, &promptSetID, &promptSetLabel, &promptSetStatus); err != nil {
 			return nil, fmt.Errorf("scan recent session: %w", err)
 		}
 
@@ -328,6 +337,8 @@ func (s *Store) ListRecentSessions(ctx context.Context, limit int) ([]domain.Tra
 			TotalScore:  totalScore,
 			ReviewID:    reviewID,
 			UpdatedAt:   parseTime(updatedAt),
+			PromptSetID: promptSetID,
+			PromptSet:   parsePromptSetSummary(promptSetID, promptSetLabel, promptSetStatus),
 		}
 		if jobTargetID != "" {
 			item.JobTarget = &domain.JobTargetRef{
@@ -345,7 +356,8 @@ func (s *Store) ListRecentSessions(ctx context.Context, limit int) ([]domain.Tra
 func (s *Store) GetLatestResumableSession(ctx context.Context) (*domain.TrainingSessionSummary, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT ts.id, ts.mode, ts.topic, COALESCE(pp.name, ''), ts.status, ts.total_score, ts.review_id, ts.updated_at,
-			COALESCE(jt.id, ''), COALESCE(jt.title, ''), COALESCE(jt.company_name, '')
+			COALESCE(jt.id, ''), COALESCE(jt.title, ''), COALESCE(jt.company_name, ''),
+			COALESCE(ts.prompt_set_id, ''), COALESCE(ts.prompt_set_label, ''), COALESCE(ts.prompt_set_status, '')
 		FROM training_sessions ts
 		LEFT JOIN project_profiles pp ON ts.project_id = pp.id
 		LEFT JOIN job_targets jt ON ts.job_target_id = jt.id
@@ -356,8 +368,9 @@ func (s *Store) GetLatestResumableSession(ctx context.Context) (*domain.Training
 
 	var id, mode, topic, projectName, status, reviewID, updatedAt string
 	var jobTargetID, jobTargetTitle, jobTargetCompanyName string
+	var promptSetID, promptSetLabel, promptSetStatus string
 	var totalScore float64
-	if err := row.Scan(&id, &mode, &topic, &projectName, &status, &totalScore, &reviewID, &updatedAt, &jobTargetID, &jobTargetTitle, &jobTargetCompanyName); err != nil {
+	if err := row.Scan(&id, &mode, &topic, &projectName, &status, &totalScore, &reviewID, &updatedAt, &jobTargetID, &jobTargetTitle, &jobTargetCompanyName, &promptSetID, &promptSetLabel, &promptSetStatus); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
@@ -374,6 +387,8 @@ func (s *Store) GetLatestResumableSession(ctx context.Context) (*domain.Training
 		TotalScore:  totalScore,
 		ReviewID:    reviewID,
 		UpdatedAt:   parseTime(updatedAt),
+		PromptSetID: promptSetID,
+		PromptSet:   parsePromptSetSummary(promptSetID, promptSetLabel, promptSetStatus),
 	}
 	if jobTargetID != "" {
 		item.JobTarget = &domain.JobTargetRef{
@@ -384,6 +399,20 @@ func (s *Store) GetLatestResumableSession(ctx context.Context) (*domain.Training
 	}
 
 	return item, nil
+}
+
+func promptSetLabel(promptSet *domain.PromptSetSummary) string {
+	if promptSet == nil {
+		return ""
+	}
+	return promptSet.Label
+}
+
+func promptSetStatus(promptSet *domain.PromptSetSummary) string {
+	if promptSet == nil {
+		return ""
+	}
+	return promptSet.Status
 }
 
 func (s *Store) InsertTurn(ctx context.Context, turn *domain.TrainingTurn) error {

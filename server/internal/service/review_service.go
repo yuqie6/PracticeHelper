@@ -22,16 +22,17 @@ func (s *Service) finalizeReview(ctx context.Context, sessionID string) (*domain
 	}
 
 	startedAt := time.Now()
-	review, err := s.sidecar.GenerateReview(ctx, domain.GenerateReviewRequest{
+	review, promptMeta, err := s.sidecar.GenerateReview(ctx, domain.GenerateReviewRequest{
 		Session:           updatedSession,
 		Project:           updatedSession.Project,
 		Turns:             updatedSession.Turns,
+		PromptSetID:       updatedSession.PromptSetID,
 		JobTargetAnalysis: jobTargetAnalysis,
 	})
 	if err != nil {
 		return nil, err
 	}
-	s.recordEvaluationLog(ctx, updatedSession.ID, "", "generate_review", startedAt)
+	s.recordEvaluationLog(ctx, updatedSession.ID, "", "generate_review", startedAt, promptMeta)
 
 	return s.persistReview(ctx, updatedSession, review)
 }
@@ -54,16 +55,17 @@ func (s *Service) finalizeReviewStream(
 	}
 
 	startedAt := time.Now()
-	review, err := s.sidecar.GenerateReviewStream(ctx, domain.GenerateReviewRequest{
+	review, promptMeta, err := s.sidecar.GenerateReviewStream(ctx, domain.GenerateReviewRequest{
 		Session:           updatedSession,
 		Project:           updatedSession.Project,
 		Turns:             updatedSession.Turns,
+		PromptSetID:       updatedSession.PromptSetID,
 		JobTargetAnalysis: jobTargetAnalysis,
 	}, emit)
 	if err != nil {
 		return nil, err
 	}
-	s.recordEvaluationLog(ctx, updatedSession.ID, "", "generate_review_stream", startedAt)
+	s.recordEvaluationLog(ctx, updatedSession.ID, "", "generate_review_stream", startedAt, promptMeta)
 
 	savedSession, err := s.persistReview(ctx, updatedSession, review)
 	if err != nil {
@@ -81,6 +83,8 @@ func (s *Service) persistReview(
 ) (*domain.TrainingSession, error) {
 	review.ID = newID("review")
 	review.SessionID = session.ID
+	review.PromptSetID = session.PromptSetID
+	review.PromptSet = session.PromptSet
 	if err := s.repo.CreateReview(ctx, review); err != nil {
 		return nil, err
 	}

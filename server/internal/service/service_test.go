@@ -18,6 +18,33 @@ import (
 	"practicehelper/server/internal/sidecar"
 )
 
+var testPromptSets = []domain.PromptSetSummary{
+	{
+		ID:        "stable-v1",
+		Label:     "Stable v1",
+		Status:    "stable",
+		IsDefault: true,
+	},
+	{
+		ID:     "candidate-v1",
+		Label:  "Candidate v1",
+		Status: "candidate",
+	},
+}
+
+func handlePromptSetRequest(t *testing.T, w http.ResponseWriter, r *http.Request) bool {
+	t.Helper()
+	if r.URL.Path != "/internal/prompt-sets" {
+		return false
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(testPromptSets); err != nil {
+		t.Fatalf("encode prompt sets: %v", err)
+	}
+	return true
+}
+
 func TestBuildTodayFocusUsesReadableWeaknessLabels(t *testing.T) {
 	profile := &domain.UserProfile{}
 	weaknesses := []domain.WeaknessTag{
@@ -163,6 +190,9 @@ func TestCreateSessionPassesBoundJobTargetAnalysisToSidecar(t *testing.T) {
 
 	var captured domain.GenerateQuestionRequest
 	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if handlePromptSetRequest(t, w, r) {
+			return
+		}
 		if r.URL.Path != "/internal/generate_question" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -194,8 +224,14 @@ func TestCreateSessionPassesBoundJobTargetAnalysisToSidecar(t *testing.T) {
 	if session.JobTargetID != target.ID {
 		t.Fatalf("expected session job target id %q, got %q", target.ID, session.JobTargetID)
 	}
+	if session.PromptSetID != "stable-v1" {
+		t.Fatalf("expected session prompt set id stable-v1, got %q", session.PromptSetID)
+	}
 	if session.JobTargetAnalysisID == "" {
 		t.Fatal("expected session to persist a job target analysis id")
+	}
+	if captured.PromptSetID != "stable-v1" {
+		t.Fatalf("expected generate question request prompt set id stable-v1, got %q", captured.PromptSetID)
 	}
 	if captured.JobTargetAnalysis == nil {
 		t.Fatal("expected generate question request to include job target analysis")
@@ -219,6 +255,9 @@ func TestCreateSessionFallsBackToActiveJobTargetWhenRequestOmitsOne(t *testing.T
 
 	var captured domain.GenerateQuestionRequest
 	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if handlePromptSetRequest(t, w, r) {
+			return
+		}
 		if r.URL.Path != "/internal/generate_question" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -274,6 +313,12 @@ func TestCreateSessionIgnoresUnavailableActiveJobTarget(t *testing.T) {
 
 	var captured domain.GenerateQuestionRequest
 	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if handlePromptSetRequest(t, w, r) {
+			return
+		}
+		if r.URL.Path != "/internal/generate_question" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
 		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 			t.Fatalf("decode request body: %v", err)
 		}
@@ -319,6 +364,12 @@ func TestCreateSessionCanExplicitlyIgnoreActiveJobTarget(t *testing.T) {
 
 	var captured domain.GenerateQuestionRequest
 	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if handlePromptSetRequest(t, w, r) {
+			return
+		}
+		if r.URL.Path != "/internal/generate_question" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
 		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 			t.Fatalf("decode request body: %v", err)
 		}
@@ -359,6 +410,9 @@ func TestCreateSessionUsesOSTemplates(t *testing.T) {
 
 	var captured domain.GenerateQuestionRequest
 	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if handlePromptSetRequest(t, w, r) {
+			return
+		}
 		if r.URL.Path != "/internal/generate_question" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -419,6 +473,9 @@ func TestCreateSessionMixedSelectsTopicsFromWeaknesses(t *testing.T) {
 
 	var captured domain.GenerateQuestionRequest
 	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if handlePromptSetRequest(t, w, r) {
+			return
+		}
 		if r.URL.Path != "/internal/generate_question" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -685,9 +742,15 @@ func TestCreateSessionWritesEvaluationLog(t *testing.T) {
 	store := repo.New(db)
 
 	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if handlePromptSetRequest(t, w, r) {
+			return
+		}
 		if r.URL.Path != "/internal/generate_question" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
+		w.Header().Set("X-PracticeHelper-Prompt-Set", "stable-v1")
+		w.Header().Set("X-PracticeHelper-Prompt-Hash", "hash-generate-question")
+		w.Header().Set("X-PracticeHelper-Model-Name", "gpt-test")
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(domain.GenerateQuestionResponse{
 			Question:       "Redis 为什么快？",
@@ -709,18 +772,20 @@ func TestCreateSessionWritesEvaluationLog(t *testing.T) {
 	}
 
 	var (
-		sessionID string
-		turnID    string
-		flowName  string
-		modelName string
-		latencyMs float64
+		sessionID   string
+		turnID      string
+		flowName    string
+		modelName   string
+		promptSetID string
+		promptHash  string
+		latencyMs   float64
 	)
 	if err := db.QueryRow(`
-		SELECT session_id, turn_id, flow_name, model_name, latency_ms
+		SELECT session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash, latency_ms
 		FROM evaluation_logs
 		ORDER BY id DESC
 		LIMIT 1
-	`).Scan(&sessionID, &turnID, &flowName, &modelName, &latencyMs); err != nil {
+	`).Scan(&sessionID, &turnID, &flowName, &modelName, &promptSetID, &promptHash, &latencyMs); err != nil {
 		t.Fatalf("query evaluation log: %v", err)
 	}
 
@@ -733,8 +798,14 @@ func TestCreateSessionWritesEvaluationLog(t *testing.T) {
 	if flowName != "generate_question" {
 		t.Fatalf("expected flow name generate_question, got %q", flowName)
 	}
-	if modelName != "" {
-		t.Fatalf("expected model name to be empty, got %q", modelName)
+	if modelName != "gpt-test" {
+		t.Fatalf("expected model name gpt-test, got %q", modelName)
+	}
+	if promptSetID != "stable-v1" {
+		t.Fatalf("expected prompt set id stable-v1, got %q", promptSetID)
+	}
+	if promptHash != "hash-generate-question" {
+		t.Fatalf("expected prompt hash hash-generate-question, got %q", promptHash)
 	}
 	if latencyMs < 0 {
 		t.Fatalf("expected non-negative latency, got %.2f", latencyMs)

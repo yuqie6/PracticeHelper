@@ -97,6 +97,14 @@ class QuestionTemplate(BaseModel):
     score_weights: dict[str, float] = Field(default_factory=dict)
 
 
+class PromptSetSummary(BaseModel):
+    id: str
+    label: str
+    description: str = ""
+    status: str
+    is_default: bool = False
+
+
 class AnalyzeRepoRequest(BaseModel):
     repo_url: str
 
@@ -130,6 +138,7 @@ class GenerateQuestionRequest(BaseModel):
     mode: Literal["basics", "project"]
     topic: str = ""
     candidate_topics: list[str] = Field(default_factory=list)
+    prompt_set_id: str = ""
     intensity: str = "standard"
     strategy: str = ""
     project: ProjectProfile | None = None
@@ -147,6 +156,7 @@ class GenerateQuestionResponse(BaseModel):
 class EvaluateAnswerRequest(BaseModel):
     mode: Literal["basics", "project"]
     topic: str = ""
+    prompt_set_id: str = ""
     project: ProjectProfile | None = None
     question: str
     expected_points: list[str] = Field(default_factory=list)
@@ -196,6 +206,7 @@ class GenerateReviewRequest(BaseModel):
     session: TrainingSession
     project: ProjectProfile | None = None
     turns: list[TrainingTurn] = Field(default_factory=list)
+    prompt_set_id: str = ""
     job_target_analysis: JobTargetAnalysisSnapshot | None = None
 
 

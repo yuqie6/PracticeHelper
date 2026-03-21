@@ -213,6 +213,7 @@ class AgentRuntime:
         self._require_model_client()
 
         try:
+            # 先走带工具的主链路；只有 tool call 或 JSON 收口不稳定时才退回单轮生成。
             return self._run_tool_loop(
                 response_model=response_model,
                 system_prompt=system_prompt,
@@ -250,6 +251,7 @@ class AgentRuntime:
         tool_map = {tool.name: tool for tool in tools}
         used_any_tool = False
 
+        # 轮数上限用于兜住 prompt/tool 契约失配，避免 sidecar 卡在无限工具往返里。
         for _ in range(4):
             result = model_client.create_completion(
                 messages=messages,

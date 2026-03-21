@@ -127,6 +127,9 @@ func migrate(db *sql.DB) error {
 			project_id TEXT NOT NULL DEFAULT '',
 			job_target_id TEXT NOT NULL DEFAULT '',
 			job_target_analysis_id TEXT NOT NULL DEFAULT '',
+			prompt_set_id TEXT NOT NULL DEFAULT '',
+			prompt_set_label TEXT NOT NULL DEFAULT '',
+			prompt_set_status TEXT NOT NULL DEFAULT '',
 			intensity TEXT NOT NULL,
 			status TEXT NOT NULL,
 			max_turns INTEGER NOT NULL DEFAULT 2,
@@ -196,6 +199,8 @@ func migrate(db *sql.DB) error {
 			turn_id TEXT NOT NULL DEFAULT '',
 			flow_name TEXT NOT NULL,
 			model_name TEXT NOT NULL DEFAULT '',
+			prompt_set_id TEXT NOT NULL DEFAULT '',
+			prompt_hash TEXT NOT NULL DEFAULT '',
 			latency_ms REAL NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL
 		);`,
@@ -222,10 +227,25 @@ func migrate(db *sql.DB) error {
 	if err := ensureColumn(db, "training_sessions", "job_target_analysis_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
+	if err := ensureColumn(db, "training_sessions", "prompt_set_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "training_sessions", "prompt_set_label", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "training_sessions", "prompt_set_status", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
 	if err := ensureColumn(db, "user_profile", "active_job_target_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 	if err := ensureColumn(db, "training_sessions", "max_turns", "INTEGER NOT NULL DEFAULT 2"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "evaluation_logs", "prompt_set_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "evaluation_logs", "prompt_hash", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 

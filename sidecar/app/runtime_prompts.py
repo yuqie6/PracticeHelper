@@ -4,7 +4,13 @@ import json
 
 from pydantic import BaseModel, Field
 
-from app.prompt_loader import load_prompt, render_prompt
+from app.prompt_loader import (
+    PromptLoadResult,
+    load_prompt,
+    load_prompt_with_meta,
+    render_prompt,
+    render_prompt_with_meta,
+)
 from app.repo_context import RepoAnalysisBundle
 from app.runtime_support import RuntimeTool, compact_chunks, repo_overview_payload
 from app.schemas import (
@@ -83,7 +89,7 @@ def analyze_job_target_prompt_bundle(
 def question_prompt_bundle(
     request: GenerateQuestionRequest,
 ) -> tuple[str, str, list[RuntimeTool]]:
-    system_prompt = load_prompt("generate_question_system.md")
+    system_prompt = question_prompt_meta(request).content
     jd_label = "有" if request.job_target_analysis else "无"
     strategy = resolve_question_strategy(request)
     candidate_topics = request.candidate_topics or ([request.topic] if request.topic else [])
@@ -160,16 +166,7 @@ def resolve_question_strategy(request: GenerateQuestionRequest) -> str:
 def evaluate_prompt_bundle(
     request: EvaluateAnswerRequest,
 ) -> tuple[str, str, list[RuntimeTool]]:
-    weights = request.score_weights or _DEFAULT_SCORE_WEIGHTS
-    rubric_lines = "\n".join(f"- {key} ({int(value)}%)" for key, value in weights.items())
-    dimensions_example = json.dumps({key: 0 for key in weights}, ensure_ascii=False)
-    system_prompt = render_prompt(
-        "evaluate_answer_system.md",
-        {
-            "RUBRIC_LINES": rubric_lines,
-            "DIMENSIONS_EXAMPLE": dimensions_example,
-        },
-    )
+    system_prompt = evaluate_prompt_meta(request).content
     followup_label = "是" if request.turn_index > 1 else "否"
     jd_label = "有" if request.job_target_analysis else "无"
     is_last_turn = request.turn_index >= request.max_turns
@@ -214,7 +211,7 @@ def evaluate_prompt_bundle(
 def review_prompt_bundle(
     request: GenerateReviewRequest,
 ) -> tuple[str, str, list[RuntimeTool]]:
-    system_prompt = load_prompt("generate_review_system.md")
+    system_prompt = review_prompt_meta(request).content
     jd_label = "有" if request.job_target_analysis else "无"
     user_prompt = f"请根据整轮训练历史生成最终复盘卡。是否绑定岗位 JD：{jd_label}"
     tools = [
@@ -240,3 +237,25 @@ def review_prompt_bundle(
         ),
     ]
     return system_prompt, user_prompt, tools
+
+
+def question_prompt_meta(request: GenerateQuestionRequest) -> PromptLoadResult:
+    return load_prompt_with_meta("generate_question_system.md", request.prompt_set_id)
+
+
+def evaluate_prompt_meta(request: EvaluateAnswerRequest) -> PromptLoadResult:
+    weights = request.score_weights or _DEFAULT_SCORE_WEIGHTS
+    rubric_lines = "\n".join(f"- {key} ({int(value)}%)" for key, value in weights.items())
+    dimensions_example = json.dumps({key: 0 for key in weights}, ensure_ascii=False)
+    return render_prompt_with_meta(
+        "evaluate_answer_system.md",
+        {
+            "RUBRIC_LINES": rubric_lines,
+            "DIMENSIONS_EXAMPLE": dimensions_example,
+        },
+        request.prompt_set_id,
+    )
+
+
+def review_prompt_meta(request: GenerateReviewRequest) -> PromptLoadResult:
+    return load_prompt_with_meta("generate_review_system.md", request.prompt_set_id)

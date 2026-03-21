@@ -1072,24 +1072,28 @@ func TestCreateEvaluationLogPersistsEntry(t *testing.T) {
 		"turn_eval_log",
 		"evaluate_answer",
 		"gpt-test",
+		"stable-v1",
+		"hash-evaluate-answer",
 		12.5,
 	); err != nil {
 		t.Fatalf("CreateEvaluationLog() error = %v", err)
 	}
 
 	var (
-		sessionID string
-		turnID    string
-		flowName  string
-		modelName string
-		latencyMs float64
+		sessionID   string
+		turnID      string
+		flowName    string
+		modelName   string
+		promptSetID string
+		promptHash  string
+		latencyMs   float64
 	)
 	if err := store.db.QueryRow(`
-		SELECT session_id, turn_id, flow_name, model_name, latency_ms
+		SELECT session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash, latency_ms
 		FROM evaluation_logs
 		ORDER BY id DESC
 		LIMIT 1
-	`).Scan(&sessionID, &turnID, &flowName, &modelName, &latencyMs); err != nil {
+	`).Scan(&sessionID, &turnID, &flowName, &modelName, &promptSetID, &promptHash, &latencyMs); err != nil {
 		t.Fatalf("query evaluation log: %v", err)
 	}
 
@@ -1101,6 +1105,12 @@ func TestCreateEvaluationLogPersistsEntry(t *testing.T) {
 	}
 	if modelName != "gpt-test" {
 		t.Fatalf("expected model name gpt-test, got %q", modelName)
+	}
+	if promptSetID != "stable-v1" {
+		t.Fatalf("expected prompt set id stable-v1, got %q", promptSetID)
+	}
+	if promptHash != "hash-evaluate-answer" {
+		t.Fatalf("expected prompt hash hash-evaluate-answer, got %q", promptHash)
 	}
 	if latencyMs != 12.5 {
 		t.Fatalf("expected latency 12.5, got %.2f", latencyMs)
