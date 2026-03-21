@@ -161,6 +161,19 @@ func TestGetAgentContextUsesVectorSimilarityForSessionSummaries(t *testing.T) {
 		t.Fatalf("UpsertSessionMemorySummary() rule error = %v", err)
 	}
 
+	entries, err := store.GetMemoryIndexEntriesByRefs(ctx, []domain.MemoryRef{
+		{RefTable: "session_memory_summaries", RefID: "sm_semantic_match"},
+		{RefTable: "session_memory_summaries", RefID: "sm_rule_only"},
+	})
+	if err != nil {
+		t.Fatalf("GetMemoryIndexEntriesByRefs() error = %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 memory index entries, got %d", len(entries))
+	}
+	semanticEntry := entries[0]
+	ruleEntry := entries[1]
+
 	sidecarServer := newMemoryEmbeddingTestSidecarServer(
 		t,
 		func(request domain.EmbedMemoryRequest) domain.EmbedMemoryResponse {
@@ -170,9 +183,9 @@ func TestGetAgentContextUsesVectorSimilarityForSessionSummaries(t *testing.T) {
 				switch item.ID {
 				case "query":
 					vector = []float64{1, 0, 0}
-				case "memidx_semantic":
+				case semanticEntry.ID:
 					vector = []float64{0.98, 0.02, 0}
-				case "memidx_rule":
+				case ruleEntry.ID:
 					vector = []float64{0.15, 0.85, 0}
 				}
 				items = append(items, domain.EmbeddedMemoryVector{
@@ -195,73 +208,7 @@ func TestGetAgentContextUsesVectorSimilarityForSessionSummaries(t *testing.T) {
 		WithVectorRetrievalConfig(true, true, false, time.Second, 10*time.Second, time.Minute),
 	)
 
-	if err := store.UpsertMemoryIndexEntries(ctx, []domain.MemoryIndexEntry{
-		{
-			ID:         "memidx_semantic",
-			MemoryType: domain.MemoryTypeSessionSummary,
-			ScopeType:  domain.MemoryScopeSession,
-			ScopeID:    "sess_semantic_match",
-			Topic:      domain.BasicsTopicRedis,
-			SessionID:  "sess_semantic_match",
-			Summary:    "用户对 Redis 缓存一致性 trade-off 的解释已经接近到位。",
-			Entities:   []string{"缓存一致性 trade-off"},
-			Salience:   0.55,
-			Confidence: 0.75,
-			Freshness:  1,
-			RefTable:   "session_memory_summaries",
-			RefID:      "sm_semantic_match",
-		},
-		{
-			ID:         "memidx_rule",
-			MemoryType: domain.MemoryTypeSessionSummary,
-			ScopeType:  domain.MemoryScopeSession,
-			ScopeID:    "sess_rule_only",
-			Topic:      domain.BasicsTopicRedis,
-			SessionID:  "sess_rule_only",
-			Summary:    "高热度但语义更泛的 Redis 总结。",
-			Entities:   []string{"Redis 基础"},
-			Salience:   0.95,
-			Confidence: 0.7,
-			Freshness:  1,
-			RefTable:   "session_memory_summaries",
-			RefID:      "sm_rule_only",
-		},
-	}); err != nil {
-		t.Fatalf("UpsertMemoryIndexEntries() error = %v", err)
-	}
-
-	if err := svc.indexMemoryIndexEntries(ctx, []domain.MemoryIndexEntry{
-		{
-			ID:         "memidx_semantic",
-			MemoryType: domain.MemoryTypeSessionSummary,
-			ScopeType:  domain.MemoryScopeSession,
-			ScopeID:    "sess_semantic_match",
-			Topic:      domain.BasicsTopicRedis,
-			SessionID:  "sess_semantic_match",
-			Summary:    "用户对 Redis 缓存一致性 trade-off 的解释已经接近到位。",
-			Entities:   []string{"缓存一致性 trade-off"},
-			Salience:   0.55,
-			Confidence: 0.75,
-			Freshness:  1,
-			RefTable:   "session_memory_summaries",
-			RefID:      "sm_semantic_match",
-		},
-		{
-			ID:         "memidx_rule",
-			MemoryType: domain.MemoryTypeSessionSummary,
-			ScopeType:  domain.MemoryScopeSession,
-			ScopeID:    "sess_rule_only",
-			Topic:      domain.BasicsTopicRedis,
-			SessionID:  "sess_rule_only",
-			Summary:    "高热度但语义更泛的 Redis 总结。",
-			Entities:   []string{"Redis 基础"},
-			Salience:   0.95,
-			Confidence: 0.7,
-			Freshness:  1,
-			RefTable:   "session_memory_summaries",
-			RefID:      "sm_rule_only",
-		},
-	}); err != nil {
+	if err := svc.indexMemoryIndexEntries(ctx, entries); err != nil {
 		t.Fatalf("indexMemoryIndexEntries() error = %v", err)
 	}
 

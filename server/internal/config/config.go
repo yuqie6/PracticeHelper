@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -88,7 +89,7 @@ func getEnvBool(key string, fallback bool) bool {
 		return fallback
 	}
 
-	switch strconv.ToLower(raw) {
+	switch strings.ToLower(raw) {
 	case "1", "true", "yes", "on":
 		return true
 	case "0", "false", "no", "off":
