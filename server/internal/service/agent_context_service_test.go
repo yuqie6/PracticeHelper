@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -255,6 +256,276 @@ func TestGetAgentContextUsesMemoryIndexPlanner(t *testing.T) {
 	}
 	if agentContext.SessionSummaries[1].ID != "sm_topic" {
 		t.Fatalf("expected topic summary second, got %q", agentContext.SessionSummaries[1].ID)
+	}
+}
+
+func TestPersistReviewBuildsKnowledgeGraphBackedRecommendedNext(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	if err := store.EnsureKnowledgeSeeds(ctx); err != nil {
+		t.Fatalf("EnsureKnowledgeSeeds() error = %v", err)
+	}
+
+	seedSubgraph, err := store.GetKnowledgeSubgraph(ctx, domain.BasicsTopicRedis, "", 2)
+	if err != nil {
+		t.Fatalf("GetKnowledgeSubgraph() seed error = %v", err)
+	}
+	if len(seedSubgraph.Nodes) == 0 {
+		t.Fatal("expected redis topic seed node")
+	}
+	root := seedSubgraph.Nodes[0]
+	if err := store.UpsertKnowledgeNodes(ctx, "sess_graph_reason_seed", []domain.KnowledgeUpdate{
+		{
+			ScopeType:   domain.MemoryScopeGlobal,
+			ParentID:    root.ID,
+			Label:       "cache_consistency",
+			NodeType:    domain.KnowledgeNodeTypeConcept,
+			Proficiency: 1.5,
+			Confidence:  0.9,
+			Evidence:    "回答里能说目标，但 trade-off 还不够完整。",
+		},
+	}); err != nil {
+		t.Fatalf("UpsertKnowledgeNodes() error = %v", err)
+	}
+
+	session := &domain.TrainingSession{
+		ID:          "sess_review_recommendation",
+		Mode:        domain.ModeBasics,
+		Topic:       domain.BasicsTopicRedis,
+		PromptSetID: "stable-v1",
+		Intensity:   "standard",
+		Status:      domain.StatusReviewPending,
+		MaxTurns:    2,
+		TotalScore:  74,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_review_recommendation",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Redis 如何处理缓存一致性？",
+		ExpectedPoints: []string{"一致性目标", "失效策略"},
+		WeaknessHits: []domain.WeaknessHit{{
+			Kind:     "detail",
+			Label:    "缓存一致性",
+			Severity: 0.82,
+		}},
+	}
+	if err := store.CreateSession(ctx, session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	svc := New(store, nil)
+	review := &domain.ReviewCard{
+		Overall:           "主线能站住，但缓存一致性 trade-off 还是偏虚。",
+		TopFix:            "补缓存一致性取舍",
+		TopFixReason:      "这是当前最影响说服力的短板。",
+		Highlights:        []string{"主线清楚"},
+		Gaps:              []string{"缓存一致性 trade-off 不够具体"},
+		SuggestedTopics:   []string{domain.BasicsTopicRedis},
+		NextTrainingFocus: []string{"缓存一致性取舍"},
+	}
+	if _, err := svc.persistReview(ctx, session, review, &domain.GenerateReviewSideEffects{}); err != nil {
+		t.Fatalf("persistReview() error = %v", err)
+	}
+
+	savedReview, err := store.GetReview(ctx, session.ReviewID)
+	if err != nil {
+		t.Fatalf("GetReview() error = %v", err)
+	}
+	if savedReview == nil || savedReview.RecommendedNext == nil {
+		t.Fatalf("expected recommended next to be persisted, got %#v", savedReview)
+	}
+	if savedReview.RecommendedNext.Mode != domain.ModeBasics {
+		t.Fatalf("expected basics mode, got %#v", savedReview.RecommendedNext)
+	}
+	if savedReview.RecommendedNext.Topic != domain.BasicsTopicRedis {
+		t.Fatalf("expected redis topic, got %#v", savedReview.RecommendedNext)
+	}
+	if savedReview.RecommendedNext.Reason == "" {
+		t.Fatal("expected recommended next reason to be generated")
+	}
+	if !strings.Contains(savedReview.RecommendedNext.Reason, "知识图谱") {
+		t.Fatalf("expected knowledge graph reason, got %q", savedReview.RecommendedNext.Reason)
+	}
+	if !strings.Contains(savedReview.RecommendedNext.Reason, "cache_consistency") {
+		t.Fatalf("expected weakest concept to appear in reason, got %q", savedReview.RecommendedNext.Reason)
+	}
+}
+
+func TestPersistReviewBackfillsLearningPathFromKnowledgeGraphWhenReviewIsSparse(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	if err := store.EnsureKnowledgeSeeds(ctx); err != nil {
+		t.Fatalf("EnsureKnowledgeSeeds() error = %v", err)
+	}
+
+	seedSubgraph, err := store.GetKnowledgeSubgraph(ctx, domain.BasicsTopicRedis, "", 2)
+	if err != nil {
+		t.Fatalf("GetKnowledgeSubgraph() seed error = %v", err)
+	}
+	if len(seedSubgraph.Nodes) == 0 {
+		t.Fatal("expected redis topic seed node")
+	}
+	root := seedSubgraph.Nodes[0]
+	if err := store.UpsertKnowledgeNodes(ctx, "sess_graph_path_seed", []domain.KnowledgeUpdate{
+		{
+			ScopeType:   domain.MemoryScopeGlobal,
+			ParentID:    root.ID,
+			Label:       "cache_consistency",
+			NodeType:    domain.KnowledgeNodeTypeConcept,
+			Proficiency: 1.2,
+			Confidence:  0.85,
+			Evidence:    "这轮仍然讲不清缓存一致性 trade-off。",
+		},
+	}); err != nil {
+		t.Fatalf("UpsertKnowledgeNodes() error = %v", err)
+	}
+
+	session := &domain.TrainingSession{
+		ID:          "sess_review_learning_path",
+		Mode:        domain.ModeBasics,
+		Topic:       domain.BasicsTopicRedis,
+		PromptSetID: "stable-v1",
+		Intensity:   "standard",
+		Status:      domain.StatusReviewPending,
+		MaxTurns:    1,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_review_learning_path",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Redis 如何保证缓存一致性？",
+		ExpectedPoints: []string{"一致性目标", "更新顺序"},
+		WeaknessHits: []domain.WeaknessHit{{
+			Kind:     "detail",
+			Label:    "缓存一致性",
+			Severity: 0.91,
+		}},
+	}
+	if err := store.CreateSession(ctx, session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	svc := New(store, nil)
+	review := &domain.ReviewCard{
+		Overall:      "主线能站住，但关键 trade-off 还是说虚了。",
+		TopFix:       "补缓存一致性取舍",
+		TopFixReason: "这是当前最影响说服力的短板。",
+		Highlights:   []string{"主线清楚"},
+		Gaps:         []string{"缓存一致性 trade-off 不够具体"},
+	}
+	if _, err := svc.persistReview(ctx, session, review, &domain.GenerateReviewSideEffects{}); err != nil {
+		t.Fatalf("persistReview() error = %v", err)
+	}
+
+	savedReview, err := store.GetReview(ctx, session.ReviewID)
+	if err != nil {
+		t.Fatalf("GetReview() error = %v", err)
+	}
+	if savedReview == nil {
+		t.Fatal("expected saved review")
+	}
+	if len(savedReview.SuggestedTopics) == 0 || savedReview.SuggestedTopics[0] != domain.BasicsTopicRedis {
+		t.Fatalf("expected suggested topic redis, got %#v", savedReview.SuggestedTopics)
+	}
+	if len(savedReview.NextTrainingFocus) == 0 {
+		t.Fatal("expected next training focus to be backfilled")
+	}
+	if !strings.Contains(savedReview.NextTrainingFocus[0], "cache consistency") {
+		t.Fatalf("expected graph-derived focus, got %#v", savedReview.NextTrainingFocus)
+	}
+}
+
+func TestPersistReviewInfersPrerequisiteEdgeFromRecommendedNextTopic(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	session := &domain.TrainingSession{
+		ID:          "sess_review_prerequisite",
+		Mode:        domain.ModeBasics,
+		Topic:       domain.BasicsTopicKafka,
+		PromptSetID: "stable-v1",
+		Intensity:   "standard",
+		Status:      domain.StatusReviewPending,
+		MaxTurns:    1,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_review_prerequisite",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Kafka consumer rebalance 怎么影响稳定性？",
+		ExpectedPoints: []string{"rebalance 触发", "消费抖动"},
+		WeaknessHits: []domain.WeaknessHit{{
+			Kind:     "topic",
+			Label:    "Kafka rebalance",
+			Severity: 0.88,
+		}},
+	}
+	if err := store.CreateSession(ctx, session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	svc := New(store, nil)
+	review := &domain.ReviewCard{
+		Overall:      "Kafka 主线还可以，但网络基础短板已经开始拖累理解。",
+		TopFix:       "先补网络层基础",
+		TopFixReason: "消费者组抖动和网络行为联系不够清楚。",
+		Highlights:   []string{"能说出 rebalance 触发点"},
+		Gaps:         []string{"网络基础不够扎实"},
+		RecommendedNext: &domain.NextSession{
+			Mode:   domain.ModeBasics,
+			Topic:  domain.BasicsTopicNetwork,
+			Reason: "先把网络基础补上。",
+		},
+	}
+	if _, err := svc.persistReview(ctx, session, review, &domain.GenerateReviewSideEffects{}); err != nil {
+		t.Fatalf("persistReview() error = %v", err)
+	}
+
+	subgraph, err := store.GetKnowledgeSubgraph(ctx, domain.BasicsTopicNetwork, "", 4)
+	if err != nil {
+		t.Fatalf("GetKnowledgeSubgraph() error = %v", err)
+	}
+
+	labels := make(map[string]string, len(subgraph.Nodes))
+	for _, node := range subgraph.Nodes {
+		labels[node.Label] = node.ID
+	}
+	if _, ok := labels[domain.BasicsTopicKafka]; !ok {
+		t.Fatalf("expected kafka topic to appear as prerequisite neighbor, got %#v", labels)
+	}
+	if _, ok := labels[domain.BasicsTopicNetwork]; !ok {
+		t.Fatalf("expected network topic to appear as root, got %#v", labels)
+	}
+
+	found := false
+	for _, edge := range subgraph.Edges {
+		if edge.SourceID == labels[domain.BasicsTopicNetwork] &&
+			edge.TargetID == labels[domain.BasicsTopicKafka] &&
+			edge.EdgeType == domain.KnowledgeEdgePrerequisite {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected prerequisite edge network -> kafka after review persistence")
 	}
 }
 

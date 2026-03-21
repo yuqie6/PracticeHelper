@@ -932,14 +932,16 @@ class EvaluateAnswerEnvelope(BaseModel):
 涉及方向：
 
 - `suggest_next_session` 深化
-- knowledge graph 边治理：当前已开始随 `update_knowledge(parent_id=...)` 自动沉淀 `contains`，后续再补 `prerequisite` 推断
+- knowledge graph 边治理：当前已开始随 `update_knowledge(parent_id=...)` 自动沉淀 `contains`，并已落第一版 `prerequisite` 推断；后续再补更强的推断策略
 - review 中基于知识图谱给出学习路径建议
 - 为 `agent_observations` / `session_memory_summaries` 增加 embedding 与 hybrid rerank
 
 交付物：
 
 - 推荐下一轮训练时能解释“为什么是这一轮”
-- graph 不只是记录热度；当前已开始表达 `topic -> concept/skill` 的包含关系，后续再补更强的学习路径
+- 当前 Go 侧已经开始对 `recommended_next` 做知识图谱兜底与 reason 归一化，不再完全依赖模型自由发挥
+- review 较稀疏时，Go 侧也会基于知识图谱回填 `suggested_topics / next_training_focus` 的最小学习路径
+- graph 不只是记录热度；当前已开始表达 `topic -> concept/skill` 的包含关系，也已开始把“推荐 topic -> 当前 topic”沉淀成第一版 `prerequisite` 关系
 - embedding 只覆盖 observations / session summaries，不扩到 graph 和 repo chunks
 
 ---

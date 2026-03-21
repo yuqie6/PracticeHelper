@@ -114,6 +114,9 @@ func (s *Service) persistReview(
 	if sideEffects != nil && review.RecommendedNext == nil && sideEffects.RecommendedNext != nil {
 		review.RecommendedNext = sideEffects.RecommendedNext
 	}
+	if err := s.normalizeRecommendedNext(ctx, session, review, sideEffects); err != nil {
+		return nil, fmt.Errorf("normalize recommended next: %w", err)
+	}
 	review.ID = newID("review")
 	review.SessionID = session.ID
 	review.PromptSetID = session.PromptSetID

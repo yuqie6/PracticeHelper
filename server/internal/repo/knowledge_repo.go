@@ -116,6 +116,14 @@ func (s *Store) GetKnowledgeSubgraph(
 		nodes = append(nodes, children...)
 	}
 
+	if len(nodes) < limit {
+		neighbors, err := s.listKnowledgeNeighborTopics(ctx, rootIDs, limit-len(nodes), nodes)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, neighbors...)
+	}
+
 	nodeIDs := make([]string, 0, len(nodes))
 	for _, node := range nodes {
 		nodeIDs = append(nodeIDs, node.ID)
@@ -192,6 +200,54 @@ func (s *Store) UpsertKnowledgeNodes(
 	return tx.Commit()
 }
 
+func (s *Store) EnsureKnowledgePrerequisiteEdge(
+	ctx context.Context,
+	prerequisiteTopic string,
+	dependentTopic string,
+) error {
+	prerequisiteTopic = normalizeTopicLabel(prerequisiteTopic)
+	dependentTopic = normalizeTopicLabel(dependentTopic)
+	if prerequisiteTopic == "" || dependentTopic == "" || prerequisiteTopic == dependentTopic {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin ensure prerequisite edge: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	sourceID, err := s.ensureKnowledgeNodeTx(ctx, tx, domain.KnowledgeNode{
+		ScopeType:  domain.MemoryScopeGlobal,
+		Label:      prerequisiteTopic,
+		NodeType:   domain.KnowledgeNodeTypeTopic,
+		Confidence: 0.5,
+	})
+	if err != nil {
+		return err
+	}
+	targetID, err := s.ensureKnowledgeNodeTx(ctx, tx, domain.KnowledgeNode{
+		ScopeType:  domain.MemoryScopeGlobal,
+		Label:      dependentTopic,
+		NodeType:   domain.KnowledgeNodeTypeTopic,
+		Confidence: 0.5,
+	})
+	if err != nil {
+		return err
+	}
+	if err := s.ensureKnowledgeEdgeTx(
+		ctx,
+		tx,
+		sourceID,
+		targetID,
+		domain.KnowledgeEdgePrerequisite,
+	); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 func (s *Store) listSeedTopics(ctx context.Context, tx *sql.Tx) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT DISTINCT topic
@@ -259,6 +315,111 @@ func (s *Store) listKnowledgeChildren(
 		return nil, fmt.Errorf("iterate knowledge children: %w", err)
 	}
 
+	return items, nil
+}
+
+func (s *Store) listKnowledgeNeighborTopics(
+	ctx context.Context,
+	rootIDs []string,
+	limit int,
+	existing []domain.KnowledgeNode,
+) ([]domain.KnowledgeNode, error) {
+	if len(rootIDs) == 0 || limit <= 0 {
+		return nil, nil
+	}
+
+	seen := make(map[string]struct{}, len(existing))
+	for _, node := range existing {
+		seen[node.ID] = struct{}{}
+	}
+
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(rootIDs)), ",")
+	args := make([]any, 0, len(rootIDs)*3+2)
+	for _, id := range rootIDs {
+		args = append(args, id)
+	}
+	for _, id := range rootIDs {
+		args = append(args, id)
+	}
+	for _, id := range rootIDs {
+		args = append(args, id)
+	}
+	args = append(args, domain.KnowledgeEdgePrerequisite, domain.KnowledgeEdgeRelated)
+
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
+		SELECT DISTINCT
+			CASE
+				WHEN source_id IN (%s) THEN target_id
+				ELSE source_id
+			END AS neighbor_id
+		FROM knowledge_edges
+		WHERE (source_id IN (%s) OR target_id IN (%s))
+		  AND edge_type IN (?, ?)
+		ORDER BY created_at ASC
+	`, placeholders, placeholders, placeholders), args...)
+	if err != nil {
+		return nil, fmt.Errorf("list knowledge neighbor topics: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	neighborIDs := make([]string, 0, limit)
+	for rows.Next() {
+		var neighborID string
+		if err := rows.Scan(&neighborID); err != nil {
+			return nil, fmt.Errorf("scan knowledge neighbor id: %w", err)
+		}
+		if _, ok := seen[neighborID]; ok {
+			continue
+		}
+		seen[neighborID] = struct{}{}
+		neighborIDs = append(neighborIDs, neighborID)
+		if len(neighborIDs) == limit {
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate knowledge neighbor ids: %w", err)
+	}
+
+	if len(neighborIDs) == 0 {
+		return nil, nil
+	}
+
+	placeholders = strings.TrimRight(strings.Repeat("?,", len(neighborIDs)), ",")
+	nodeArgs := make([]any, 0, len(neighborIDs))
+	for _, id := range neighborIDs {
+		nodeArgs = append(nodeArgs, id)
+	}
+	nodeRows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
+		SELECT id, scope_type, scope_id, parent_id, label, node_type, proficiency, confidence, hit_count, last_assessed_at, created_at, updated_at
+		FROM knowledge_nodes
+		WHERE id IN (%s)
+	`, placeholders), nodeArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("load knowledge neighbor nodes: %w", err)
+	}
+	defer func() { _ = nodeRows.Close() }()
+
+	byID := make(map[string]domain.KnowledgeNode, len(neighborIDs))
+	for nodeRows.Next() {
+		item, err := scanKnowledgeNode(nodeRows)
+		if err != nil {
+			return nil, err
+		}
+		byID[item.ID] = *item
+	}
+	if err := nodeRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate knowledge neighbor nodes: %w", err)
+	}
+
+	items := make([]domain.KnowledgeNode, 0, len(neighborIDs))
+	for _, id := range neighborIDs {
+		item, ok := byID[id]
+		if !ok {
+			continue
+		}
+		items = append(items, item)
+	}
 	return items, nil
 }
 

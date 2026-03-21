@@ -1483,6 +1483,54 @@ func TestUpsertKnowledgeNodesCreatesContainsEdgeAndIndexesByRootTopic(t *testing
 	}
 }
 
+func TestEnsureKnowledgePrerequisiteEdgeAppearsInKnowledgeSubgraph(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	if err := store.EnsureKnowledgePrerequisiteEdge(
+		ctx,
+		domain.BasicsTopicNetwork,
+		domain.BasicsTopicKafka,
+	); err != nil {
+		t.Fatalf("EnsureKnowledgePrerequisiteEdge() error = %v", err)
+	}
+
+	subgraph, err := store.GetKnowledgeSubgraph(ctx, domain.BasicsTopicNetwork, "", 4)
+	if err != nil {
+		t.Fatalf("GetKnowledgeSubgraph() error = %v", err)
+	}
+
+	labels := make(map[string]string, len(subgraph.Nodes))
+	for _, node := range subgraph.Nodes {
+		labels[node.Label] = node.ID
+	}
+	if _, ok := labels[domain.BasicsTopicNetwork]; !ok {
+		t.Fatalf("expected network topic node, got %#v", labels)
+	}
+	if _, ok := labels[domain.BasicsTopicKafka]; !ok {
+		t.Fatalf("expected kafka neighbor topic node, got %#v", labels)
+	}
+
+	expectedSource := labels[domain.BasicsTopicNetwork]
+	expectedTarget := labels[domain.BasicsTopicKafka]
+	found := false
+	for _, edge := range subgraph.Edges {
+		if edge.SourceID == expectedSource &&
+			edge.TargetID == expectedTarget &&
+			edge.EdgeType == domain.KnowledgeEdgePrerequisite {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected prerequisite edge network -> kafka to appear in knowledge subgraph")
+	}
+}
+
 func openTestStore(t *testing.T) (*Store, error) {
 	t.Helper()
 
