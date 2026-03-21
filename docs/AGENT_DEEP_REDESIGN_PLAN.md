@@ -1,7 +1,7 @@
 # Agent Deep Redesign Plan
 
 > 状态：提案，已按 2026-03-22 当前仓库实现审校。  
-> 目标：把 sidecar 从“带只读工具的 LLM pipeline”渐进升级为“带知识图谱记忆、真实工具调用、受约束自主权”的 ReAct agent。  
+> 目标：把 sidecar 从“已经具备 agent loop、长期记忆装载和受约束副作用回写的基础 agent runtime”继续升级为“检索更完整、工具更主动、渐进自主权更强”的 ReAct agent。  
 > 本文不是原始想法直抄，而是已经结合当前 `server + sidecar + web` 代码现实修正过的执行版方案。
 
 ---
@@ -10,37 +10,36 @@
 
 在继续设计之前，先把现在到底是什么说清楚。
 
-### 1.1 Sidecar 现在已经不是纯 single-shot
+### 1.1 Sidecar 现在已经是基础版 constrained agent
 
 当前 `sidecar/app/agent_runtime.py` 已经具备：
 
-- 非流式 `generate_question / evaluate_answer / generate_review / analyze_repo / analyze_job_target` 会先走 `_run_tool_loop`
-- `_run_tool_loop` 已允许模型读取运行时工具，再输出最终 JSON
-- tool loop 失败时会降级到 `_run_single_shot`
-- 流式链路目前仍走 `_stream_single_shot_task`，没有复用 tool loop
+- 非流式 `generate_question / evaluate_answer / generate_review / analyze_repo / analyze_job_target` 会先走 `_run_agent_loop`
+- `_run_agent_loop` 已允许模型读取运行时工具、执行行动工具，再输出最终 JSON
+- 非流式 agent loop 失稳时会降级到 `_run_single_shot`
+- 流式 `generate_question / evaluate_answer / generate_review` 会先走 `_stream_agent_loop`，只有收口失败时才退回 `_stream_single_shot_task`
+- stream `result` 事件已经能携带 `raw_output` 和 `side_effects`
 
-也就是说，当前 sidecar 已经有“受约束的工具调用”，但还不是本文要推进的真正 agent。
+也就是说，当前 sidecar 已经不是“受约束的工具调用 demo”，而是带 loop、fallback、side effects、stream 回退语义，以及第一版 retrieval planner 的基础 agent runtime；但它还没有做到 embedding/rerank 和记忆治理深化。
 
-### 1.2 当前工具仍然是只读上下文获取器
+### 1.2 当前工具已经分成回忆工具和行动工具，但仍然偏保守
 
-`sidecar/app/runtime_prompts.py` 里已有的工具，基本都是：
+`sidecar/app/agent_tools.py` 里现在至少已经有两类工具：
 
-- 读取模板
-- 读取项目画像
-- 读取 context chunks
-- 读取 weakness memory
-- 读取 session/turn 摘要
+- 回忆工具：`recall_training_context`、`recall_weakness_profile`、`recall_knowledge_graph`、`recall_observations`、`recall_session_summaries`
+- 按需回调工具：`search_repo_chunks`、`get_session_detail`
+- 行动工具：`record_observation`、`update_knowledge`、`suggest_next_session`、`set_depth_signal`
 
 这些工具的特点是：
 
-- 数据都来自请求体预装载
-- 不会跨请求持久化新记忆
-- 不会触发副作用
-- 不会按需回调 Go 获取新信息
+- 回忆工具大多依赖 Go 预装载的 `agent_context`
+- project / review 场景已经能按需回调 Go 读更多 repo chunk 或 session detail
+- 行动工具不会直接写库，而是先写入 `side_effects`，再由 Go 统一落库
+- 当前仍然没有开放“任意工具规划”和“多步任务拆解”，runtime 依旧是强约束、窄能力面
 
-所以今天的 sidecar 更准确地说，是“带只读工具上下文的结构化推理器”，不是有长期记忆和可行动能力的 agent。
+所以今天的 sidecar 更准确地说，是“带长期记忆装载、少量行动工具和 Go 边界约束的训练 agent”，而不是自由规划的通用 agent。
 
-### 1.3 当前持久记忆只有 weakness / review / evaluation log
+### 1.3 当前持久记忆层已经落地，但检索利用还偏基础
 
 Go 端目前已经有这些持久化层：
 
@@ -48,24 +47,39 @@ Go 端目前已经有这些持久化层：
 - `weakness_snapshots`
 - `review_schedule`
 - `evaluation_logs`
+- `knowledge_nodes`
+- `knowledge_edges`
+- `knowledge_snapshots`
+- `agent_observations`
+- `session_memory_summaries`
+- `memory_index`
 
-但还没有：
+当前已经做到：
 
-- 知识图谱式的 topic / concept / skill 图
-- 非结构化 observations
-- 可被 agent 主动写入的长期策略记忆
+- 保存画像或装载 agent context 时会补 `knowledge_nodes` 基础种子
+- `evaluate_answer / generate_review` 的 `side_effects` 已能回写 observations 和 knowledge updates
+- review 落库后会生成 `session_memory_summaries`
+- observations / knowledge / session summaries 都会同步进 `memory_index`
 
-### 1.4 当前训练深度仍由 Go 固定控制
+但目前更大的缺口仍然在“怎么更好地用这些记忆”：
+
+- 主要还是 Go 预装载 Top-N，而不是 planner 驱动的主动检索
+- 还没有 embedding / hybrid rerank
+- memory_index 现在更像统一检索入口和索引层，不是更强的记忆编排器
+
+### 1.4 当前训练深度已经能被 sidecar 信号影响，但最终边界仍在 Go
 
 `server/internal/service/answer_service.go` 当前逻辑是：
 
-- `turn_index >= max_turns` 就进入 `review_pending`
-- 否则一定创建下一条 follow-up turn
+- 默认还是按 `turn_index / max_turns` 驱动多轮 FSM
+- `side_effects.depth_signal=skip_followup` 时会提前收口，直接进入 review
+- `side_effects.depth_signal=extend` 时，若当前已到上限且 `max_turns < 6`，Go 会额外补一轮
+- 真正创建 follow-up turn、调整 `max_turns`、进入 `review_pending` 的最终决定仍由 Go 执行
 
 也就是说：
 
-- 模型今天没有“跳过追问”或“追加深挖一轮”的决策权
-- 训练深度是 Go 侧固定 FSM，不是 agent 根据信号动态决定
+- 模型已经可以提出“跳过追问”或“追加一轮”的信号
+- 但它没有直接改 session 状态的权限，Go 仍然保留最终边界和兜底上限
 
 ---
 
@@ -180,24 +194,26 @@ PRACTICEHELPER_INTERNAL_TOKEN=...
 
 这不是“优化项”，是第一天就该补的边界。
 
-### 2.5 流式链路不适合在 Phase 2 一起硬切到 agent loop
+### 2.5 原计划里 streaming 不跟 Phase 2 一起切，但当前已经补了最小版 stream agent loop
 
-当前稳定性最好的是：
-
-- 非流式：tool loop + single-shot fallback
-- 流式：single-shot streaming
-
-如果在同一阶段把 streaming 也切成 agent loop，会让风险成倍放大：
+原计划当时的判断并不错误，主要风险点是：
 
 - 工具调用事件如何流式展示
 - action tools 的 side_effects 如何在 stream 结束前收口
 - 失败重试如何和 NDJSON 协议对齐
 
-更稳的路线是：
+但当前真实状态已经往前走了一步：
 
-- Phase 2 只升级非流式 agent loop
-- 流式链路先继续保留现有 single-shot streaming
-- 等非流式链路稳定后，再评估是否做 streaming agent loop
+- 非流式：agent loop + single-shot fallback
+- 流式：stream agent loop + NDJSON 事件 + single-shot streaming fallback
+
+这里的“stream agent loop”不是把每个 token 级 tool decision 都暴露出来，而是：
+
+- 优先在 runtime 里跑工具循环
+- 把工具读取过程映射成 `phase/context/reasoning`
+- 最终把 `result/raw_output/side_effects` 一次性收口到 stream 结果事件
+
+所以现在真正还没做的，不是“streaming 还没 agent 化”，而是更细粒度的 token 级 tool-call 可视化。
 
 ### 2.6 不应该让 LLM 直接写库，Go 仍然是唯一副作用入口
 
@@ -802,7 +818,7 @@ class EvaluateAnswerEnvelope(BaseModel):
 
 ### 7.1 Constrained ReAct Loop
 
-非流式任务里，把 `_run_tool_loop` 升级为 `_run_agent_loop`：
+这部分当前已经从旧的 `_run_tool_loop` 口径收敛成 `_run_agent_loop`。如果继续演进，主循环可以按下面理解：
 
 1. 接收任务与 `agent_context`
 2. 初始化 `WorkingMemory`
@@ -814,14 +830,18 @@ class EvaluateAnswerEnvelope(BaseModel):
 6. 轮次耗尽后，退回现有 single-shot fallback
 7. 从 working memory 收集 side effects，拼到 envelope
 
-### 7.2 Phase 2 不动 streaming loop
+### 7.2 streaming loop 状态修正
 
-为了保留当前稳定链路：
+当前实现已经不是“流式仍保留 `_stream_single_shot_task`”：
 
-- 非流式先切 `_run_agent_loop`
-- 流式仍保留 `_stream_single_shot_task`
+- `stream_generate_question / stream_evaluate_answer / stream_generate_review` 都会先走 stream agent loop
+- 只有 agent loop 无法稳定收口时，才退回 `_stream_single_shot_task`
+- `evaluate_answer / generate_review` 的 stream 结果也已经能携带 `side_effects`
 
-如果后续要做 stream agent loop，建议单开一轮设计，不和本次计划绑在一起。
+仍然没做的是：
+
+- token 级 tool-call streaming
+- 更细的流式观测与回放
 
 ### 7.3 LangGraph 收敛
 
@@ -840,9 +860,9 @@ class EvaluateAnswerEnvelope(BaseModel):
 
 ## 8. 分阶段实施
 
-### Phase 1：Knowledge Graph Foundation + Observations
+### Phase 1：Knowledge Graph Foundation + Observations ✅ 已落第一版
 
-目标：先把长期记忆基础设施补齐。
+目标：这部分基础设施已经落到库表、repo 和 service；后续更需要补的是检索质量与治理，而不是从零建模。
 
 涉及文件：
 
@@ -861,9 +881,9 @@ class EvaluateAnswerEnvelope(BaseModel):
 - Go 可读写 knowledge graph / observations / session summaries / memory index
 - 基础 topic seed ready
 
-### Phase 2：非流式 Agent Loop + 工具注册表
+### Phase 2：Agent Loop + 工具注册表 ✅ 已落第一版
 
-目标：把 sidecar 从“固定只读工具 loop”升级成“带 side effects 的 constrained ReAct loop”，同时接上 retrieval planner。
+目标：在现有 constrained agent loop 的基础上，把 retrieval planner、工具治理和可观测性补到可用基线。
 
 涉及文件：
 
@@ -879,14 +899,16 @@ class EvaluateAnswerEnvelope(BaseModel):
 
 交付物：
 
-- 非流式 `generate_question / evaluate_answer / generate_review` 接入 agent loop
+- `generate_question / evaluate_answer / generate_review` 的非流式和流式接口都优先接入 agent loop
 - `record_observation` / `update_knowledge` 能通过 side effects 回写 Go
-- `session_memory_summaries` 开始参与 review / answer 的默认装载
-- streaming 仍保持现状，不一起动
+- `session_memory_summaries` 已参与 question / answer / review 的默认装载
+- `agent_context` 已改成先走 `memory_index` 检索 observations / session summaries，再按 `ref_id` 回源 materialize
+- stream 路径在 agent loop 失稳时回退 single-shot streaming
+- 尚未落地的是 embedding / hybrid rerank、工具预算和更细粒度 stream 观测
 
-### Phase 3：Go Callback + Dynamic Depth
+### Phase 3：Go Callback + Dynamic Depth 🟡 已落第一版
 
-目标：让 agent 能按需搜索、按信号控制追问深度。
+目标：让 agent 能更主动地按需搜索，并把深度控制从“固定轮数”推进到“信号驱动 + Go 兜底边界”。
 
 涉及文件：
 
@@ -899,9 +921,9 @@ class EvaluateAnswerEnvelope(BaseModel):
 
 交付物：
 
-- `search_repo_chunks` / `get_session_detail` 可用
-- `depth_signal` 接进 Go FSM
-- project 模式的上下文选择不再完全依赖预选 chunks
+- `search_repo_chunks` / `get_session_detail` 已可用
+- `depth_signal` 已接进 Go FSM
+- 当前 project 模式仍然以预选 chunks 为主，按需回调只是补充，不算完整 planner
 
 ### Phase 4：Progressive Autonomy
 
@@ -910,14 +932,14 @@ class EvaluateAnswerEnvelope(BaseModel):
 涉及方向：
 
 - `suggest_next_session` 深化
-- prerequisite edge 推断
+- knowledge graph 边治理：当前已开始随 `update_knowledge(parent_id=...)` 自动沉淀 `contains`，后续再补 `prerequisite` 推断
 - review 中基于知识图谱给出学习路径建议
 - 为 `agent_observations` / `session_memory_summaries` 增加 embedding 与 hybrid rerank
 
 交付物：
 
 - 推荐下一轮训练时能解释“为什么是这一轮”
-- graph 不只是记录热度，还能表达学习路径
+- graph 不只是记录热度；当前已开始表达 `topic -> concept/skill` 的包含关系，后续再补更强的学习路径
 - embedding 只覆盖 observations / session summaries，不扩到 graph 和 repo chunks
 
 ---
@@ -933,11 +955,12 @@ class EvaluateAnswerEnvelope(BaseModel):
 ### Phase 2
 
 - `cd sidecar && uv run pytest`
+- `cd server && go test -tags sqlite_fts5 ./internal/repo ./internal/service`
 - 启动三进程，创建 session -> 提交答案
 - 检查 `agent_observations` 有写入
 - 检查 `knowledge_nodes.proficiency` 有更新
 - 检查 review 结束后 `session_memory_summaries` 有生成
-- 检查 retrieval planner 默认优先使用 summary 而不是回放全量 turns
+- 检查 retrieval planner 默认先通过 `memory_index` 取回 summary / observations，而不是直接回放全量 turns
 
 ### Phase 3
 
@@ -950,7 +973,7 @@ class EvaluateAnswerEnvelope(BaseModel):
 
 - 完整跑一轮 session
 - 检查 `recommended_next` 是否有知识图谱依据
-- 检查 `knowledge_edges` 是否开始沉淀 `prerequisite`
+- 检查 `knowledge_edges` 是否已开始沉淀 `contains`，以及后续新增 `prerequisite`
 - 检查 observations / session summaries 的 embedding 召回只作用于对应 memory，不影响 graph / repo chunk 的主检索路径
 
 ---

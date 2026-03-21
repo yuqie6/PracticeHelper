@@ -2,7 +2,7 @@
 
 本文档是当前阶段的执行计划。产品方向和阶段划分见 [VISION.md](./VISION.md)。
 
-如果后续要把 sidecar 从“带只读工具的 LLM pipeline”继续升级为“具备知识图谱记忆与渐进自主权的 ReAct agent”，当前仓库已经有一份按源码审校过的独立方案，见 [AGENT_DEEP_REDESIGN_PLAN.md](./AGENT_DEEP_REDESIGN_PLAN.md)。
+如果后续要把 sidecar 从“当前这套已具备 agent loop、行动工具、长期记忆装载和 Go 侧副作用回写的受约束 agent runtime”继续升级为“具备更强检索与渐进自主权的 ReAct agent”，当前仓库已经有一份按源码审校过的独立方案，见 [AGENT_DEEP_REDESIGN_PLAN.md](./AGENT_DEEP_REDESIGN_PLAN.md)。
 
 ## 已完成
 
@@ -116,7 +116,7 @@
 - 题库已经外置到 seed 文件，并扩到 10 个 topic；`mixed` 会按 weakness 选择候选 topic
 - `intensity=auto` 已稳定可用；`review_schedule` 也已打通 review 生成 -> 到期展示 -> 完成推进 的基础链路
 - `evaluation_logs` 已覆盖 `generate_question` / `evaluate_answer` / `generate_review` 及其 stream 变体，并且 Review 审计面板与 Prompt 实验页都已有前端承接
-- LangGraph 已经不再是全量单节点图，`generate_question` 有策略节点，`evaluate_answer` 有输出校验与重试预算
+- LangGraph 当前已经收成“`analyze_repo` 多节点 + `generate_question` 策略节点 + `evaluate_answer / generate_review` 薄壳图”的结构；输出校验、重试预算和 `side_effects` 收口都在 `agent_runtime.py`
 - 默认 JD、`recommendation_scope` 和 generic fallback 语义已经收口，岗位模式不再是阶段 C 之前的阻塞项
 
 ### 本阶段当前更适合继续推进的方向
@@ -142,6 +142,6 @@
 - 导入任务升级为可恢复的 worker / 队列模型
 - 仓库理解沉淀细粒度分析资产
 - 多 agent 并行分析仓库
-- tool-loop 流式化替代 single-shot streaming
+- stream 里的更细粒度 tool-call 可视化与 token 级 agent 输出
 - 评分 rubric 程序化、证据绑定（引用用户原文 + repo chunk）
 - 自动抓取 JD / 多岗位对比 / 简历联动
