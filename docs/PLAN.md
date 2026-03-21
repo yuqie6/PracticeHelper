@@ -113,20 +113,21 @@
 - 历史页、分页筛选、弱项趋势图和首页待复习卡片已经落地
 - 题库已经外置到 seed 文件，并扩到 10 个 topic；`mixed` 会按 weakness 选择候选 topic
 - `intensity=auto` 已稳定可用；`review_schedule` 也已打通 review 生成 -> 到期展示 -> 完成推进 的基础链路
-- `evaluation_logs` 已覆盖 `generate_question` / `evaluate_answer` / `generate_review` 及其 stream 变体的基础耗时记录
+- `evaluation_logs` 已覆盖 `generate_question` / `evaluate_answer` / `generate_review` 及其 stream 变体，并且 Review 审计面板与 Prompt 实验页都已有前端承接
 - LangGraph 已经不再是全量单节点图，`generate_question` 有策略节点，`evaluate_answer` 有输出校验与重试预算
 - 默认 JD、`recommendation_scope` 和 generic fallback 语义已经收口，岗位模式不再是阶段 C 之前的阻塞项
 
-### 本阶段优先补的缺口
+### 本阶段当前更适合继续推进的方向
 
-- 把复习计划和评估审计从“基础链路可用”补到“真正可追踪”：待复习从 session 级提示推进到更直接的弱项级入口，评估日志补 `prompt_hash` / `model_name` / 前端详情面板
-- 继续把 LangGraph 编排从最小可用补到可验证节点化，但仍保持薄壳定位
-- 继续保持 P2 体验项延后，不让暗色模式、动效和导出抢主线
+- 不再把已落地的多轮训练、弱项级待复习入口、评估审计面板重新写成“半成能力”
+- 把 Prompt 版本管理从 v1 继续补强：当前已有版本选择、A/B 对比和审计明细，但还没有在线编辑、更细粒度 flow 级切换和更强实验分析
+- 把检索升级视为独立未开始项审慎评估；当前项目训练仍是 SQLite FTS5，不要把 RAG 当成已经在做
+- 继续保持 LangGraph 薄壳和 P2 体验项边界，不为了“更像 agent”继续扩图或顺手重做暗色模式、动效、导出
 
 ### 完成标准
 
-- P0 剩余缺口已经收口，不再把已完成能力当成新需求反复重做
-- P1 的半成能力至少收口到：可验证、可回看、可解释
+- 已完成能力不再在文档里被写成“待补缺口”
+- 当前真未做项和已实现能力的边界清楚
 - 文档、代码和页面对当前主线的描述重新一致
 
 ---

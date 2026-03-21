@@ -49,7 +49,7 @@ server/
       session_creation_service.go # 创建训练会话与出题
       answer_service.go       # 回答提交、多轮状态机与复盘生成
       review_service.go       # 复盘查询与到期复习推进
-      export_service.go       # Session Markdown 导出
+      export_service.go       # Session Markdown / JSON / PDF 导出与批量 ZIP 组装
       audit_service.go        # evaluation_logs 记录
       session_guard.go        # session 原子抢占与恢复语义
       basics_topics.go        # basics topic 归一化与 mixed 选题
@@ -109,18 +109,19 @@ Go API 不再同步等待整个导入结束，而是先创建 `project_import_jo
 
 当前并不是“所有图都是单节点”：
 
-- `analyze_repo` 和 `generate_review` 目前仍然是简单图，主要是 `AgentRuntime` 的薄壳
-- `analyze_job_target` 已作为独立 flow 存在，支撑阶段 B 的岗位分析
-- `generate_question` 已经拆成 `select_strategy -> generate`
-- `evaluate_answer` 已经带最小输出校验、重试和超预算失败逻辑，不再是纯 `START -> run -> END`
+- `analyze_repo` 已拆成 `collect_bundle -> rank_chunks -> summarize`
+- `analyze_job_target` 目前仍是简单 flow，主要承担岗位分析入口
+- `generate_question` 已拆成 `select_strategy -> generate`
+- `evaluate_answer` 已拆成 `retrieve_context -> evaluate -> validate_output -> re_evaluate`
+- `generate_review` 已拆成 `prepare_review_context -> generate_review -> validate_review -> re_generate`
 
-也就是说，当前仓库已经开始使用 LangGraph 做最小编排，但还没有走到完整多节点工作流。后续如果继续做产品升级，更合理的方向是：
+也就是说，当前仓库已经把仓库分析、出题、评估和复盘这几条核心链路都接成了最小多节点编排，但整体仍保持薄壳风格。后续如果继续做产品升级，更合理的方向是：
 
 - 在 `generate_question` 里继续增强策略选择和上下文筛选
-- 在 `evaluate_answer` 里继续拆开“取上下文 / 评估 / 校验 / 重试”
-- 在 `analyze_repo` 里补 `rank_chunks` 这类检索重排节点
+- 在 `evaluate_answer` / `generate_review` 里继续提高输出校验与失败分流的可观测性
+- 在 `analyze_repo` 里继续深化检索重排，而不是盲目把图铺得更大
 
-目前最重要的仍然不是把图堆复杂，而是让训练质量、状态机和可观测性先稳定。
+目前最重要的仍然不是把图堆复杂，而是让训练质量、检索质量、状态机和可观测性先稳定。
 
 ## 3.4 日志与 request_id
 
@@ -208,9 +209,9 @@ Go API 不再同步等待整个导入结束，而是先创建 `project_import_jo
 1. **证据绑定 ⬜ 仍待补齐**：`gaps`、`weakness_hits`、`followup_question` 目前还没有直接引用用户原文或具体 repo chunk；这一点仍是减少“脑补式判断”的关键缺口。
 2. **评分 rubric 程序化 🟡 部分落地**：基础题模板已经能提供 `score_weights`，sidecar prompt 也按 rubric 产出 `score_breakdown`；但总分和最终裁决仍主要依赖 LLM 一次性给出，程序侧还没有把多维评分稳定汇总成统一判定。
 3. **状态机异常路径 🟡 已补主要护栏，但还没完全收口**：回答提交的原子抢占、`review_pending -> retry-review` 恢复、流式阶段事件、失败回滚，以及 `evaluate_answer` 输出校验/重试预算都已经存在；但 stream / non-stream 一致性和更系统的端到端异常回归还需要继续补。
-4. **弱项记忆衰减与复习入口 🟡 部分落地**：`effectiveSeverity`、`weakness_snapshots`、`review_schedule`、首页待复习卡片和完成后按 session 分数推进下一次复习时间都已落地；但当前复习仍偏 session 级，还没有做到 weakness 级直接开练。
+4. **弱项记忆衰减与复习入口 🟡 已形成闭环，但算法仍偏简化**：`effectiveSeverity`、`weakness_snapshots`、`review_schedule`、首页待复习卡片、弱项标签回显、直达 `/train?mode=basics&topic=...` 的入口都已落地；当前仍是用 session 总分走简化版 SM-2 推进下次复习时间，而不是按弱项粒度独立反馈。
 5. **保守表达与置信度意识 ✅ 已落地基础约束**：`analyze_repo`、`analyze_job_target`、`evaluate_answer` prompt 已明确要求“证据不足时保守表达”；但还没有进一步把证据来源显式展示给用户。
-6. **LangGraph 薄壳定位 🟡 已稳定，但仍有深化空间**：`generate_question` / `evaluate_answer` 已不是单节点占位；`analyze_repo` / `generate_review` 仍保持简单 flow，当前优先级仍然是训练质量和状态安全，而不是继续堆图复杂度。
+6. **LangGraph 薄壳定位 🟡 已稳定当前边界，但仍有深化空间**：`analyze_repo` / `generate_question` / `evaluate_answer` / `generate_review` 都已经有最小多节点编排；当前优先级仍然是训练质量、检索质量和状态安全，而不是继续堆图复杂度。
 
 ## 4. 数据库 Schema
 
@@ -227,13 +228,13 @@ SQLite 当前共 15 张表（含 1 张 FTS5 虚拟表），启动时由 `interna
 | `repo_chunks` | 项目源码文本片段 | project_id（外键）, file_path, content, importance, fts_key |
 | `repo_chunks_fts` | FTS5 全文索引（镜像 repo_chunks） | chunk_id, project_id, file_path, file_type, content |
 | `question_templates` | 基础知识题目模板（外部 seed 文件导入） | mode, topic, prompt, focus_points_json, score_weights_json |
-| `training_sessions` | 训练会话 | mode（basics/project）, job_target_id, status, max_turns, total_score, review_id |
+| `training_sessions` | 训练会话 | mode（basics/project）, job_target_id, prompt_set_id, status, max_turns, total_score, review_id |
 | `training_turns` | 训练回合（每一轮独立一条） | session_id（外键）, turn_index, question, answer, evaluation_json |
-| `review_cards` | 复盘卡 | session_id（UNIQUE 外键）, overall, highlights_json, gaps_json |
+| `review_cards` | 复盘卡 | session_id（UNIQUE 外键）, overall, top_fix, top_fix_reason, recommended_next_json |
 | `weakness_tags` | 薄弱点标签 | kind, label（联合 UNIQUE）, severity, frequency |
 | `weakness_snapshots` | 弱项严重度历史点 | weakness_id, session_id, severity, created_at |
-| `review_schedule` | session 级复习计划 | session_id, review_card_id, weakness_tag_id, next_review_at, interval_days, ease_factor |
-| `evaluation_logs` | 生成/评估耗时审计基础 | session_id, turn_id, flow_name, model_name, latency_ms |
+| `review_schedule` | 按 session + weakness tag 生成的待复习计划 | session_id, review_card_id, weakness_tag_id, topic, next_review_at, interval_days, ease_factor |
+| `evaluation_logs` | 生成/评估耗时审计 | session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash, raw_output, latency_ms |
 
 JSON 数组字段（如 `tech_stacks_json`）存储为 `TEXT`，在 Go 侧用 `json.Marshal`/`json.Unmarshal` 序列化。
 
@@ -294,7 +295,7 @@ waiting_answer ──用户回答当前轮──▶ evaluating ──未到 max_
 其中有两个例外：
 
 - `/healthz` 是顶层健康检查接口，不走 `/api`
-- stream 接口返回 `application/x-ndjson`，导出接口返回 Markdown 附件，不走统一 JSON envelope
+- stream 接口返回 `application/x-ndjson`，导出接口直接返回附件内容（单次 `markdown/json/pdf`，批量 `zip`），不走统一 JSON envelope
 
 | 方法 | 路径 | 用途 |
 |------|------|------|
@@ -310,11 +311,16 @@ waiting_answer ──用户回答当前轮──▶ evaluating ──未到 max_
 | GET | `/api/projects` | 列出所有已导入项目 |
 | GET | `/api/projects/:id` | 获取单个项目详情 |
 | PATCH | `/api/projects/:id` | 编辑项目画像 |
+| GET | `/api/prompt-sets` | 列出可用 prompt set |
+| GET | `/api/prompt-experiments/prompt-sets` | 列出 Prompt 实验页可比较的 prompt set |
+| GET | `/api/prompt-experiments` | 读取两个 prompt set 的聚合对比报告 |
 | GET | `/api/sessions` | 分页列出训练历史，支持 mode / topic / status 筛选 |
 | POST | `/api/sessions` | 创建训练会话（触发 sidecar 出题） |
+| POST | `/api/sessions/export` | 批量导出选中的 session（ZIP） |
 | POST | `/api/sessions/stream` | 流式创建训练会话 |
 | GET | `/api/sessions/:id` | 获取会话详情（含所有回合） |
-| GET | `/api/sessions/:id/export?format=markdown` | 导出单次 session 的 Markdown 报告 |
+| GET | `/api/sessions/:id/evaluation-logs` | 获取当前 session 的评估审计日志 |
+| GET | `/api/sessions/:id/export?format=markdown\|json\|pdf` | 导出单次 session 报告 |
 | POST | `/api/sessions/:id/answer` | 提交回答（触发 sidecar 评分，可能触发复盘生成） |
 | POST | `/api/sessions/:id/answer/stream` | 流式提交回答 |
 | POST | `/api/sessions/:id/retry-review` | 对 `review_pending` 会话重试生成复盘 |
@@ -382,6 +388,7 @@ waiting_answer ──用户回答当前轮──▶ evaluating ──未到 max_
 | `/profile` | 用户画像编辑 | ProfileView.vue |
 | `/job-targets` | JD / 岗位页 | JobTargetsView.vue |
 | `/projects` | 项目列表与导入 | ProjectsView.vue |
+| `/prompt-experiments` | Prompt 实验 / 审计页 | PromptExperimentsView.vue |
 | `/train` | 训练配置（选模式/主题/项目） | TrainView.vue |
 | `/history` | 训练历史页 | HistoryView.vue |
 | `/sessions/:id` | 训练过程（问答交互） | SessionView.vue |
