@@ -2,7 +2,7 @@
 
 本文档是当前阶段的执行计划。产品方向和阶段划分见 [VISION.md](./VISION.md)。
 
-如果后续要把 sidecar 从“当前这套已具备 agent loop、行动工具、长期记忆装载和 Go 侧副作用回写的受约束 agent runtime”继续升级为“具备更强检索与渐进自主权的 ReAct agent”，当前仓库已经有一份按源码审校过的独立方案，见 [AGENT_DEEP_REDESIGN_PLAN.md](./AGENT_DEEP_REDESIGN_PLAN.md)。
+如果后续要把 sidecar 从“当前这套已具备 agent loop、行动工具、长期记忆装载和 Go 侧副作用回写的受约束 agent runtime”继续升级为“训练域里的成熟 agent runtime”，当前仓库已经有一份按源码审校过的独立方案，见 [AGENT_DEEP_REDESIGN_PLAN.md](./AGENT_DEEP_REDESIGN_PLAN.md)。
 
 ## 已完成
 
@@ -119,13 +119,25 @@
 - LangGraph 当前已经收成“`analyze_repo` 多节点 + `generate_question` 策略节点 + `evaluate_answer / generate_review` 薄壳图”的结构；输出校验、重试预算和 `side_effects` 收口都在 `agent_runtime.py`
 - 默认 JD、`recommendation_scope` 和 generic fallback 语义已经收口，岗位模式不再是阶段 C 之前的阻塞项
 
+### 当前 agent 主线定位
+
+- PracticeHelper 当前追求的不是“把系统改写成通用 agent 平台”，而是把现有训练链路的 `sidecar` 继续做成训练域里的成熟 agent runtime
+- 这条 agent 主线是阶段 C 的技术底座，不替代“训练深度与留存升级”这条产品主线
+- 近期仍然是单 agent 主路径；多 agent 只写成后续高价值长任务的演进方向，不进入当前训练热路径
+- Go 继续保留产品边界、状态机、持久化、审计和恢复入口；sidecar 继续负责上下文理解、规划、工具使用、输出校验和结构化意图生成
+- 近期优先补的是检索、memory 利用、失败恢复和可观测性，而不是直接铺复杂多 agent 编排
+
 ### 本阶段当前更适合继续推进的方向
 
 - 不再把已落地的多轮训练、弱项级待复习入口、评估审计面板重新写成“半成能力”
 - 把 Prompt 版本管理从 v1 继续补强：当前已有版本选择、A/B 对比和审计明细，但还没有在线编辑、更细粒度 flow 级切换和更强实验分析
-- 把检索升级视为独立未开始项审慎评估；当前项目训练仍是 SQLite FTS5，不要把 RAG 当成已经在做
-- 如果要继续推进 sidecar agent 化，按 [AGENT_DEEP_REDESIGN_PLAN.md](./AGENT_DEEP_REDESIGN_PLAN.md) 的 4 个 phase 渐进推进，而不是一次性推翻现有 stream / FSM / sidecar client 主链路
-- 继续保持 LangGraph 薄壳和 P2 体验项边界，不为了“更像 agent”继续扩图或顺手重做暗色模式、动效、导出
+- 把单 agent 成熟化作为当前技术主线：优先补检索升级、memory 利用、恢复语义和观测能力，而不是先上多 agent
+- 继续保持 repo chunk 以 SQLite FTS5 主路径为主；observation / session summary
+  已落第一版 embedding / hybrid rerank，但不要把 graph / repo chunk 的全量
+  RAG 写成已在做
+- 如果要继续推进 sidecar agent 化，按 [AGENT_DEEP_REDESIGN_PLAN.md](./AGENT_DEEP_REDESIGN_PLAN.md) 的分阶段路线渐进推进，而不是一次性推翻现有 stream / FSM / sidecar client 主链路
+- Go 侧继续保留最终落库和状态机边界；sidecar 的动作能力继续以 `side_effects` 为主，关键状态迁移后续再引入 typed command path
+- 多 agent 目前只作为后续高价值长任务的实现蓝图，不作为阶段 C 的当前热路径方案
 
 ### 完成标准
 
