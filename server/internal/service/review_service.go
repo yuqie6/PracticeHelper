@@ -110,6 +110,10 @@ func (s *Service) ListDueReviews(ctx context.Context) ([]domain.ReviewScheduleIt
 	return s.repo.ListDueReviews(ctx, time.Now().UTC())
 }
 
+func (s *Service) CompleteDueReview(ctx context.Context, id int64, score float64) error {
+	return s.repo.CompleteReviewSchedule(ctx, id, score)
+}
+
 func (s *Service) ListSessions(ctx context.Context, req domain.ListSessionsRequest) (*domain.PaginatedList[domain.TrainingSessionSummary], error) {
 	return s.repo.ListSessions(ctx, req)
 }

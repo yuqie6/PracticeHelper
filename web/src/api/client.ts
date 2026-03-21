@@ -575,3 +575,13 @@ export interface ReviewScheduleItem {
 export function listDueReviews(): Promise<ReviewScheduleItem[]> {
   return request('/api/reviews/due');
 }
+
+export function completeDueReview(
+  id: number,
+  score: number,
+): Promise<string> {
+  return request(`/api/reviews/due/${id}/complete`, {
+    method: 'POST',
+    body: JSON.stringify({ score }),
+  });
+}

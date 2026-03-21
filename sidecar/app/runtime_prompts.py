@@ -86,11 +86,18 @@ def question_prompt_bundle(
 ) -> tuple[str, str, list[RuntimeTool]]:
     system_prompt = load_prompt("generate_question_system.md")
     jd_label = "有" if request.job_target_analysis else "无"
+    strategy_hint = {
+        "weakness_first": "出题策略：优先围绕用户历史弱项出题，确保题目直击薄弱环节。",
+        "project_deep_dive": "出题策略：优先围绕项目的取舍、挑战和追问点深挖，而非泛问基础概念。",
+        "template_based": "出题策略：从模板库选取合适题目，结合弱项和岗位要求微调。",
+    }.get(request.strategy, "")
     user_prompt = (
         f"请生成本轮训练的主问题。\n"
-        f"当前模式：{request.mode}，主题：{request.topic}，是否绑定岗位 JD：{jd_label}\n\n"
-        '最终答案必须匹配：{{"question": "string", "expected_points": ["string"]}}'
+        f"当前模式：{request.mode}，主题：{request.topic}，是否绑定岗位 JD：{jd_label}\n"
     )
+    if strategy_hint:
+        user_prompt += f"{strategy_hint}\n"
+    user_prompt += '\n最终答案必须匹配：{{"question": "string", "expected_points": ["string"]}}'
     tools = [
         RuntimeTool(
             name="read_question_templates",

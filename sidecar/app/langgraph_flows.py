@@ -41,8 +41,9 @@ class GenerateQuestionState(TypedDict):
 
 class EvaluateAnswerState(TypedDict):
     request: EvaluateAnswerRequest
-    result: EvaluationResult
+    result: EvaluationResult | None
     attempts: int
+    error: str
 
 
 class GenerateReviewState(TypedDict):
@@ -92,7 +93,8 @@ def _build_generate_question_graph(runtime: AgentRuntime):
         else:
             strategy = "template_based"
         logger.info("generate_question strategy=%s mode=%s topic=%s", strategy, req.mode, req.topic)
-        return {"strategy": strategy}
+        req_with_strategy = req.model_copy(update={"strategy": strategy})
+        return {"strategy": strategy, "request": req_with_strategy}
 
     def generate(state: GenerateQuestionState) -> dict:
         result = runtime.generate_question(state["request"])
@@ -109,20 +111,27 @@ def _build_generate_question_graph(runtime: AgentRuntime):
 
 def _build_evaluate_answer_graph(runtime: AgentRuntime):
     def evaluate(state: EvaluateAnswerState) -> dict:
-        result = runtime.evaluate_answer(state["request"])
-        validated = EvaluationResult.model_validate(result)
-        return {"result": validated, "attempts": state.get("attempts", 0) + 1}
+        attempts = state.get("attempts", 0) + 1
+        try:
+            result = runtime.evaluate_answer(state["request"])
+            validated = EvaluationResult.model_validate(result)
+            return {"result": validated, "attempts": attempts, "error": ""}
+        except Exception as exc:
+            logger.warning("evaluate_answer attempt %d failed: %s", attempts, exc)
+            return {"result": None, "attempts": attempts, "error": str(exc)}
 
     def should_retry(state: EvaluateAnswerState) -> str:
-        result = state.get("result")
         attempts = state.get("attempts", 0)
+        error = state.get("error", "")
+        result = state.get("result")
+
         if attempts >= _MAX_EVALUATE_ATTEMPTS:
+            if error and result is None:
+                raise RuntimeError(f"evaluate_answer failed after {attempts} attempts: {error}")
             return "accept"
 
-        if result is None:
-            return "retry"
-
-        if not isinstance(result, EvaluationResult):
+        if error or result is None:
+            logger.warning("evaluate_answer retrying due to: %s", error or "no result")
             return "retry"
 
         if not result.strengths and not result.gaps:

@@ -3,8 +3,10 @@ package controller
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -67,6 +69,7 @@ func NewRouter(svc *service.Service) *gin.Engine {
 		api.GET("/weaknesses", handler.listWeaknesses)
 		api.GET("/weaknesses/trends", handler.getWeaknessTrends)
 		api.GET("/reviews/due", handler.listDueReviews)
+		api.POST("/reviews/due/:id/complete", handler.completeDueReview)
 	}
 
 	return router
@@ -487,6 +490,27 @@ func (h *Handler) listDueReviews(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) completeDueReview(c *gin.Context) {
+	var body struct {
+		Score float64 `json:"score"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, fmt.Errorf("invalid id: %s", idStr))
+		return
+	}
+	if err := h.service.CompleteDueReview(c.Request.Context(), id, body.Score); err != nil {
+		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": "ok"})
 }
 
 func requestLogger() gin.HandlerFunc {

@@ -114,14 +114,24 @@
         {{ t('home.dueReviews.description', { count: dueReviews.length }) }}
       </p>
       <div class="mt-3 flex flex-wrap gap-2">
-        <RouterLink
+        <div
           v-for="item in dueReviews.slice(0, 5)"
           :key="item.id"
-          :to="item.review_card_id ? `/reviews/${item.review_card_id}` : `/sessions/${item.session_id}`"
-          class="neo-button-dark"
+          class="flex items-center gap-2"
         >
-          {{ item.topic || t('home.dueReviews.review') }}
-        </RouterLink>
+          <RouterLink
+            :to="item.review_card_id ? `/reviews/${item.review_card_id}` : `/sessions/${item.session_id}`"
+            class="neo-button-dark"
+          >
+            {{ item.topic || t('home.dueReviews.review') }}
+          </RouterLink>
+          <button
+            class="neo-button bg-white text-xs"
+            @click="completeMutation.mutate(item.id)"
+          >
+            {{ t('home.dueReviews.markDone') }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -256,12 +266,12 @@
 </template>
 
 <script setup lang="ts">
-import { useQuery } from '@tanstack/vue-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
 
-import { getDashboard, getWeaknessTrends, listDueReviews, type TrainingSessionSummary, type WeaknessTrend } from '../api/client';
+import { completeDueReview, getDashboard, getWeaknessTrends, listDueReviews, type TrainingSessionSummary, type WeaknessTrend } from '../api/client';
 import StatCard from '../components/StatCard.vue';
 import {
   describeProfile,
@@ -292,10 +302,15 @@ const { data: dueReviewsData } = useQuery({
 });
 
 const { t, locale } = useI18n();
+const queryClient = useQueryClient();
 
 const dashboard = computed(() => data.value ?? null);
 const trends = computed(() => trendsData.value ?? []);
 const dueReviews = computed(() => dueReviewsData.value ?? []);
+const completeMutation = useMutation({
+  mutationFn: (id: number) => completeDueReview(id, 0),
+  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['due-reviews'] }),
+});
 const currentSession = computed(() => dashboard.value?.current_session ?? null);
 const weaknessSummary = computed(() => {
   locale.value;

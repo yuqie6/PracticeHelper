@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"practicehelper/server/internal/domain"
 )
@@ -36,6 +37,7 @@ func (s *Service) SubmitAnswer(ctx context.Context, sessionID string, request do
 	}
 
 	isLastTurn := turn.TurnIndex >= session.MaxTurns
+	evalStart := time.Now()
 	evaluation, err := s.sidecar.EvaluateAnswer(ctx, domain.EvaluateAnswerRequest{
 		Mode:              session.Mode,
 		Topic:             session.Topic,
@@ -53,6 +55,7 @@ func (s *Service) SubmitAnswer(ctx context.Context, sessionID string, request do
 		s.restoreSessionStatus(ctx, session.ID, previousStatus)
 		return nil, err
 	}
+	_ = s.repo.RecordEvaluationLog(ctx, session.ID, turn.ID, "evaluate_answer", "", float64(time.Since(evalStart).Milliseconds()))
 
 	turn.Answer = request.Answer
 	turn.Evaluation = evaluation
@@ -138,6 +141,7 @@ func (s *Service) SubmitAnswerStream(
 	isLastTurn := turn.TurnIndex >= session.MaxTurns
 	emitStatus(emit, "evaluation_started")
 
+	evalStart := time.Now()
 	evaluation, err := s.sidecar.EvaluateAnswerStream(ctx, domain.EvaluateAnswerRequest{
 		Mode:              session.Mode,
 		Topic:             session.Topic,
@@ -155,6 +159,7 @@ func (s *Service) SubmitAnswerStream(
 		s.restoreSessionStatus(ctx, session.ID, previousStatus)
 		return nil, err
 	}
+	_ = s.repo.RecordEvaluationLog(ctx, session.ID, turn.ID, "evaluate_answer_stream", "", float64(time.Since(evalStart).Milliseconds()))
 	emitStatus(emit, "feedback_ready")
 
 	turn.Answer = request.Answer

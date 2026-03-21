@@ -191,6 +191,7 @@ export const messages = {
         kicker: '今日待复习',
         description: '你有 {count} 条待复习内容，点击进入回顾。',
         review: '复习',
+        markDone: '已复习',
       },
       currentSession: {
         kicker: '继续训练',
@@ -769,6 +770,7 @@ export const messages = {
         kicker: 'Due for Review',
         description: 'You have {count} items due for review. Click to revisit.',
         review: 'Review',
+        markDone: 'Done',
       },
       currentSession: {
         kicker: 'Resume',
