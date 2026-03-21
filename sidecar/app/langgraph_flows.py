@@ -4,11 +4,11 @@ import logging
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
-from app.llm_client import ModelClientError
-from app.runtime_prompts import resolve_question_strategy
 
 from app.agent_runtime import AgentRuntime
 from app.config import Settings
+from app.llm_client import ModelClientError
+from app.runtime_prompts import resolve_question_strategy
 from app.schemas import (
     AnalyzeJobTargetRequest,
     AnalyzeJobTargetResponse,
@@ -124,13 +124,17 @@ def _build_evaluate_answer_graph(runtime: AgentRuntime):
 
         if error or result is None:
             if attempts >= _MAX_EVALUATE_ATTEMPTS:
-                raise ModelClientError(f"evaluate_answer failed after {attempts} attempts: {error or 'no result'}")
+                raise ModelClientError(
+                    f"evaluate_answer failed after {attempts} attempts: {error or 'no result'}"
+                )
             logger.warning("evaluate_answer retrying due to: %s", error or "no result")
             return "retry"
 
         if not result.strengths and not result.gaps:
             if attempts >= _MAX_EVALUATE_ATTEMPTS:
-                raise ModelClientError("evaluate_answer failed after retries: missing strengths/gaps")
+                raise ModelClientError(
+                    "evaluate_answer failed after retries: missing strengths/gaps"
+                )
             logger.warning("evaluate_answer output missing strengths/gaps, retrying")
             return "retry"
 
@@ -138,7 +142,8 @@ def _build_evaluate_answer_graph(runtime: AgentRuntime):
         if not is_last_turn and not result.followup_question:
             if attempts >= _MAX_EVALUATE_ATTEMPTS:
                 raise ModelClientError(
-                    "evaluate_answer failed after retries: missing followup_question on non-last turn"
+                    "evaluate_answer failed after retries: "
+                    "missing followup_question on non-last turn"
                 )
             logger.warning("evaluate_answer missing followup_question on non-last turn, retrying")
             return "retry"

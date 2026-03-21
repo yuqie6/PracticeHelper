@@ -383,6 +383,66 @@ func TestCreateSessionRejectsExplicitUnavailableJobTarget(t *testing.T) {
 	}
 }
 
+func TestCreateSessionRejectsExplicitRunningOrFailedJobTarget(t *testing.T) {
+	cases := []struct {
+		name       string
+		prepare    func(*testing.T, *repo.Store, *domain.JobTarget)
+		wantStatus string
+	}{
+		{
+			name:       "running",
+			prepare:    markJobTargetAnalysisRunning,
+			wantStatus: domain.JobTargetAnalysisRunning,
+		},
+		{
+			name:       "failed",
+			prepare:    markJobTargetAnalysisFailed,
+			wantStatus: domain.JobTargetAnalysisFailed,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store, err := openTestStore(t)
+			if err != nil {
+				t.Fatalf("openTestStore() error = %v", err)
+			}
+			defer func() { _ = store.Close() }()
+
+			target := seedReadyJobTarget(t, store)
+			tc.prepare(t, store, target)
+
+			saved, err := store.GetJobTarget(context.Background(), target.ID)
+			if err != nil {
+				t.Fatalf("GetJobTarget() error = %v", err)
+			}
+			if saved == nil {
+				t.Fatal("expected saved job target")
+			}
+			if saved.LatestAnalysisStatus != tc.wantStatus {
+				t.Fatalf("expected %s status, got %s", tc.wantStatus, saved.LatestAnalysisStatus)
+			}
+			if saved.LatestSuccessfulAnalysis == nil {
+				t.Fatal("expected latest successful analysis to remain available")
+			}
+
+			svc := New(store, nil)
+			_, err = svc.CreateSession(context.Background(), domain.CreateSessionRequest{
+				Mode:        domain.ModeBasics,
+				Topic:       "redis",
+				Intensity:   "standard",
+				JobTargetID: target.ID,
+			})
+			if err == nil {
+				t.Fatal("expected CreateSession() to fail")
+			}
+			if !errors.Is(err, ErrJobTargetNotReady) {
+				t.Fatalf("expected ErrJobTargetNotReady, got %v", err)
+			}
+		})
+	}
+}
+
 func TestGetDashboardKeepsUnavailableActiveJobTargetVisible(t *testing.T) {
 	store, err := openTestStore(t)
 	if err != nil {
@@ -425,6 +485,208 @@ func TestGetDashboardKeepsUnavailableActiveJobTargetVisible(t *testing.T) {
 	}
 	if dashboard.RecommendationScope != "generic" {
 		t.Fatalf("expected recommendation scope to fall back to generic, got %q", dashboard.RecommendationScope)
+	}
+}
+
+func TestGetDashboardKeepsRunningOrFailedActiveJobTargetVisible(t *testing.T) {
+	cases := []struct {
+		name       string
+		prepare    func(*testing.T, *repo.Store, *domain.JobTarget)
+		wantStatus string
+	}{
+		{
+			name:       "running",
+			prepare:    markJobTargetAnalysisRunning,
+			wantStatus: domain.JobTargetAnalysisRunning,
+		},
+		{
+			name:       "failed",
+			prepare:    markJobTargetAnalysisFailed,
+			wantStatus: domain.JobTargetAnalysisFailed,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store, err := openTestStore(t)
+			if err != nil {
+				t.Fatalf("openTestStore() error = %v", err)
+			}
+			defer func() { _ = store.Close() }()
+
+			target := seedReadyJobTarget(t, store)
+			if _, err := store.SetActiveJobTarget(context.Background(), target.ID); err != nil {
+				t.Fatalf("SetActiveJobTarget() error = %v", err)
+			}
+			tc.prepare(t, store, target)
+
+			svc := New(store, nil)
+			dashboard, err := svc.GetDashboard(context.Background())
+			if err != nil {
+				t.Fatalf("GetDashboard() error = %v", err)
+			}
+			if dashboard == nil {
+				t.Fatal("expected dashboard")
+			}
+			if dashboard.ActiveJobTarget == nil {
+				t.Fatal("expected dashboard to keep exposing active job target")
+			}
+			if dashboard.ActiveJobTarget.ID != target.ID {
+				t.Fatalf("expected active job target id %q, got %q", target.ID, dashboard.ActiveJobTarget.ID)
+			}
+			if dashboard.ActiveJobTarget.LatestAnalysisStatus != tc.wantStatus {
+				t.Fatalf("expected active job target status %q, got %q", tc.wantStatus, dashboard.ActiveJobTarget.LatestAnalysisStatus)
+			}
+			if dashboard.RecommendationScope != "generic" {
+				t.Fatalf("expected recommendation scope to fall back to generic, got %q", dashboard.RecommendationScope)
+			}
+		})
+	}
+}
+
+func TestCreateSessionWritesEvaluationLog(t *testing.T) {
+	db, err := sqlite.Open(filepath.Join(t.TempDir(), "practicehelper.db"))
+	if err != nil {
+		t.Fatalf("sqlite.Open() error = %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := sqlite.Bootstrap(db); err != nil {
+		t.Fatalf("Bootstrap() error = %v", err)
+	}
+	store := repo.New(db)
+
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/generate_question" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(domain.GenerateQuestionResponse{
+			Question:       "Redis 为什么快？",
+			ExpectedPoints: []string{"内存访问", "事件循环"},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	session, err := svc.CreateSession(context.Background(), domain.CreateSessionRequest{
+		Mode:      domain.ModeBasics,
+		Topic:     "redis",
+		Intensity: "standard",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	var (
+		sessionID string
+		turnID    string
+		flowName  string
+		modelName string
+		latencyMs float64
+	)
+	if err := db.QueryRow(`
+		SELECT session_id, turn_id, flow_name, model_name, latency_ms
+		FROM evaluation_logs
+		ORDER BY id DESC
+		LIMIT 1
+	`).Scan(&sessionID, &turnID, &flowName, &modelName, &latencyMs); err != nil {
+		t.Fatalf("query evaluation log: %v", err)
+	}
+
+	if sessionID != session.ID {
+		t.Fatalf("expected evaluation log session id %q, got %q", session.ID, sessionID)
+	}
+	if turnID != "" {
+		t.Fatalf("expected create session log turn id to be empty, got %q", turnID)
+	}
+	if flowName != "generate_question" {
+		t.Fatalf("expected flow name generate_question, got %q", flowName)
+	}
+	if modelName != "" {
+		t.Fatalf("expected model name to be empty, got %q", modelName)
+	}
+	if latencyMs < 0 {
+		t.Fatalf("expected non-negative latency, got %.2f", latencyMs)
+	}
+}
+
+func TestCompleteDueReviewAdvancesScheduleUsingSessionScore(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := &domain.TrainingSession{
+		ID:         "sess_due_review",
+		Mode:       domain.ModeBasics,
+		Topic:      "redis",
+		Intensity:  "standard",
+		Status:     domain.StatusCompleted,
+		TotalScore: 88,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_due_review",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Redis 为什么快？",
+		ExpectedPoints: []string{"内存访问", "事件循环"},
+		Answer:         "因为数据在内存里。",
+	}
+	if err := store.CreateSession(context.Background(), session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if err := store.CreateReviewSchedule(context.Background(), &domain.ReviewScheduleItem{
+		SessionID:    session.ID,
+		ReviewCardID: "review_due_review",
+		Topic:        session.Topic,
+		NextReviewAt: time.Now().UTC().Add(-time.Hour),
+		IntervalDays: 1,
+		EaseFactor:   2.5,
+	}); err != nil {
+		t.Fatalf("CreateReviewSchedule() error = %v", err)
+	}
+
+	items, err := store.ListDueReviews(context.Background(), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("ListDueReviews() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 due review item, got %d", len(items))
+	}
+
+	svc := New(store, nil)
+	if err := svc.CompleteDueReview(context.Background(), items[0].ID); err != nil {
+		t.Fatalf("CompleteDueReview() error = %v", err)
+	}
+
+	saved, err := store.GetReviewSchedule(context.Background(), items[0].ID)
+	if err != nil {
+		t.Fatalf("GetReviewSchedule() error = %v", err)
+	}
+	if saved == nil {
+		t.Fatal("expected updated review schedule")
+	}
+	if saved.IntervalDays != 3 {
+		t.Fatalf("expected interval to advance to 3 days, got %d", saved.IntervalDays)
+	}
+	if saved.EaseFactor <= 2.5 {
+		t.Fatalf("expected ease factor to increase, got %.2f", saved.EaseFactor)
+	}
+	if !saved.NextReviewAt.After(time.Now().UTC().Add(48 * time.Hour)) {
+		t.Fatalf("expected next review to move into future, got %s", saved.NextReviewAt.Format(time.RFC3339))
+	}
+
+	remaining, err := store.ListDueReviews(context.Background(), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("ListDueReviews() after complete error = %v", err)
+	}
+	if len(remaining) != 0 {
+		t.Fatalf("expected no due reviews after completion, got %d", len(remaining))
 	}
 }
 
@@ -929,6 +1191,30 @@ func seedReadyJobTarget(t *testing.T, store *repo.Store) *domain.JobTarget {
 		t.Fatal("expected saved job target")
 	}
 	return saved
+}
+
+func markJobTargetAnalysisRunning(t *testing.T, store *repo.Store, target *domain.JobTarget) {
+	t.Helper()
+
+	run, err := store.StartJobTargetAnalysis(context.Background(), target.ID, target.SourceText)
+	if err != nil {
+		t.Fatalf("StartJobTargetAnalysis() error = %v", err)
+	}
+	if run.Status != domain.JobTargetAnalysisRunning {
+		t.Fatalf("expected running status, got %s", run.Status)
+	}
+}
+
+func markJobTargetAnalysisFailed(t *testing.T, store *repo.Store, target *domain.JobTarget) {
+	t.Helper()
+
+	run, err := store.StartJobTargetAnalysis(context.Background(), target.ID, target.SourceText)
+	if err != nil {
+		t.Fatalf("StartJobTargetAnalysis() error = %v", err)
+	}
+	if err := store.FailJobTargetAnalysis(context.Background(), target.ID, run.ID, "boom"); err != nil {
+		t.Fatalf("FailJobTargetAnalysis() error = %v", err)
+	}
 }
 
 func openTestStore(t *testing.T) (*repo.Store, error) {

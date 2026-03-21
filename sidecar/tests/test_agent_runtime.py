@@ -26,8 +26,8 @@ from app.schemas import (
     QuestionTemplate,
     TrainingSession,
     TrainingTurn,
-    WeaknessTag,
     WeaknessHit,
+    WeaknessTag,
 )
 
 
@@ -68,6 +68,18 @@ class FlakyEvaluateGraphRuntime:
             "followup_question": "如果线上抖动，你会先看什么？",
             "followup_expected_points": ["先止血", "再定位"],
             "weakness_hits": [],
+        }
+
+
+class AlwaysInvalidEvaluateGraphRuntime:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def evaluate_answer(self, request: EvaluateAnswerRequest):
+        self.calls += 1
+        return {
+            "score": 80,
+            "score_breakdown": {"准确性": 80},
         }
 
 
@@ -373,6 +385,28 @@ def test_evaluate_answer_graph_retries_after_invalid_output() -> None:
 
     assert runtime.calls == 2
     assert result["result"].followup_question == "如果线上抖动，你会先看什么？"
+
+
+def test_evaluate_answer_graph_raises_after_retry_budget_is_exhausted() -> None:
+    runtime = AlwaysInvalidEvaluateGraphRuntime()
+    graph = _build_evaluate_answer_graph(runtime)
+
+    with pytest.raises(ModelClientError, match="missing strengths/gaps"):
+        graph.invoke(
+            {
+                "request": EvaluateAnswerRequest(
+                    mode="basics",
+                    topic="redis",
+                    question="Redis 为什么快？",
+                    expected_points=["内存访问", "事件循环"],
+                    answer="因为它在内存里。",
+                    turn_index=1,
+                    max_turns=2,
+                )
+            }
+        )
+
+    assert runtime.calls == 2
 
 
 def test_review_prompt_bundle_includes_job_target_analysis_context() -> None:

@@ -959,6 +959,116 @@ func TestSetAndClearActiveJobTargetPersistsOnProfile(t *testing.T) {
 	}
 }
 
+func TestCreateReviewScheduleUpsertsExistingSessionEntry(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	first := &domain.ReviewScheduleItem{
+		SessionID:    "sess_review_schedule",
+		ReviewCardID: "review_1",
+		Topic:        "redis",
+		NextReviewAt: time.Date(2026, 3, 21, 10, 0, 0, 0, time.UTC),
+		IntervalDays: 1,
+		EaseFactor:   2.5,
+	}
+	if err := store.CreateReviewSchedule(ctx, first); err != nil {
+		t.Fatalf("CreateReviewSchedule() first error = %v", err)
+	}
+
+	second := &domain.ReviewScheduleItem{
+		SessionID:    first.SessionID,
+		ReviewCardID: "review_2",
+		Topic:        "kafka",
+		NextReviewAt: time.Date(2026, 3, 24, 10, 0, 0, 0, time.UTC),
+		IntervalDays: 3,
+		EaseFactor:   2.6,
+	}
+	if err := store.CreateReviewSchedule(ctx, second); err != nil {
+		t.Fatalf("CreateReviewSchedule() second error = %v", err)
+	}
+
+	var count int
+	if err := store.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM review_schedule
+		WHERE session_id = ?
+	`, first.SessionID).Scan(&count); err != nil {
+		t.Fatalf("query review schedule count: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly 1 review schedule row after upsert, got %d", count)
+	}
+
+	items, err := store.ListDueReviews(ctx, second.NextReviewAt.Add(time.Second))
+	if err != nil {
+		t.Fatalf("ListDueReviews() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 due review item, got %d", len(items))
+	}
+	if items[0].ReviewCardID != second.ReviewCardID {
+		t.Fatalf("expected updated review card id %q, got %q", second.ReviewCardID, items[0].ReviewCardID)
+	}
+	if items[0].Topic != second.Topic {
+		t.Fatalf("expected updated topic %q, got %q", second.Topic, items[0].Topic)
+	}
+	if items[0].IntervalDays != second.IntervalDays {
+		t.Fatalf("expected updated interval %d, got %d", second.IntervalDays, items[0].IntervalDays)
+	}
+}
+
+func TestCreateEvaluationLogPersistsEntry(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	if err := store.CreateEvaluationLog(
+		context.Background(),
+		"sess_eval_log",
+		"turn_eval_log",
+		"evaluate_answer",
+		"gpt-test",
+		12.5,
+	); err != nil {
+		t.Fatalf("CreateEvaluationLog() error = %v", err)
+	}
+
+	var (
+		sessionID string
+		turnID    string
+		flowName  string
+		modelName string
+		latencyMs float64
+	)
+	if err := store.db.QueryRow(`
+		SELECT session_id, turn_id, flow_name, model_name, latency_ms
+		FROM evaluation_logs
+		ORDER BY id DESC
+		LIMIT 1
+	`).Scan(&sessionID, &turnID, &flowName, &modelName, &latencyMs); err != nil {
+		t.Fatalf("query evaluation log: %v", err)
+	}
+
+	if sessionID != "sess_eval_log" || turnID != "turn_eval_log" {
+		t.Fatalf("unexpected evaluation log ids: got session=%q turn=%q", sessionID, turnID)
+	}
+	if flowName != "evaluate_answer" {
+		t.Fatalf("expected flow name evaluate_answer, got %q", flowName)
+	}
+	if modelName != "gpt-test" {
+		t.Fatalf("expected model name gpt-test, got %q", modelName)
+	}
+	if latencyMs != 12.5 {
+		t.Fatalf("expected latency 12.5, got %.2f", latencyMs)
+	}
+}
+
 func openTestStore(t *testing.T) (*Store, error) {
 	t.Helper()
 
