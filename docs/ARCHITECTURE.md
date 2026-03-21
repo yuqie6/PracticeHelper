@@ -30,19 +30,29 @@ server/
     repo/
       repo.go                 # Store 定义与 repo.New(db)
       profile_repo.go         # 用户画像读写
+      job_target_repo.go      # JD 与分析快照读写
       project_repo.go         # 项目画像、repo chunk、FTS 检索
       import_job_repo.go      # 项目导入任务 CRUD
       question_template_repo.go # basics 模板查询
-      session_repo.go         # 训练 session / turn / 原子状态切换
+      session_repo.go         # 训练 session / turn / 原子状态切换与分页查询
       review_repo.go          # review card 落库与查询
+      review_schedule_repo.go # 到期复习项读写与推进
       weakness_repo.go        # weakness 聚合与降温
+      evaluation_log_repo.go  # 生成/评估耗时审计
       scan.go                 # DB row -> domain 扫描器
       util.go                 # repo 内部 JSON/时间/ID/FTS 辅助函数
     service/
       service.go              # Service 定义、构造与服务级错误
       profile_service.go      # 画像与 dashboard 聚合
+      job_target_service.go   # JD 管理、分析与默认 JD 逻辑
       import_service.go       # 项目导入编排与后台恢复
-      session_service.go      # 会话创建、答题状态机、review 收口
+      session_creation_service.go # 创建训练会话与出题
+      answer_service.go       # 回答提交、多轮状态机与复盘生成
+      review_service.go       # 复盘查询与到期复习推进
+      export_service.go       # Session Markdown 导出
+      audit_service.go        # evaluation_logs 记录
+      session_guard.go        # session 原子抢占与恢复语义
+      basics_topics.go        # basics topic 归一化与 mixed 选题
       weakness_service.go     # weakness 辅助逻辑与 dashboard 文案 helper
     sidecar/client.go         # sidecar HTTP 客户端：序列化请求 → POST → 反序列化响应/流
     observability/request.go  # request_id 生成与透传
@@ -61,6 +71,10 @@ sidecar/app/
   schemas.py         # Pydantic 请求/响应模型（与 Go 侧 domain/types.go 字段对齐）
   langgraph_flows.py # 5 条 LangGraph 图：repo 分析 / JD 分析 / 出题 / 评估 / 复盘
   agent_runtime.py   # 核心 AI 逻辑：tool-loop 模式与 single-shot 降级
+  prompt_loader.py   # 从 markdown 文件加载长 system prompt
+  runtime_prompts.py # 运行时动态拼装 system/user prompt
+  runtime_support.py # tool-loop 与 single-shot 共享辅助逻辑
+  prompts/*.md       # 外置的长 system prompt 模板
   llm_client.py      # OpenAI 兼容的 HTTP 客户端（用 urllib 实现，无第三方依赖）
   repo_context.py    # 仓库克隆、文件过滤、chunk 切分、技术栈检测
 ```
@@ -276,7 +290,11 @@ waiting_answer ──用户回答当前轮──▶ evaluating ──未到 max_
 
 ## 6. API 清单
 
-所有接口前缀 `/api`，响应格式 `{"data": ...}` 或 `{"error": {"message": "..."}}`。
+普通 JSON 接口前缀为 `/api`，成功时返回 `{"data": ...}`，失败时返回 `{"error": {"code": "...", "message": "..."}}`。
+其中有两个例外：
+
+- `/healthz` 是顶层健康检查接口，不走 `/api`
+- stream 接口返回 `application/x-ndjson`，导出接口返回 Markdown 附件，不走统一 JSON envelope
 
 | 方法 | 路径 | 用途 |
 |------|------|------|
@@ -296,6 +314,7 @@ waiting_answer ──用户回答当前轮──▶ evaluating ──未到 max_
 | POST | `/api/sessions` | 创建训练会话（触发 sidecar 出题） |
 | POST | `/api/sessions/stream` | 流式创建训练会话 |
 | GET | `/api/sessions/:id` | 获取会话详情（含所有回合） |
+| GET | `/api/sessions/:id/export?format=markdown` | 导出单次 session 的 Markdown 报告 |
 | POST | `/api/sessions/:id/answer` | 提交回答（触发 sidecar 评分，可能触发复盘生成） |
 | POST | `/api/sessions/:id/answer/stream` | 流式提交回答 |
 | POST | `/api/sessions/:id/retry-review` | 对 `review_pending` 会话重试生成复盘 |
