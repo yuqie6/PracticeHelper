@@ -581,6 +581,99 @@ func scanMemoryIndexEntry(scanner interface{ Scan(dest ...any) error }) (*domain
 	}, nil
 }
 
+func scanMemoryEmbeddingRecord(
+	scanner interface{ Scan(dest ...any) error },
+) (*domain.MemoryEmbeddingRecord, error) {
+	var (
+		id, memoryIndexID, memoryType, refTable, refID string
+		contentHash, modelName, vectorStoreID, status  string
+		lastError, lastIndexedAt, createdAt, updatedAt string
+		vectorDim                                      int
+	)
+	if err := scanner.Scan(
+		&id,
+		&memoryIndexID,
+		&memoryType,
+		&refTable,
+		&refID,
+		&contentHash,
+		&modelName,
+		&vectorStoreID,
+		&vectorDim,
+		&status,
+		&lastError,
+		&lastIndexedAt,
+		&createdAt,
+		&updatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return &domain.MemoryEmbeddingRecord{
+		ID:            id,
+		MemoryIndexID: memoryIndexID,
+		MemoryType:    memoryType,
+		RefTable:      refTable,
+		RefID:         refID,
+		ContentHash:   contentHash,
+		ModelName:     modelName,
+		VectorStoreID: vectorStoreID,
+		VectorDim:     vectorDim,
+		Status:        status,
+		LastError:     lastError,
+		LastIndexedAt: parseNullableTime(lastIndexedAt),
+		CreatedAt:     parseTime(createdAt),
+		UpdatedAt:     parseTime(updatedAt),
+	}, nil
+}
+
+func scanMemoryEmbeddingJob(
+	scanner interface{ Scan(dest ...any) error },
+) (*domain.MemoryEmbeddingJob, error) {
+	var (
+		id, memoryIndexID, memoryType, refTable, refID string
+		status, errorMessage, claimToken               string
+		claimExpiresAt, createdAt, updatedAt           string
+		startedAt, finishedAt                          string
+		attemptCount                                   int
+	)
+	if err := scanner.Scan(
+		&id,
+		&memoryIndexID,
+		&memoryType,
+		&refTable,
+		&refID,
+		&status,
+		&attemptCount,
+		&errorMessage,
+		&claimToken,
+		&claimExpiresAt,
+		&createdAt,
+		&updatedAt,
+		&startedAt,
+		&finishedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return &domain.MemoryEmbeddingJob{
+		ID:             id,
+		MemoryIndexID:  memoryIndexID,
+		MemoryType:     memoryType,
+		RefTable:       refTable,
+		RefID:          refID,
+		Status:         status,
+		AttemptCount:   attemptCount,
+		ErrorMessage:   errorMessage,
+		ClaimToken:     claimToken,
+		ClaimExpiresAt: parseNullableTime(claimExpiresAt),
+		CreatedAt:      parseTime(createdAt),
+		UpdatedAt:      parseTime(updatedAt),
+		StartedAt:      parseNullableTime(startedAt),
+		FinishedAt:     parseNullableTime(finishedAt),
+	}, nil
+}
+
 func parseStringList(raw string) []string {
 	items := make([]string, 0)
 	_ = json.Unmarshal([]byte(raw), &items)

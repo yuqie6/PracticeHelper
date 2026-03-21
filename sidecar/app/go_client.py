@@ -56,9 +56,7 @@ class GoBackendClient:
                 raw = response.read().decode("utf-8")
         except urllib_error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            raise GoBackendClientError(
-                f"Go backend returned HTTP {exc.code}: {detail}"
-            ) from exc
+            raise GoBackendClientError(f"Go backend returned HTTP {exc.code}: {detail}") from exc
         except urllib_error.URLError as exc:
             raise GoBackendClientError(f"Go backend is unreachable: {exc.reason}") from exc
 

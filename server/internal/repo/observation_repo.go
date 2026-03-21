@@ -27,7 +27,8 @@ func (s *Store) CreateObservations(
 	defer func() { _ = tx.Rollback() }()
 
 	indexEntries := make([]domain.MemoryIndexEntry, 0, len(observations))
-	for _, observation := range observations {
+	for index := range observations {
+		observation := &observations[index]
 		if observation.Content == "" || observation.Category == "" {
 			continue
 		}
@@ -67,7 +68,7 @@ func (s *Store) CreateObservations(
 		}
 
 		indexEntries = append(indexEntries, domain.MemoryIndexEntry{
-			MemoryType: "observation",
+			MemoryType: domain.MemoryTypeObservation,
 			ScopeType:  observation.ScopeType,
 			ScopeID:    observation.ScopeID,
 			Topic:      observation.Topic,

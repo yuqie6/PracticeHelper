@@ -13,6 +13,7 @@ import (
 	"practicehelper/server/internal/repo"
 	"practicehelper/server/internal/service"
 	"practicehelper/server/internal/sidecar"
+	"practicehelper/server/internal/vectorstore"
 )
 
 func main() {
@@ -41,7 +42,28 @@ func main() {
 	repository := repo.New(db)
 
 	sidecarClient := sidecar.New(cfg.SidecarURL, cfg.SidecarTimeout)
-	svc := service.New(repository, sidecarClient)
+	var memoryVectorStore vectorstore.Store
+	if cfg.VectorStoreURL != "" {
+		memoryVectorStore = vectorstore.NewQdrantStore(
+			cfg.VectorStoreURL,
+			cfg.VectorStoreAPIKey,
+			cfg.VectorStoreCollection,
+			cfg.VectorStoreTimeout,
+		)
+	}
+	svc := service.New(
+		repository,
+		sidecarClient,
+		service.WithVectorStore(memoryVectorStore),
+		service.WithVectorRetrievalConfig(
+			cfg.VectorWriteEnabled,
+			cfg.VectorReadEnabled,
+			cfg.VectorRerankEnabled,
+			cfg.MemoryHotIndexTimeout,
+			cfg.MemoryEmbeddingClaimTTL,
+			cfg.MemoryEmbeddingPollEvery,
+		),
+	)
 	router := controller.NewRouterWithInternalToken(svc, cfg.InternalToken)
 
 	address := fmt.Sprintf(":%d", cfg.Port)

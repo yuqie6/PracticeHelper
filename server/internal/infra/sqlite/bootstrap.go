@@ -292,6 +292,38 @@ func migrate(db *sql.DB) error {
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS memory_embedding_records (
+			id TEXT PRIMARY KEY,
+			memory_index_id TEXT NOT NULL UNIQUE,
+			memory_type TEXT NOT NULL,
+			ref_table TEXT NOT NULL,
+			ref_id TEXT NOT NULL,
+			content_hash TEXT NOT NULL DEFAULT '',
+			model_name TEXT NOT NULL DEFAULT '',
+			vector_store_id TEXT NOT NULL DEFAULT '',
+			vector_dim INTEGER NOT NULL DEFAULT 0,
+			status TEXT NOT NULL CHECK(status IN ('pending','indexed','failed')),
+			last_error TEXT NOT NULL DEFAULT '',
+			last_indexed_at TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS memory_embedding_jobs (
+			id TEXT PRIMARY KEY,
+			memory_index_id TEXT NOT NULL UNIQUE,
+			memory_type TEXT NOT NULL,
+			ref_table TEXT NOT NULL,
+			ref_id TEXT NOT NULL,
+			status TEXT NOT NULL CHECK(status IN ('queued','running','failed')),
+			attempt_count INTEGER NOT NULL DEFAULT 0,
+			error_message TEXT NOT NULL DEFAULT '',
+			claim_token TEXT NOT NULL DEFAULT '',
+			claim_expires_at TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			started_at TEXT NOT NULL DEFAULT '',
+			finished_at TEXT NOT NULL DEFAULT ''
+		);`,
 		`CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_scope_label
 			ON knowledge_nodes(scope_type, scope_id, node_type, label);`,
 		`CREATE INDEX IF NOT EXISTS idx_knowledge_snapshots_node_created
@@ -304,6 +336,10 @@ func migrate(db *sql.DB) error {
 			ON memory_index(ref_table, ref_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_memory_index_lookup
 			ON memory_index(scope_type, scope_id, memory_type, topic, updated_at DESC);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_embedding_records_memory
+			ON memory_embedding_records(memory_index_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_memory_embedding_jobs_status
+			ON memory_embedding_jobs(status, updated_at ASC);`,
 	}
 
 	for _, statement := range statements {

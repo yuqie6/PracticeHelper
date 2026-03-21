@@ -60,7 +60,7 @@ class OpenAICompatibleModelClient:
             method="POST",
         )
 
-        with self._call_with_retry(request) as response:
+        with self._call_with_retry(request, timeout=self._settings.llm_timeout_seconds) as response:
             raw = response.read().decode("utf-8")
 
         try:
@@ -106,7 +106,7 @@ class OpenAICompatibleModelClient:
             method="POST",
         )
 
-        with self._call_with_retry(request) as response:
+        with self._call_with_retry(request, timeout=self._settings.llm_timeout_seconds) as response:
             content_type = response.headers.get_content_type()
             if content_type != "text/event-stream":
                 raw = response.read().decode("utf-8")
@@ -130,6 +130,125 @@ class OpenAICompatibleModelClient:
             if event_lines:
                 yield from self._parse_stream_event(event_lines)
 
+    def create_embeddings(self, texts: list[str]) -> tuple[list[list[float]], str]:
+        if not self._settings.embedding_enabled:
+            raise ModelClientError(
+                "Embedding model is required. Configure PRACTICEHELPER_SIDECAR_EMBEDDING_MODEL, "
+                "PRACTICEHELPER_SIDECAR_EMBEDDING_BASE_URL, "
+                "and PRACTICEHELPER_SIDECAR_EMBEDDING_API_KEY."
+            )
+        if not texts:
+            return [], ""
+
+        request = urllib_request.Request(
+            self._embeddings_url,
+            data=json.dumps(
+                {
+                    "model": self._settings.embedding_model,
+                    "input": texts,
+                }
+            ).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self._settings.embedding_api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        with self._call_with_retry(
+            request,
+            timeout=self._settings.embedding_timeout_seconds,
+        ) as response:
+            raw = response.read().decode("utf-8")
+
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ModelClientError(f"Embedding provider returned invalid JSON: {raw}") from exc
+
+        items = payload.get("data")
+        if not isinstance(items, list):
+            raise ModelClientError(f"Embedding provider returned invalid payload: {payload}")
+
+        vectors: list[tuple[int, list[float]]] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            index = item.get("index", len(vectors))
+            embedding = item.get("embedding")
+            if not isinstance(index, int) or not isinstance(embedding, list):
+                continue
+            vectors.append((index, [float(value) for value in embedding]))
+        vectors.sort(key=lambda item: item[0])
+        model_name = str(payload.get("model") or self._settings.embedding_model)
+        return [vector for _, vector in vectors], model_name
+
+    def rerank_documents(
+        self,
+        *,
+        query: str,
+        documents: list[str],
+        top_k: int,
+    ) -> list[dict[str, float | int]]:
+        if not self._settings.rerank_enabled:
+            raise ModelClientError(
+                "Rerank model is required. Configure PRACTICEHELPER_SIDECAR_RERANK_MODEL, "
+                "PRACTICEHELPER_SIDECAR_RERANK_BASE_URL, and PRACTICEHELPER_SIDECAR_RERANK_API_KEY."
+            )
+        if not documents:
+            return []
+
+        request = urllib_request.Request(
+            self._rerank_url,
+            data=json.dumps(
+                {
+                    "model": self._settings.rerank_model,
+                    "query": query,
+                    "documents": documents,
+                    "top_n": top_k,
+                    "return_documents": False,
+                }
+            ).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self._settings.rerank_api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        with self._call_with_retry(
+            request,
+            timeout=self._settings.rerank_timeout_seconds,
+        ) as response:
+            raw = response.read().decode("utf-8")
+
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ModelClientError(f"Rerank provider returned invalid JSON: {raw}") from exc
+
+        raw_items = payload.get("results")
+        if raw_items is None:
+            raw_items = payload.get("data")
+        if not isinstance(raw_items, list):
+            raise ModelClientError(f"Rerank provider returned invalid payload: {payload}")
+
+        items: list[dict[str, float | int]] = []
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+            index = item.get("index")
+            score = item.get("relevance_score", item.get("score"))
+            if not isinstance(index, int):
+                continue
+            try:
+                normalized_score = float(score)
+            except (TypeError, ValueError):
+                continue
+            items.append({"index": index, "score": normalized_score})
+        items.sort(key=lambda item: float(item["score"]), reverse=True)
+        return items
+
     @property
     def _chat_completions_url(self) -> str:
         base = self._settings.openai_base_url.rstrip("/")
@@ -140,6 +259,22 @@ class OpenAICompatibleModelClient:
         if base.endswith("/v1"):
             return f"{base}/chat/completions"
         return f"{base}/v1/chat/completions"
+
+    @property
+    def _embeddings_url(self) -> str:
+        base = self._settings.embedding_base_url.rstrip("/")
+        if base.endswith("/embeddings"):
+            return base
+        if base.endswith("/v1"):
+            return f"{base}/embeddings"
+        return f"{base}/v1/embeddings"
+
+    @property
+    def _rerank_url(self) -> str:
+        base = self._settings.rerank_base_url.rstrip("/")
+        if base.endswith("/rerank"):
+            return base
+        return f"{base}/rerank"
 
     @staticmethod
     def _normalize_content(content: Any) -> str:
@@ -232,6 +367,7 @@ class OpenAICompatibleModelClient:
         self,
         request: urllib_request.Request,
         *,
+        timeout: float,
         max_attempts: int = 3,
         base_delay: float = 0.5,
     ) -> http.client.HTTPResponse:
@@ -239,7 +375,7 @@ class OpenAICompatibleModelClient:
             try:
                 return urllib_request.urlopen(
                     request,
-                    timeout=self._settings.llm_timeout_seconds,
+                    timeout=timeout,
                 )
             except urllib_error.HTTPError as exc:
                 if not self._is_retryable_http_status(exc.code) or attempt == max_attempts - 1:

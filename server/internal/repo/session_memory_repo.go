@@ -75,7 +75,7 @@ func (s *Store) UpsertSessionMemorySummary(
 	if stored != nil {
 		*summary = *stored
 		if err := s.upsertMemoryIndexEntries(ctx, tx, []domain.MemoryIndexEntry{{
-			MemoryType:  "session_summary",
+			MemoryType:  domain.MemoryTypeSessionSummary,
 			ScopeType:   domain.MemoryScopeSession,
 			ScopeID:     stored.SessionID,
 			Topic:       stored.Topic,

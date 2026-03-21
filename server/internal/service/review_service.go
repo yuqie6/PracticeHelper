@@ -132,8 +132,15 @@ func (s *Service) persistReview(
 	if err := s.repo.SaveSession(ctx, session); err != nil {
 		return nil, err
 	}
-	if err := s.repo.UpsertSessionMemorySummary(ctx, buildSessionMemorySummary(session, review)); err != nil {
+	summary := buildSessionMemorySummary(session, review)
+	if err := s.repo.UpsertSessionMemorySummary(ctx, summary); err != nil {
 		return nil, fmt.Errorf("save session memory summary: %w", err)
+	}
+	if summary != nil && summary.ID != "" {
+		s.syncOrQueueMemoryEmbeddings(ctx, []domain.MemoryRef{{
+			RefTable: "session_memory_summaries",
+			RefID:    summary.ID,
+		}})
 	}
 	if err := s.applyGenerateReviewSideEffects(ctx, session, sideEffects); err != nil {
 		return nil, err
@@ -156,6 +163,7 @@ func (s *Service) applyGenerateReviewSideEffects(
 		if err := s.repo.CreateObservations(ctx, session.ID, sideEffects.Observations); err != nil {
 			return fmt.Errorf("create review observations: %w", err)
 		}
+		s.syncOrQueueMemoryEmbeddings(ctx, collectObservationMemoryRefs(sideEffects.Observations))
 	}
 	if len(sideEffects.KnowledgeUpdates) > 0 {
 		if err := s.repo.UpsertKnowledgeNodes(ctx, session.ID, sideEffects.KnowledgeUpdates); err != nil {

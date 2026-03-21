@@ -76,6 +76,71 @@ func TestEvaluateAnswerSupportsEnvelopedResultPayload(t *testing.T) {
 	}
 }
 
+func TestEmbedMemoryDecodesPlainResponsePayload(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/embed_memory" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(domain.EmbedMemoryResponse{
+			Items: []domain.EmbeddedMemoryVector{{
+				ID:        "memidx_1",
+				Vector:    []float64{0.1, 0.2, 0.3},
+				ModelName: "embed-test",
+			}},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(server.URL, time.Second)
+	response, err := client.EmbedMemory(context.Background(), domain.EmbedMemoryRequest{
+		Items: []domain.EmbedMemoryItem{{ID: "memidx_1", Text: "redis cache consistency"}},
+	})
+	if err != nil {
+		t.Fatalf("EmbedMemory() error = %v", err)
+	}
+	if len(response.Items) != 1 || len(response.Items[0].Vector) != 3 {
+		t.Fatalf("unexpected embed response: %+v", response)
+	}
+}
+
+func TestRerankMemoryDecodesPlainResponsePayload(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/rerank_memory" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(domain.RerankMemoryResponse{
+			Items: []domain.RerankMemoryResult{{
+				ID:    "memidx_1",
+				Score: 0.92,
+				Rank:  1,
+			}},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(server.URL, time.Second)
+	response, err := client.RerankMemory(context.Background(), domain.RerankMemoryRequest{
+		Query: "redis consistency tradeoff",
+		Candidates: []domain.RerankMemoryCandidate{{
+			ID:   "memidx_1",
+			Text: "redis cache consistency answer",
+		}},
+		TopK: 1,
+	})
+	if err != nil {
+		t.Fatalf("RerankMemory() error = %v", err)
+	}
+	if len(response.Items) != 1 || response.Items[0].ID != "memidx_1" {
+		t.Fatalf("unexpected rerank response: %+v", response)
+	}
+}
+
 func TestGenerateReviewStreamReadsRawOutputFromResultEventEnvelope(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/internal/generate_review/stream" {

@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from app.agent_runtime import AgentRuntime
 from app.config import load_settings
 from app.langgraph_flows import build_flows
-from app.llm_client import ModelClientError
+from app.llm_client import ModelClientError, OpenAICompatibleModelClient
 from app.prompt_loader import list_prompt_sets
 from app.runtime_prompts import (
     evaluate_prompt_meta,
@@ -23,6 +23,9 @@ from app.schemas import (
     AnalyzeJobTargetRequest,
     AnalyzeRepoEnvelope,
     AnalyzeRepoRequest,
+    EmbeddedMemoryVector,
+    EmbedMemoryRequest,
+    EmbedMemoryResponse,
     EvaluateAnswerEnvelope,
     EvaluateAnswerRequest,
     GenerateQuestionEnvelope,
@@ -30,11 +33,15 @@ from app.schemas import (
     GenerateReviewEnvelope,
     GenerateReviewRequest,
     PromptSetSummary,
+    RerankMemoryRequest,
+    RerankMemoryResponse,
+    RerankMemoryResult,
 )
 
 settings = load_settings()
 logger = logging.getLogger(__name__)
-runtime = AgentRuntime(settings)
+model_client = OpenAICompatibleModelClient(settings)
+runtime = AgentRuntime(settings, model_client=model_client if settings.llm_enabled else None)
 
 
 def configure_logging() -> None:
@@ -180,6 +187,41 @@ def generate_review_stream_endpoint(request: GenerateReviewRequest) -> Streaming
     )
     apply_prompt_headers(response, review_prompt_meta(request))
     return response
+
+
+@app.post("/internal/embed_memory", response_model=EmbedMemoryResponse)
+def embed_memory_endpoint(request: EmbedMemoryRequest) -> EmbedMemoryResponse:
+    vectors, model_name = model_client.create_embeddings([item.text for item in request.items])
+    return EmbedMemoryResponse(
+        items=[
+            EmbeddedMemoryVector(
+                id=request.items[index].id,
+                vector=vector,
+                model_name=model_name,
+            )
+            for index, vector in enumerate(vectors)
+        ]
+    )
+
+
+@app.post("/internal/rerank_memory", response_model=RerankMemoryResponse)
+def rerank_memory_endpoint(request: RerankMemoryRequest) -> RerankMemoryResponse:
+    ranked = model_client.rerank_documents(
+        query=request.query,
+        documents=[item.text for item in request.candidates],
+        top_k=request.top_k,
+    )
+    return RerankMemoryResponse(
+        items=[
+            RerankMemoryResult(
+                id=request.candidates[int(item["index"])].id,
+                score=float(item["score"]),
+                rank=rank + 1,
+            )
+            for rank, item in enumerate(ranked)
+            if 0 <= int(item["index"]) < len(request.candidates)
+        ]
+    )
 
 
 def _ndjson_stream(events):

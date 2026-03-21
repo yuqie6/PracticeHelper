@@ -2,10 +2,12 @@ package service
 
 import (
 	"errors"
+	"time"
 
 	"practicehelper/server/internal/domain"
 	"practicehelper/server/internal/repo"
 	"practicehelper/server/internal/sidecar"
+	"practicehelper/server/internal/vectorstore"
 )
 
 var (
@@ -31,14 +33,64 @@ var (
 type Service struct {
 	repo    *repo.Store
 	sidecar *sidecar.Client
+
+	vectorStore                vectorstore.Store
+	vectorWriteEnabled         bool
+	vectorReadEnabled          bool
+	vectorRerankEnabled        bool
+	memoryHotIndexTimeout      time.Duration
+	memoryEmbeddingClaimTTL    time.Duration
+	memoryEmbeddingPollEvery   time.Duration
+	memoryEmbeddingWorkerAlive bool
 }
 
-func New(repository *repo.Store, sc *sidecar.Client) *Service {
+type Option func(*Service)
+
+func WithVectorStore(store vectorstore.Store) Option {
+	return func(s *Service) {
+		s.vectorStore = store
+	}
+}
+
+func WithVectorRetrievalConfig(
+	writeEnabled bool,
+	readEnabled bool,
+	rerankEnabled bool,
+	hotIndexTimeout time.Duration,
+	claimTTL time.Duration,
+	pollEvery time.Duration,
+) Option {
+	return func(s *Service) {
+		s.vectorWriteEnabled = writeEnabled
+		s.vectorReadEnabled = readEnabled
+		s.vectorRerankEnabled = rerankEnabled
+		if hotIndexTimeout > 0 {
+			s.memoryHotIndexTimeout = hotIndexTimeout
+		}
+		if claimTTL > 0 {
+			s.memoryEmbeddingClaimTTL = claimTTL
+		}
+		if pollEvery > 0 {
+			s.memoryEmbeddingPollEvery = pollEvery
+		}
+	}
+}
+
+func New(repository *repo.Store, sc *sidecar.Client, options ...Option) *Service {
 	svc := &Service{
-		repo:    repository,
-		sidecar: sc,
+		repo:                     repository,
+		sidecar:                  sc,
+		memoryHotIndexTimeout:    2 * time.Second,
+		memoryEmbeddingClaimTTL:  20 * time.Second,
+		memoryEmbeddingPollEvery: 4 * time.Second,
+	}
+	for _, option := range options {
+		if option != nil {
+			option(svc)
+		}
 	}
 	svc.resumePendingImportJobs()
+	svc.startMemoryEmbeddingWorker()
 	return svc
 }
 

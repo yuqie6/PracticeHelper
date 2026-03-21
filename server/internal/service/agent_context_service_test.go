@@ -259,6 +259,90 @@ func TestGetAgentContextUsesMemoryIndexPlanner(t *testing.T) {
 	}
 }
 
+func TestGetAgentContextReranksSessionSummariesBeyondRawSalience(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	if err := store.UpsertSessionMemorySummary(ctx, &domain.SessionMemorySummary{
+		ID:               "sm_salience_first",
+		SessionID:        "sess_salience_first",
+		Mode:             domain.ModeBasics,
+		Topic:            domain.BasicsTopicRedis,
+		Summary:          "高热度但老旧的 Redis 总结。",
+		RecommendedFocus: []string{"缓存击穿"},
+		Salience:         0.95,
+	}); err != nil {
+		t.Fatalf("UpsertSessionMemorySummary() first error = %v", err)
+	}
+	if err := store.UpsertSessionMemorySummary(ctx, &domain.SessionMemorySummary{
+		ID:               "sm_confident_first",
+		SessionID:        "sess_confident_first",
+		Mode:             domain.ModeBasics,
+		Topic:            domain.BasicsTopicRedis,
+		Summary:          "更可信也更新的 Redis 总结。",
+		RecommendedFocus: []string{"缓存一致性"},
+		Salience:         0.70,
+	}); err != nil {
+		t.Fatalf("UpsertSessionMemorySummary() second error = %v", err)
+	}
+
+	if err := store.UpsertMemoryIndexEntries(ctx, []domain.MemoryIndexEntry{
+		{
+			ID:         "memidx_salience_first",
+			MemoryType: "session_summary",
+			ScopeType:  domain.MemoryScopeSession,
+			ScopeID:    "sess_salience_first",
+			Topic:      domain.BasicsTopicRedis,
+			SessionID:  "sess_salience_first",
+			Summary:    "高热度但老旧的 Redis 总结。",
+			Entities:   []string{"缓存击穿"},
+			Salience:   0.95,
+			Confidence: 0.15,
+			Freshness:  0.10,
+			RefTable:   "session_memory_summaries",
+			RefID:      "sm_salience_first",
+		},
+		{
+			ID:         "memidx_confident_first",
+			MemoryType: "session_summary",
+			ScopeType:  domain.MemoryScopeSession,
+			ScopeID:    "sess_confident_first",
+			Topic:      domain.BasicsTopicRedis,
+			SessionID:  "sess_confident_first",
+			Summary:    "更可信也更新的 Redis 总结。",
+			Entities:   []string{"缓存一致性"},
+			Salience:   0.70,
+			Confidence: 0.95,
+			Freshness:  1.00,
+			RefTable:   "session_memory_summaries",
+			RefID:      "sm_confident_first",
+		},
+	}); err != nil {
+		t.Fatalf("UpsertMemoryIndexEntries() error = %v", err)
+	}
+
+	svc := New(store, nil)
+	agentContext, err := svc.getAgentContext(ctx, agentContextParams{
+		Topic:               domain.BasicsTopicRedis,
+		SessionID:           "sess_current",
+		SessionSummaryLimit: 1,
+	})
+	if err != nil {
+		t.Fatalf("getAgentContext() error = %v", err)
+	}
+
+	if len(agentContext.SessionSummaries) != 1 {
+		t.Fatalf("expected 1 session summary, got %d", len(agentContext.SessionSummaries))
+	}
+	if agentContext.SessionSummaries[0].ID != "sm_confident_first" {
+		t.Fatalf("expected reranked summary sm_confident_first, got %q", agentContext.SessionSummaries[0].ID)
+	}
+}
+
 func TestPersistReviewBuildsKnowledgeGraphBackedRecommendedNext(t *testing.T) {
 	store, err := openTestStore(t)
 	if err != nil {

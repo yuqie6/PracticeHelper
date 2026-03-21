@@ -146,3 +146,45 @@ def test_model_client_errors_map_to_expected_status_codes(monkeypatch) -> None:
     )
     assert gateway_response.status_code == 502
     assert "provider temporarily unavailable" in gateway_response.json()["error"]["message"]
+
+
+def test_embed_memory_endpoint_returns_vectors(monkeypatch) -> None:
+    monkeypatch.setattr(
+        main.model_client,
+        "create_embeddings",
+        lambda texts: ([[0.1, 0.2, 0.3]], "embed-test"),
+    )
+
+    client = TestClient(main.app)
+    response = client.post(
+        "/internal/embed_memory",
+        json={"items": [{"id": "memidx_1", "text": "redis cache consistency"}]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["id"] == "memidx_1"
+    assert response.json()["items"][0]["model_name"] == "embed-test"
+
+
+def test_rerank_memory_endpoint_returns_ranked_items(monkeypatch) -> None:
+    monkeypatch.setattr(
+        main.model_client,
+        "rerank_documents",
+        lambda **_: [{"index": 1, "score": 0.8}, {"index": 0, "score": 0.4}],
+    )
+
+    client = TestClient(main.app)
+    response = client.post(
+        "/internal/rerank_memory",
+        json={
+            "query": "redis tradeoff",
+            "candidates": [
+                {"id": "memidx_1", "text": "redis basic"},
+                {"id": "memidx_2", "text": "redis tradeoff"},
+            ],
+            "top_k": 2,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"][0] == {"id": "memidx_2", "score": 0.8, "rank": 1}

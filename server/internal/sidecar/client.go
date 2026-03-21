@@ -83,6 +83,28 @@ func (c *Client) AnalyzeJobTarget(
 	return &response, nil
 }
 
+func (c *Client) EmbedMemory(
+	ctx context.Context,
+	request domain.EmbedMemoryRequest,
+) (*domain.EmbedMemoryResponse, error) {
+	var response domain.EmbedMemoryResponse
+	if _, _, err := c.postJSON(ctx, "/internal/embed_memory", request, &response, nil); err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
+func (c *Client) RerankMemory(
+	ctx context.Context,
+	request domain.RerankMemoryRequest,
+) (*domain.RerankMemoryResponse, error) {
+	var response domain.RerankMemoryResponse
+	if _, _, err := c.postJSON(ctx, "/internal/rerank_memory", request, &response, nil); err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
 func (c *Client) GenerateQuestion(
 	ctx context.Context,
 	request domain.GenerateQuestionRequest,

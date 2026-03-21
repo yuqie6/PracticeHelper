@@ -553,7 +553,9 @@ def test_analyze_repo_graph_reranks_chunks_before_summarizing() -> None:
     runtime = FakeAnalyzeRepoGraphRuntime()
     graph = _build_analyze_repo_graph(runtime)
 
-    result = graph.invoke({"request": AnalyzeRepoRequest(repo_url="https://example.com/mirror.git")})
+    result = graph.invoke(
+        {"request": AnalyzeRepoRequest(repo_url="https://example.com/mirror.git")}
+    )
 
     assert isinstance(result["result"], AnalyzeRepoEnvelope)
     assert runtime.summarized_bundle is not None

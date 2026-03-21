@@ -46,6 +46,12 @@ def build_settings(base_url: str = "https://example.com/v1") -> Settings:
         openai_base_url=base_url,
         openai_api_key="test-key",
         llm_timeout_seconds=5,
+        embedding_model="embed-model",
+        embedding_base_url="https://embed.example.com/v1",
+        embedding_api_key="embed-key",
+        rerank_model="rerank-model",
+        rerank_base_url="https://rerank.example.com",
+        rerank_api_key="rerank-key",
     )
 
 
@@ -160,3 +166,60 @@ def test_create_completion_stream_parses_reasoning_and_done_from_sse(monkeypatch
     assert chunks[0].reasoning == "先整理思路"
     assert chunks[1].content == "done"
     assert chunks[-1].done is True
+
+
+def test_create_embeddings_uses_embedding_endpoint_and_parses_vectors(monkeypatch) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["timeout"] = str(timeout)
+        return FakeHTTPResponse(
+            [
+                json.dumps(
+                    {
+                        "model": "embed-model",
+                        "data": [
+                            {"index": 1, "embedding": [0.2, 0.3]},
+                            {"index": 0, "embedding": [0.9, 0.1]},
+                        ],
+                    }
+                ).encode("utf-8")
+            ]
+        )
+
+    monkeypatch.setattr(llm_client.urllib_request, "urlopen", fake_urlopen)
+
+    client = OpenAICompatibleModelClient(build_settings())
+    vectors, model_name = client.create_embeddings(["query", "doc"])
+
+    assert captured["url"] == "https://embed.example.com/v1/embeddings"
+    assert model_name == "embed-model"
+    assert vectors == [[0.9, 0.1], [0.2, 0.3]]
+
+
+def test_rerank_documents_uses_rerank_endpoint_and_sorts_scores(monkeypatch) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        return FakeHTTPResponse(
+            [
+                json.dumps(
+                    {
+                        "results": [
+                            {"index": 1, "relevance_score": 0.4},
+                            {"index": 0, "relevance_score": 0.9},
+                        ]
+                    }
+                ).encode("utf-8")
+            ]
+        )
+
+    monkeypatch.setattr(llm_client.urllib_request, "urlopen", fake_urlopen)
+
+    client = OpenAICompatibleModelClient(build_settings())
+    items = client.rerank_documents(query="redis", documents=["a", "b"], top_k=2)
+
+    assert captured["url"] == "https://rerank.example.com/rerank"
+    assert items == [{"index": 0, "score": 0.9}, {"index": 1, "score": 0.4}]

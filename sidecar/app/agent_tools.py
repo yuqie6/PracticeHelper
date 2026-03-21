@@ -308,8 +308,7 @@ def make_suggest_next_session_tool(side_effects: dict[str, Any]) -> RuntimeTool:
     return RuntimeTool(
         name="suggest_next_session",
         description=(
-            "Recommend the next training session configuration to continue the "
-            "learning path."
+            "Recommend the next training session configuration to continue the learning path."
         ),
         parameters={
             "type": "object",

@@ -199,6 +199,7 @@ func (s *Service) applyEvaluateAnswerSideEffects(
 		if err := s.repo.CreateObservations(ctx, session.ID, sideEffects.Observations); err != nil {
 			return fmt.Errorf("create observations: %w", err)
 		}
+		s.syncOrQueueMemoryEmbeddings(ctx, collectObservationMemoryRefs(sideEffects.Observations))
 	}
 	if len(sideEffects.KnowledgeUpdates) > 0 {
 		if err := s.repo.UpsertKnowledgeNodes(ctx, session.ID, sideEffects.KnowledgeUpdates); err != nil {

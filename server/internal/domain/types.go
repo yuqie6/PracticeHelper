@@ -60,6 +60,17 @@ const (
 	ObservationCategoryGrowth        = "growth"
 	ObservationCategoryStrategyNote  = "strategy_note"
 
+	MemoryTypeObservation    = "observation"
+	MemoryTypeSessionSummary = "session_summary"
+
+	MemoryEmbeddingStatusPending = "pending"
+	MemoryEmbeddingStatusIndexed = "indexed"
+	MemoryEmbeddingStatusFailed  = "failed"
+
+	MemoryEmbeddingJobStatusQueued  = "queued"
+	MemoryEmbeddingJobStatusRunning = "running"
+	MemoryEmbeddingJobStatusFailed  = "failed"
+
 	DepthSignalNormal       = "normal"
 	DepthSignalSkipFollowup = "skip_followup"
 	DepthSignalExtend       = "extend"
@@ -442,6 +453,85 @@ type MemoryIndexEntry struct {
 	RefID       string    `json:"ref_id"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type MemoryRef struct {
+	RefTable string `json:"ref_table"`
+	RefID    string `json:"ref_id"`
+}
+
+type MemoryEmbeddingRecord struct {
+	ID            string     `json:"id"`
+	MemoryIndexID string     `json:"memory_index_id"`
+	MemoryType    string     `json:"memory_type"`
+	RefTable      string     `json:"ref_table"`
+	RefID         string     `json:"ref_id"`
+	ContentHash   string     `json:"content_hash"`
+	ModelName     string     `json:"model_name"`
+	VectorStoreID string     `json:"vector_store_id"`
+	VectorDim     int        `json:"vector_dim"`
+	Status        string     `json:"status"`
+	LastError     string     `json:"last_error,omitempty"`
+	LastIndexedAt *time.Time `json:"last_indexed_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+type MemoryEmbeddingJob struct {
+	ID             string     `json:"id"`
+	MemoryIndexID  string     `json:"memory_index_id"`
+	MemoryType     string     `json:"memory_type"`
+	RefTable       string     `json:"ref_table"`
+	RefID          string     `json:"ref_id"`
+	Status         string     `json:"status"`
+	AttemptCount   int        `json:"attempt_count"`
+	ErrorMessage   string     `json:"error_message,omitempty"`
+	ClaimToken     string     `json:"claim_token,omitempty"`
+	ClaimExpiresAt *time.Time `json:"claim_expires_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	StartedAt      *time.Time `json:"started_at,omitempty"`
+	FinishedAt     *time.Time `json:"finished_at,omitempty"`
+}
+
+type EmbedMemoryItem struct {
+	ID   string `json:"id"`
+	Text string `json:"text"`
+}
+
+type EmbedMemoryRequest struct {
+	Items []EmbedMemoryItem `json:"items"`
+}
+
+type EmbeddedMemoryVector struct {
+	ID        string    `json:"id"`
+	Vector    []float64 `json:"vector"`
+	ModelName string    `json:"model_name,omitempty"`
+}
+
+type EmbedMemoryResponse struct {
+	Items []EmbeddedMemoryVector `json:"items"`
+}
+
+type RerankMemoryCandidate struct {
+	ID   string `json:"id"`
+	Text string `json:"text"`
+}
+
+type RerankMemoryRequest struct {
+	Query      string                  `json:"query"`
+	Candidates []RerankMemoryCandidate `json:"candidates"`
+	TopK       int                     `json:"top_k,omitempty"`
+}
+
+type RerankMemoryResult struct {
+	ID    string  `json:"id"`
+	Score float64 `json:"score"`
+	Rank  int     `json:"rank"`
+}
+
+type RerankMemoryResponse struct {
+	Items []RerankMemoryResult `json:"items"`
 }
 
 type AgentContext struct {

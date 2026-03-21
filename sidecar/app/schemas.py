@@ -174,6 +174,50 @@ class AgentContext(BaseModel):
     session_summaries: list[SessionMemorySummary] = Field(default_factory=list)
 
 
+class EmbedMemoryItem(BaseModel):
+    id: str
+    text: str = Field(min_length=1, max_length=20_000)
+
+
+class EmbedMemoryRequest(BaseModel):
+    items: list[EmbedMemoryItem] = Field(default_factory=list, min_length=1, max_length=64)
+
+
+class EmbeddedMemoryVector(BaseModel):
+    id: str
+    vector: list[float] = Field(default_factory=list)
+    model_name: str = ""
+
+
+class EmbedMemoryResponse(BaseModel):
+    items: list[EmbeddedMemoryVector] = Field(default_factory=list)
+
+
+class RerankMemoryCandidate(BaseModel):
+    id: str
+    text: str = Field(min_length=1, max_length=20_000)
+
+
+class RerankMemoryRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=20_000)
+    candidates: list[RerankMemoryCandidate] = Field(
+        default_factory=list,
+        min_length=1,
+        max_length=64,
+    )
+    top_k: int = Field(default=5, ge=1, le=32)
+
+
+class RerankMemoryResult(BaseModel):
+    id: str
+    score: float
+    rank: int = Field(ge=1)
+
+
+class RerankMemoryResponse(BaseModel):
+    items: list[RerankMemoryResult] = Field(default_factory=list)
+
+
 class KnowledgeUpdate(BaseModel):
     node_id: str = ""
     scope_type: str = "global"
