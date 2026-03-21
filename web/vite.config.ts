@@ -29,6 +29,25 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'jsdom',
       globals: true,
+      coverage: {
+        provider: 'v8',
+        reporter: ['text', 'html', 'json-summary'],
+        include: ['src/**/*.{ts,vue}'],
+        exclude: [
+          'src/**/*.spec.ts',
+          'src/**/*.test.ts',
+          'src/main.ts',
+          'src/router.ts',
+          'src/i18n/messages.ts',
+          'src/vite-env.d.ts',
+        ],
+        thresholds: {
+          lines: 23,
+          functions: 19,
+          statements: 22,
+          branches: 20,
+        },
+      },
     },
   };
 });

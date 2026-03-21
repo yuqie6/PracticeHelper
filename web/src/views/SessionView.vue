@@ -30,24 +30,32 @@
       </p>
     </div>
 
-    <ProgressPanel
+    <div
       v-if="showProgressPanel"
-      :kicker="t('session.processingKicker')"
-      :title="progressTitle"
-      :description="progressDescription"
-      :steps="progressSteps"
-      :active-index="progressStepIndex"
-    />
+      class="sticky top-4 z-10 space-y-4"
+    >
+      <ProgressPanel
+        :kicker="t('session.processingKicker')"
+        :title="progressTitle"
+        :description="progressDescription"
+        :steps="progressSteps"
+        :active-index="progressStepIndex"
+      />
 
-    <StreamTracePanel
-      v-if="showProgressPanel && streamSections.length"
-      :kicker="t('session.processingKicker')"
-      :title="progressTitle"
-      :description="progressDescription"
-      :reasoning-title="t('session.reasoningTitle')"
-      :content-title="t('session.contentTitle')"
-      :sections="streamSections"
-    />
+      <div
+        v-if="streamSections.length"
+        class="max-h-[50vh] overflow-y-auto"
+      >
+        <StreamTracePanel
+          :kicker="t('session.processingKicker')"
+          :title="progressTitle"
+          :description="progressDescription"
+          :reasoning-title="t('session.reasoningTitle')"
+          :content-title="t('session.contentTitle')"
+          :sections="streamSections"
+        />
+      </div>
+    </div>
 
     <NoticePanel
       v-if="submitError"
@@ -58,12 +66,13 @@
 
     <div
       v-if="showReviewWrapUp"
-      class="neo-panel space-y-3 bg-[var(--neo-green)]"
+      class="neo-panel neo-stamp space-y-3 bg-[var(--neo-green)]"
     >
       <p class="neo-kicker bg-white">{{ t('session.reviewWrapUpTitle') }}</p>
       <p class="text-sm font-semibold">
         {{ t('session.reviewWrapUpDescription') }}
       </p>
+      <div class="neo-countdown-bar" />
     </div>
 
     <div
@@ -110,8 +119,10 @@
           class="space-y-4"
           @submit.prevent="submit"
         >
-          <template v-if="showSubmittedAnswer">
+          <Transition name="neo-turn" mode="out-in">
             <div
+              v-if="showSubmittedAnswer"
+              key="submitted"
               class="space-y-2 border-2 border-black bg-white px-4 py-4 md:border-4"
             >
               <p class="neo-subheading">
@@ -124,26 +135,27 @@
                 {{ t('session.submittedAnswerDescription') }}
               </p>
             </div>
-          </template>
-          <template v-else>
-            <textarea
-              v-model="draftAnswer"
-              class="neo-textarea"
-              :placeholder="placeholderText"
-              :disabled="isSubmitting || isBackgroundProcessing"
-              @keydown="handleAnswerKeydown"
-            />
-            <p class="neo-note">
-              {{ t('session.submitShortcutHint') }}
-            </p>
-            <button
-              type="submit"
-              class="neo-button-dark w-full sm:w-auto"
-              :disabled="isSubmitting || isBackgroundProcessing"
-            >
-              {{ isSubmitting ? t('common.submitting') : t('common.submit') }}
-            </button>
-          </template>
+            <div v-else key="draft" class="space-y-4">
+              <textarea
+                v-model="draftAnswer"
+                class="neo-textarea"
+                :placeholder="placeholderText"
+                :disabled="isSubmitting || isBackgroundProcessing"
+                @keydown="handleAnswerKeydown"
+              />
+              <p class="neo-note">
+                {{ t('session.submitShortcutHint') }}
+              </p>
+              <button
+                type="submit"
+                class="neo-button-dark w-full sm:w-auto"
+                :class="{ 'animate-[neo-working_600ms_ease_infinite]': isSubmitting }"
+                :disabled="isSubmitting || isBackgroundProcessing"
+              >
+                {{ isSubmitting ? t('common.submitting') : t('common.submit') }}
+              </button>
+            </div>
+          </Transition>
         </form>
         <p v-else class="neo-note">
           {{ t('session.answerLockedWhileProcessing') }}
@@ -155,16 +167,20 @@
           {{ t('session.feedback') }}
         </p>
         <template v-if="latestEvaluation">
-          <p class="text-lg font-black">
-            {{ t('session.mainScore', { score: latestEvaluation.score }) }}
-          </p>
-          <p
-            class="border-2 border-black bg-white px-4 py-4 text-base font-semibold leading-7 md:border-4"
+          <div
+            class="flex items-center gap-4 border-l-8 bg-white px-4 py-4"
+            :style="{ borderColor: `var(${scoreColor(latestEvaluation.score)})` }"
           >
-            {{
-              latestEvaluation.headline || t('session.feedbackHeadlineFallback')
-            }}
-          </p>
+            <span class="text-5xl font-black">{{ latestEvaluation.score }}</span>
+            <div>
+              <p class="text-sm font-bold uppercase tracking-[0.08em]">/10</p>
+              <p class="text-base font-semibold leading-7">
+                {{
+                  latestEvaluation.headline || t('session.feedbackHeadlineFallback')
+                }}
+              </p>
+            </div>
+          </div>
 
           <details v-if="latestEvaluation.strengths.length" class="space-y-2">
             <summary class="neo-subheading cursor-pointer">
@@ -216,10 +232,19 @@
               <li
                 v-for="(score, label) in latestEvaluation.score_breakdown"
                 :key="label"
-                class="flex items-center justify-between border-2 border-black bg-white px-3 py-2 text-sm font-semibold md:border-4"
+                class="border-2 border-black bg-white px-3 py-2 md:border-4"
               >
-                <span>{{ label }}</span>
-                <span>{{ score }}</span>
+                <div class="flex items-center justify-between text-sm font-semibold">
+                  <span>{{ label }}</span>
+                  <span>{{ score }}/10</span>
+                </div>
+                <div
+                  class="neo-score-bar mt-1"
+                  :style="{
+                    width: `${Number(score) * 10}%`,
+                    background: `var(${scoreColor(Number(score))})`,
+                  }"
+                />
               </li>
             </ul>
           </details>
@@ -232,7 +257,7 @@
 
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, Transition, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -559,6 +584,12 @@ function clearReviewRedirectTimer() {
     reviewRedirectTimer = null;
   }
   reviewRedirectTarget = '';
+}
+
+function scoreColor(score: number): string {
+  if (score >= 8) return '--neo-green';
+  if (score >= 5) return '--neo-yellow';
+  return '--neo-red';
 }
 
 function buildProgressStepDefinitions(

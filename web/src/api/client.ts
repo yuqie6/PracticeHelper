@@ -291,30 +291,74 @@ export interface StreamEvent {
   data?: unknown;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+function isAbortError(error: unknown): error is DOMException {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function toTimeoutError(): ApiError {
+  return new ApiError('Request timeout', { code: 'timeout' });
+}
+
+function bindAbortSignal(
+  source: AbortSignal | null | undefined,
+  target: AbortController,
+): () => void {
+  if (!source) {
+    return () => {};
+  }
+  if (source.aborted) {
+    target.abort();
+    return () => {};
+  }
+
+  const abort = () => target.abort();
+  source.addEventListener('abort', abort, { once: true });
+  return () => source.removeEventListener('abort', abort);
+}
+
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  timeoutMs = 90_000,
+): Promise<T> {
   // 这里封装的是当前 PracticeHelper API 的统一 JSON 契约：
   // 成功响应默认是 { data: T }，失败响应尽量从 { error.message } 提取可展示文案。
   // 如果后续出现 204、文件下载或非 JSON 接口，应该新增专用请求函数而不是继续复用这里。
-  const response = await fetch(path, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
+  const controller = new AbortController();
+  const cleanupAbort = bindAbortSignal(init?.signal, controller);
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!response.ok) {
-    const payload = (await response
-      .json()
-      .catch(() => null)) as ApiErrorPayload | null;
-    throw new ApiError(payload?.error?.message ?? '请求失败', {
-      code: payload?.error?.code,
-      status: response.status,
+  try {
+    const response = await fetch(path, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+      ...init,
+      signal: controller.signal,
     });
-  }
 
-  const payload = (await response.json()) as ApiEnvelope<T>;
-  return payload.data;
+    if (!response.ok) {
+      const payload = (await response
+        .json()
+        .catch(() => null)) as ApiErrorPayload | null;
+      throw new ApiError(payload?.error?.message ?? '请求失败', {
+        code: payload?.error?.code,
+        status: response.status,
+      });
+    }
+
+    const payload = (await response.json()) as ApiEnvelope<T>;
+    return payload.data;
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw toTimeoutError();
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+    cleanupAbort();
+  }
 }
 
 async function requestStream<T>(
@@ -322,80 +366,107 @@ async function requestStream<T>(
   init: RequestInit,
   onEvent: (event: StreamEvent) => void,
 ): Promise<T> {
-  const response = await fetch(path, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-    ...init,
-  });
+  const controller = new AbortController();
+  const cleanupAbort = bindAbortSignal(init.signal, controller);
+  const totalTimer = window.setTimeout(() => controller.abort(), 300_000);
+  let idleTimer: ReturnType<typeof window.setTimeout> | null = null;
+  const resetIdle = () => {
+    if (idleTimer != null) {
+      window.clearTimeout(idleTimer);
+    }
+    idleTimer = window.setTimeout(() => controller.abort(), 120_000);
+  };
 
-  if (!response.ok || !response.body) {
-    const payload = (await response
-      .json()
-      .catch(() => null)) as ApiErrorPayload | null;
-    throw new ApiError(payload?.error?.message ?? '请求失败', {
-      code: payload?.error?.code,
-      status: response.status,
+  try {
+    resetIdle();
+    const response = await fetch(path, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init.headers ?? {}),
+      },
+      ...init,
+      signal: controller.signal,
     });
-  }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let result: T | null = null;
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) {
-      break;
+    if (!response.ok || !response.body) {
+      const payload = (await response
+        .json()
+        .catch(() => null)) as ApiErrorPayload | null;
+      throw new ApiError(payload?.error?.message ?? '请求失败', {
+        code: payload?.error?.code,
+        status: response.status,
+      });
     }
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let result: T | null = null;
 
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      if (!line) {
-        continue;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
       }
+      resetIdle();
 
-      const event = JSON.parse(line) as StreamEvent;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) {
+          continue;
+        }
+
+        const event = JSON.parse(line) as StreamEvent;
+        onEvent(event);
+
+        if (event.type === 'error') {
+          throw new ApiError(event.message ?? '流式请求失败', {
+            code: event.code,
+            status: response.status,
+          });
+        }
+
+        if (event.type === 'result') {
+          result = event.data as T;
+        }
+      }
+    }
+
+    if (buffer.trim()) {
+      const event = JSON.parse(buffer.trim()) as StreamEvent;
       onEvent(event);
-
       if (event.type === 'error') {
         throw new ApiError(event.message ?? '流式请求失败', {
           code: event.code,
           status: response.status,
         });
       }
-
       if (event.type === 'result') {
         result = event.data as T;
       }
     }
-  }
 
-  if (buffer.trim()) {
-    const event = JSON.parse(buffer.trim()) as StreamEvent;
-    onEvent(event);
-    if (event.type === 'error') {
-      throw new ApiError(event.message ?? '流式请求失败', {
-        code: event.code,
-        status: response.status,
-      });
+    if (result == null) {
+      throw new Error('流式请求未返回最终结果');
     }
-    if (event.type === 'result') {
-      result = event.data as T;
+
+    return result;
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw toTimeoutError();
     }
+    throw error;
+  } finally {
+    if (idleTimer != null) {
+      window.clearTimeout(idleTimer);
+    }
+    window.clearTimeout(totalTimer);
+    cleanupAbort();
   }
-
-  if (result == null) {
-    throw new Error('流式请求未返回最终结果');
-  }
-
-  return result;
 }
 
 export function getDashboard(): Promise<Dashboard> {

@@ -133,6 +133,53 @@ textarea:focus-visible {
   }
 }
 
+@keyframes neo-stamp-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+
+  60% {
+    transform: scale(1.02);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes neo-countdown {
+  from {
+    width: 100%;
+  }
+
+  to {
+    width: 0;
+  }
+}
+
+@keyframes neo-pulse {
+  from {
+    opacity: 0.4;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes neo-working {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+
+  50% {
+    transform: translate(1px, 1px);
+  }
+}
+
 .route-enter-active,
 .route-leave-active {
   transition:
@@ -314,6 +361,102 @@ textarea:focus-visible {
   .neo-stagger-list > *:nth-child(6) {
     animation-delay: 150ms;
   }
+
+  .neo-panel-hero {
+    @apply rounded-none border-4 p-5 md:p-8;
+    border-color: var(--neo-border);
+    box-shadow: 8px 8px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
+    transition:
+      transform 180ms ease,
+      box-shadow 180ms ease,
+      background-color 180ms ease,
+      border-color 180ms ease,
+      color 180ms ease;
+  }
+
+  .neo-score-bar {
+    @apply h-3 border-2;
+    border-color: var(--neo-border);
+    transition: width 400ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .neo-skeleton {
+    @apply rounded-none border-2;
+    border-color: color-mix(in srgb, var(--neo-border) 30%, transparent);
+    background: var(--neo-paper);
+    animation: neo-pulse 1.2s ease infinite alternate;
+  }
+
+  .neo-stamp {
+    animation: neo-stamp-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .neo-countdown-bar {
+    @apply h-1;
+    background: var(--neo-black);
+    animation: neo-countdown 1.5s linear both;
+  }
+}
+
+.neo-button:active,
+.neo-button-dark:active,
+.neo-button-red:active {
+  box-shadow: none !important;
+}
+
+.neo-turn-enter-active,
+.neo-turn-leave-active {
+  transition:
+    opacity 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.neo-turn-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.neo-turn-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.neo-list-enter-active,
+.neo-list-leave-active {
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease;
+}
+
+.neo-list-enter-from {
+  opacity: 0;
+  transform: translateX(-12px);
+}
+
+.neo-list-leave-to {
+  opacity: 0;
+  transform: translateX(12px);
+}
+
+.neo-list-move {
+  transition: transform 200ms ease;
+}
+
+.neo-toast-enter-active,
+.neo-toast-leave-active {
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease;
+}
+
+.neo-toast-enter-from {
+  opacity: 0;
+  transform: translateX(100%);
+}
+
+.neo-toast-leave-to {
+  opacity: 0;
+  transform: translateX(100%);
 }
 
 @media (min-width: 768px) {
@@ -335,13 +478,30 @@ textarea:focus-visible {
   .route-enter-active,
   .route-leave-active,
   .neo-page > *,
-  .neo-stagger-list > * {
+  .neo-stagger-list > *,
+  .neo-stamp,
+  .neo-countdown-bar,
+  .neo-skeleton,
+  .neo-score-bar,
+  .neo-turn-enter-active,
+  .neo-turn-leave-active,
+  .neo-list-enter-active,
+  .neo-list-leave-active,
+  .neo-list-move,
+  .neo-toast-enter-active,
+  .neo-toast-leave-active {
     transition: none;
     animation: none;
   }
 
   .route-enter-from,
-  .route-leave-to {
+  .route-leave-to,
+  .neo-turn-enter-from,
+  .neo-turn-leave-to,
+  .neo-list-enter-from,
+  .neo-list-leave-to,
+  .neo-toast-enter-from,
+  .neo-toast-leave-to {
     opacity: 1;
     transform: none;
   }

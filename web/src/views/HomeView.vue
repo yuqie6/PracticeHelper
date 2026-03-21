@@ -42,7 +42,7 @@
     </div>
 
     <div class="neo-grid xl:grid-cols-[1.3fr_0.7fr]">
-      <div class="neo-panel bg-[var(--neo-yellow)]">
+      <div class="neo-panel-hero bg-[var(--neo-yellow)]">
         <p class="neo-kicker bg-white">{{ t('home.hero.kicker') }}</p>
         <p class="text-lg font-bold leading-7">
           {{ dashboard?.today_focus ?? t('common.firstTrainingHint') }}
@@ -179,6 +179,7 @@
               </RouterLink>
               <button
                 class="neo-button w-full bg-white text-xs"
+                :aria-busy="completeMutation.isPending.value"
                 @click="completeMutation.mutate(item.id)"
               >
                 {{ t('home.dueReviews.markDone') }}
@@ -194,6 +195,7 @@
         :kicker="t('home.cards.weaknessKicker')"
         kicker-class="bg-[var(--neo-red)]"
         :title="t('home.cards.weaknessTitle')"
+        :value="String(dashboard?.weaknesses?.length ?? 0)"
         :description="weaknessSummary"
       />
       <StatCard
@@ -214,6 +216,7 @@
         :kicker="t('home.cards.profileKicker')"
         kicker-class="bg-[var(--neo-blue)]"
         :title="t('home.cards.profileTitle')"
+        :value="String(dashboard?.recent_sessions?.length ?? 0)"
         :description="profileSummary"
       />
     </div>
@@ -255,8 +258,8 @@
             }}</span>
             <svg
               v-if="trend.points.length >= 2"
-              viewBox="0 0 120 32"
-              class="h-6 w-24 flex-shrink-0"
+              viewBox="0 0 160 40"
+              class="h-10 w-40 flex-shrink-0"
               preserveAspectRatio="none"
             >
               <path
@@ -264,6 +267,18 @@
                 fill="none"
                 stroke="var(--neo-red)"
                 stroke-width="2"
+              />
+              <circle
+                :cx="sparklineEndpoints(trend).first.x"
+                :cy="sparklineEndpoints(trend).first.y"
+                r="3"
+                fill="var(--neo-red)"
+              />
+              <circle
+                :cx="sparklineEndpoints(trend).last.x"
+                :cy="sparklineEndpoints(trend).last.y"
+                r="3"
+                fill="var(--neo-red)"
               />
             </svg>
             <span v-else class="text-xs text-gray-400">—</span>
@@ -358,6 +373,7 @@ import {
   formatTopicLabel,
   formatWeaknessKindLabel,
 } from '../lib/labels';
+import { useToast } from '../lib/useToast';
 
 const { data } = useQuery({
   queryKey: ['dashboard'],
@@ -381,6 +397,7 @@ const { data: projectsData } = useQuery({
 
 const { t, locale } = useI18n();
 const queryClient = useQueryClient();
+const { show: showToast } = useToast();
 
 const dashboard = computed(() => data.value ?? null);
 const trends = computed(() => trendsData.value ?? []);
@@ -388,7 +405,10 @@ const dueReviews = computed(() => dueReviewsData.value ?? []);
 const projects = computed(() => projectsData.value ?? []);
 const completeMutation = useMutation({
   mutationFn: (id: number) => completeDueReview(id),
-  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['due-reviews'] }),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['due-reviews'] });
+    showToast(t('common.operationSuccess'), 'success');
+  },
 });
 const currentSession = computed(() => dashboard.value?.current_session ?? null);
 const hasProfile = computed(() => Boolean(dashboard.value?.profile));
@@ -485,17 +505,33 @@ function formatUpdatedAt(raw: string): string {
 function sparklinePath(trend: WeaknessTrend): string {
   const pts = trend.points;
   if (pts.length < 2) return '';
-  const w = 120;
-  const h = 32;
+  const w = 160;
+  const h = 40;
   const maxSev = Math.max(...pts.map((p) => p.severity), 0.1);
   const step = w / (pts.length - 1);
   return pts
     .map((p, i) => {
       const x = i * step;
-      const y = h - (p.severity / maxSev) * (h - 4) - 2;
+      const y = h - (p.severity / maxSev) * (h - 8) - 4;
       return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(' ');
+}
+
+function sparklineEndpoints(trend: WeaknessTrend) {
+  const pts = trend.points;
+  const w = 160;
+  const h = 40;
+  const maxSev = Math.max(...pts.map((p) => p.severity), 0.1);
+  const step = w / (pts.length - 1);
+  const toY = (sev: number) => h - (sev / maxSev) * (h - 8) - 4;
+  return {
+    first: { x: 0, y: toY(pts[0].severity) },
+    last: {
+      x: (pts.length - 1) * step,
+      y: toY(pts[pts.length - 1].severity),
+    },
+  };
 }
 
 function onboardingStepClass(status: OnboardingStepStatus): string {

@@ -11,6 +11,8 @@ TOOLS_BIN := $(CURDIR)/.tools/bin
 GOLANGCI_LINT_BIN := $(TOOLS_BIN)/golangci-lint
 GOLANGCI_LINT_VERSION := v2.11.3
 AIR_BIN := $(TOOLS_BIN)/air
+SERVER_COVERAGE_MIN := 50
+SIDECAR_COVERAGE_MIN := 70
 
 .PHONY: help bootstrap setup install-tools deps deps-web deps-sidecar \
 	check \
@@ -18,6 +20,7 @@ AIR_BIN := $(TOOLS_BIN)/air
 	lint lint-web lint-server lint-sidecar \
 	format format-web format-server format-sidecar \
 	test test-web test-server test-sidecar \
+	coverage coverage-web coverage-server coverage-sidecar test-gate \
 	build build-web build-server \
 	e2e-live
 
@@ -109,6 +112,21 @@ test-server: ## 运行 Go 测试
 
 test-sidecar: ## 运行 Python 测试
 	$(ENV_LOADER); cd "$(SIDECAR_DIR)" && uv run pytest
+
+coverage: coverage-web coverage-server coverage-sidecar ## 运行三端覆盖率统计
+
+coverage-web: ## 运行前端覆盖率统计
+	$(ENV_LOADER); pnpm --dir "$(WEB_DIR)" coverage
+
+coverage-server: ## 运行 Go 覆盖率统计
+	$(ENV_LOADER); cd "$(SERVER_DIR)" && GOCACHE=/tmp/go-build go test -tags "$(GO_SQLITE_TAGS)" -covermode=count -coverpkg=./internal/... -coverprofile=coverage.out ./...
+	$(ENV_LOADER); cd "$(SERVER_DIR)" && go tool cover -func=coverage.out | tee coverage.txt
+	@awk '/^total:/ { gsub("%","",$$3); if ($$3 + 0 < $(SERVER_COVERAGE_MIN)) { printf("server coverage %.1f%% below %s%%\n", $$3 + 0, "$(SERVER_COVERAGE_MIN)"); exit 1 } }' "$(SERVER_DIR)/coverage.txt"
+
+coverage-sidecar: ## 运行 Python 覆盖率统计
+	$(ENV_LOADER); cd "$(SIDECAR_DIR)" && uv run pytest --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-report=html:htmlcov --cov-fail-under=$(SIDECAR_COVERAGE_MIN)
+
+test-gate: lint test coverage ## 运行带覆盖率门禁的完整测试校验
 
 build: build-web build-server ## 构建前端与 Go 后端
 

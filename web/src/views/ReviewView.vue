@@ -86,6 +86,7 @@
           type="button"
           class="neo-button-dark w-full sm:w-auto"
           :disabled="isExporting"
+          :aria-busy="isExporting"
           @click="exportReport"
         >
           {{
@@ -330,10 +331,12 @@ import {
 } from '../lib/export';
 import { formatModeLabel, formatTopicLabel } from '../lib/labels';
 import { buildPromptExperimentLink } from '../lib/promptExperiments';
+import { useToast } from '../lib/useToast';
 
 const route = useRoute();
 const reviewId = computed(() => route.params.id as string);
 const { t } = useI18n();
+const { show: showToast } = useToast();
 const exportError = ref('');
 const isExporting = ref(false);
 const exportFormat = ref<SessionExportFormat>(SESSION_EXPORT_FORMAT);
@@ -438,6 +441,7 @@ async function exportReport() {
       exportFormat.value,
     );
     triggerFileDownload(blob, filename);
+    showToast(t('common.exportSuccess'), 'success');
   } catch (error) {
     if (error instanceof ApiError) {
       exportError.value = error.message;

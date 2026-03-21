@@ -30,6 +30,7 @@
               :key="item.value"
               type="button"
               class="border-2 border-black px-3 py-1 text-xs font-black uppercase transition-colors md:border-4"
+              :aria-pressed="currentLocale === item.value"
               :class="
                 currentLocale === item.value
                   ? 'bg-[var(--neo-yellow)]'
@@ -50,6 +51,7 @@
               :key="item.value"
               type="button"
               class="border-2 border-black px-3 py-1 text-xs font-black uppercase transition-colors md:border-4"
+              :aria-pressed="currentTheme === item.value"
               :class="
                 currentTheme === item.value
                   ? 'bg-[var(--neo-yellow)]'
@@ -63,6 +65,7 @@
 
           <nav
             class="flex gap-3 overflow-x-auto pb-1 sm:flex-wrap sm:justify-end"
+            aria-label="Main navigation"
           >
             <RouterLink
               v-for="item in navItems"
@@ -80,6 +83,8 @@
     <main>
       <slot />
     </main>
+
+    <ToastContainer />
   </div>
 </template>
 
@@ -90,6 +95,7 @@ import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
 
 import { listImportJobs, type ProjectImportJob } from '../api/client';
+import ToastContainer from './ToastContainer.vue';
 import { setLocale, type AppLocale } from '../i18n';
 import { formatImportJobStageLabel } from '../lib/labels';
 import {

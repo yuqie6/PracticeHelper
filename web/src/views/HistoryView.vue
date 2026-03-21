@@ -248,8 +248,10 @@ import {
   formatStatusLabel,
   formatTopicLabel,
 } from '../lib/labels';
+import { useToast } from '../lib/useToast';
 
 const { t } = useI18n();
+const { show: showToast } = useToast();
 const currentPage = ref(1);
 const selectedSessionIds = ref<string[]>([]);
 const exportError = ref('');
@@ -350,6 +352,7 @@ async function exportSelected() {
       exportFormat.value,
     );
     triggerFileDownload(blob, filename);
+    showToast(t('common.exportSuccess'), 'success');
   } catch (error) {
     if (error instanceof ApiError) {
       exportError.value = error.message;
