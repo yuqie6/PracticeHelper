@@ -98,7 +98,7 @@ Go API 不再同步等待整个导入结束，而是先创建 `project_import_jo
 - `analyze_repo` 和 `generate_review` 目前仍然是简单图，主要是 `AgentRuntime` 的薄壳
 - `analyze_job_target` 已作为独立 flow 存在，支撑阶段 B 的岗位分析
 - `generate_question` 已经拆成 `select_strategy -> generate`
-- `evaluate_answer` 已经带最小输出校验与重试逻辑，不再是纯 `START -> run -> END`
+- `evaluate_answer` 已经带最小输出校验、重试和超预算失败逻辑，不再是纯 `START -> run -> END`
 
 也就是说，当前仓库已经开始使用 LangGraph 做最小编排，但还没有走到完整多节点工作流。后续如果继续做产品升级，更合理的方向是：
 
@@ -193,8 +193,8 @@ Go API 不再同步等待整个导入结束，而是先创建 `project_import_jo
 
 1. **证据绑定 ⬜ 仍待补齐**：`gaps`、`weakness_hits`、`followup_question` 目前还没有直接引用用户原文或具体 repo chunk；这一点仍是减少“脑补式判断”的关键缺口。
 2. **评分 rubric 程序化 🟡 部分落地**：基础题模板已经能提供 `score_weights`，sidecar prompt 也按 rubric 产出 `score_breakdown`；但总分和最终裁决仍主要依赖 LLM 一次性给出，程序侧还没有把多维评分稳定汇总成统一判定。
-3. **状态机异常路径 🟡 已补主要护栏，但还没完全收口**：回答提交的原子抢占、`review_pending -> retry-review` 恢复、流式阶段事件和失败回滚都已经存在；但 stream / non-stream 一致性和更系统的端到端异常回归还需要继续补。
-4. **弱项记忆衰减与复习入口 🟡 部分落地**：`effectiveSeverity`、`weakness_snapshots`、`review_schedule`、首页待复习卡片都已落地；但当前复习仍偏 session 级，还没有做到 weakness 级直接开练。
+3. **状态机异常路径 🟡 已补主要护栏，但还没完全收口**：回答提交的原子抢占、`review_pending -> retry-review` 恢复、流式阶段事件、失败回滚，以及 `evaluate_answer` 输出校验/重试预算都已经存在；但 stream / non-stream 一致性和更系统的端到端异常回归还需要继续补。
+4. **弱项记忆衰减与复习入口 🟡 部分落地**：`effectiveSeverity`、`weakness_snapshots`、`review_schedule`、首页待复习卡片和完成后按 session 分数推进下一次复习时间都已落地；但当前复习仍偏 session 级，还没有做到 weakness 级直接开练。
 5. **保守表达与置信度意识 ✅ 已落地基础约束**：`analyze_repo`、`analyze_job_target`、`evaluate_answer` prompt 已明确要求“证据不足时保守表达”；但还没有进一步把证据来源显式展示给用户。
 6. **LangGraph 薄壳定位 🟡 已稳定，但仍有深化空间**：`generate_question` / `evaluate_answer` 已不是单节点占位；`analyze_repo` / `generate_review` 仍保持简单 flow，当前优先级仍然是训练质量和状态安全，而不是继续堆图复杂度。
 
@@ -218,8 +218,8 @@ SQLite 当前共 15 张表（含 1 张 FTS5 虚拟表），启动时由 `interna
 | `review_cards` | 复盘卡 | session_id（UNIQUE 外键）, overall, highlights_json, gaps_json |
 | `weakness_tags` | 薄弱点标签 | kind, label（联合 UNIQUE）, severity, frequency |
 | `weakness_snapshots` | 弱项严重度历史点 | weakness_id, session_id, severity, created_at |
-| `review_schedule` | 复习计划 | session_id, review_card_id, weakness_tag_id, next_review_at, interval_days, ease_factor |
-| `evaluation_logs` | 评估审计骨架 | session_id, turn_id, flow_name, model_name, latency_ms |
+| `review_schedule` | session 级复习计划 | session_id, review_card_id, weakness_tag_id, next_review_at, interval_days, ease_factor |
+| `evaluation_logs` | 生成/评估耗时审计基础 | session_id, turn_id, flow_name, model_name, latency_ms |
 
 JSON 数组字段（如 `tech_stacks_json`）存储为 `TEXT`，在 Go 侧用 `json.Marshal`/`json.Unmarshal` 序列化。
 
@@ -292,6 +292,7 @@ waiting_answer ──用户回答当前轮──▶ evaluating ──未到 max_
 | GET | `/api/projects` | 列出所有已导入项目 |
 | GET | `/api/projects/:id` | 获取单个项目详情 |
 | PATCH | `/api/projects/:id` | 编辑项目画像 |
+| GET | `/api/sessions` | 分页列出训练历史，支持 mode / topic / status 筛选 |
 | POST | `/api/sessions` | 创建训练会话（触发 sidecar 出题） |
 | POST | `/api/sessions/stream` | 流式创建训练会话 |
 | GET | `/api/sessions/:id` | 获取会话详情（含所有回合） |
@@ -300,10 +301,13 @@ waiting_answer ──用户回答当前轮──▶ evaluating ──未到 max_
 | POST | `/api/sessions/:id/retry-review` | 对 `review_pending` 会话重试生成复盘 |
 | GET | `/api/reviews/:id` | 获取复盘卡 |
 | GET | `/api/weaknesses` | 列出所有薄弱点标签 |
+| GET | `/api/weaknesses/trends` | 获取首页弱项趋势 sparkline 数据 |
+| GET | `/api/reviews/due` | 获取当前到期的待复习项 |
+| POST | `/api/reviews/due/:id/complete` | 标记一条待复习已完成，并推进下次复习时间 |
 
-## 6.5 阶段 B 扩展（已接入主链路，待继续收口）
+## 6.5 阶段 B 扩展（已形成产品级主链路）
 
-下面这部分已经接入当前代码主链路，当前目标是不再停留在“第一版接进去”，而是把它收口成可依赖的产品级主链路。
+下面这部分不再只是“第一版接进去”，而是已经成为当前可依赖的产品级主链路；当前更适合把它当成既成事实，再把剩余注意力放到阶段 C。
 
 ### 当前已实现接口
 
@@ -311,8 +315,10 @@ waiting_answer ──用户回答当前轮──▶ evaluating ──未到 max_
 |------|------|------|
 | GET | `/api/job-targets` | 列出所有 JD 条目 |
 | POST | `/api/job-targets` | 创建一份新的 JD |
+| POST | `/api/job-targets/clear-active` | 清空当前默认 JD |
 | GET | `/api/job-targets/:id` | 获取单个 JD 详情 |
 | PATCH | `/api/job-targets/:id` | 编辑 JD 元数据和原文 |
+| POST | `/api/job-targets/:id/activate` | 将某份 JD 设为默认 JD |
 | POST | `/api/job-targets/:id/analyze` | 对当前 JD 原文创建一次新的分析快照 |
 | GET | `/api/job-targets/:id/analysis-runs` | 查看该 JD 的分析历史 |
 | GET | `/api/job-targets/analysis-runs/:id` | 查看某次分析快照详情 |
@@ -333,7 +339,9 @@ waiting_answer ──用户回答当前轮──▶ evaluating ──未到 max_
 - server 在创建 session 时解析出该 JD **最新成功分析快照**，并持久化到 session 的 `job_target_id` / `job_target_analysis_id`
 - 一轮训练创建后，出题、评分、复盘都只吃这次绑定的 JD 快照，不跟随后续切换漂移
 - 如果用户没选 JD，则保持当前通用训练路径
-- 如果用户选了 JD 但没有可用的成功分析快照，则不允许开始这轮训练
+- 如果用户显式选了 JD，但 `latest_analysis_status` 不是 `succeeded` 或没有可用成功快照，则返回 `job_target_not_ready`，不允许开始这轮训练
+- JD 原文被修改导致 `stale`，或后续新分析进入 `running` / `failed` 时，`latest_successful_analysis` 仍会保留给 dashboard / history / review 只读回看
+- 默认 JD 只会在 `succeeded + latest_successful_analysis` 同时存在时参与推荐；否则 dashboard 仍显示该 JD，但 `recommendation_scope` 会自动回退到 `generic`
 
 ## 7. 检索策略
 
@@ -353,16 +361,12 @@ waiting_answer ──用户回答当前轮──▶ evaluating ──未到 max_
 |------|------|---------|
 | `/` | 首页（Dashboard） | HomeView.vue |
 | `/profile` | 用户画像编辑 | ProfileView.vue |
+| `/job-targets` | JD / 岗位页 | JobTargetsView.vue |
 | `/projects` | 项目列表与导入 | ProjectsView.vue |
 | `/train` | 训练配置（选模式/主题/项目） | TrainView.vue |
+| `/history` | 训练历史页 | HistoryView.vue |
 | `/sessions/:id` | 训练过程（问答交互） | SessionView.vue |
 | `/reviews/:id` | 复盘卡展示 | ReviewView.vue |
-
-阶段 B 已新增：
-
-| 路由 | 页面 | 对应职责 |
-|------|------|---------|
-| `/job-targets` | JD / 岗位页 | 管理多份 JD、查看最新分析结果与分析历史 |
 
 前端通过 `web/src/api/client.ts` 封装的 fetch 函数与 Go API 通信，开发时由 Vite 代理 `/api` 到 `:8090`。
 
@@ -373,7 +377,7 @@ waiting_answer ──用户回答当前轮──▶ evaluating ──未到 max_
 - **单用户单体架构**：v0 只服务一个用户，不做多用户、不做微服务拆分。
 - **SQLite 即全部存储**：不引入 Redis、PostgreSQL 或向量数据库。
 - **LLM 是硬依赖**：sidecar 核心链路不保留启发式兜底，LLM 不可用时直接报错。
-- **LangGraph 保持克制**：当前只用单节点图做调度壳，不做复杂多 agent 编排。
+- **LangGraph 保持克制**：当前只做最小节点化调度，不做复杂多 agent 编排。
 - **前端 neo-brutalist 风格**：粗边框、硬阴影、无圆角、黑白主色配鲜艳强调色。禁止圆角、渐变、灰色边框。
 
 ### 为什么这样设计

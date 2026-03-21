@@ -66,7 +66,7 @@
 - `weakness_tags` 在读取时会按 `last_seen_at` 计算有效 severity，区分近期稳定弱项和陈旧偶发问题
 - 旧弱项再次命中时，会先按衰减后的有效热度继续累加，而不是沿着陈旧高点直接叠加
 - dashboard 的 `today_focus` / `recommended_track` 已直接绑定当前有效 Top1 弱项，推荐文案会带出具体 label
-- 基础题种子模板已扩到 Go / Redis / Kafka 每个 topic 至少 5 条
+- 基础题种子模板已经外置，并扩到 10 个 basics topic；`mixed` 也已支持按 weakness 自动跨 topic 选题
 - 追问 prompt 已增加“证据不足时保守表达”约束，避免把未证实事实写成既定前提
 - 已补充 repo / service / sidecar 测试，覆盖衰减排序、推荐文案、题库覆盖和 prompt 约束
 
@@ -111,15 +111,15 @@
 
 - 多轮训练流已经落地，`max_turns` 可配，追问按独立 turn 持久化
 - 历史页、分页筛选、弱项趋势图和首页待复习卡片已经落地
-- 题库已经外置到 seed 文件，并扩到 9 个 topic
-- `intensity=auto`、`review_schedule`、`evaluation_logs` 审计骨架和 due review 完成接口已经存在
-- LangGraph 已经不再是全量单节点图，`generate_question` 和 `evaluate_answer` 有了最小编排
+- 题库已经外置到 seed 文件，并扩到 10 个 topic；`mixed` 会按 weakness 选择候选 topic
+- `intensity=auto` 已稳定可用；`review_schedule` 也已打通 review 生成 -> 到期展示 -> 完成推进 的基础链路
+- `evaluation_logs` 已覆盖 `generate_question` / `evaluate_answer` / `generate_review` 及其 stream 变体的基础耗时记录
+- LangGraph 已经不再是全量单节点图，`generate_question` 有策略节点，`evaluate_answer` 有输出校验与重试预算
 - 默认 JD、`recommendation_scope` 和 generic fallback 语义已经收口，岗位模式不再是阶段 C 之前的阻塞项
 
 ### 本阶段优先补的缺口
 
-- 补齐题库策略的剩余缺口：`os` / `docker_k8s` 的定位和 basics 混合出题
-- 把复习计划和评估审计从“骨架可见”补到“真正可追踪”：待复习从 session 级提示推进到更直接的弱项级入口，评估日志补 `prompt_hash` / `model_name` / 前端详情面板
+- 把复习计划和评估审计从“基础链路可用”补到“真正可追踪”：待复习从 session 级提示推进到更直接的弱项级入口，评估日志补 `prompt_hash` / `model_name` / 前端详情面板
 - 继续把 LangGraph 编排从最小可用补到可验证节点化，但仍保持薄壳定位
 - 继续保持 P2 体验项延后，不让暗色模式、动效和导出抢主线
 
