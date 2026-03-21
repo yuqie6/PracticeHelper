@@ -2,14 +2,15 @@
 
 PracticeHelper 是一个面向后端 / AI Agent 方向求职者的面试训练系统，围绕用户画像、项目理解和弱点记忆，提供个性化的训练与成长路径。
 
-它不是题库，而是一个能根据你的真实项目和薄弱环节持续追问、打分、复盘的训练 Agent。产品方向与未来演化见 [docs/VISION.md](docs/VISION.md)，当前主线与下一阶段方案见 [docs/PLAN.md](docs/PLAN.md) 和 [docs/JD_TRAINING_STAGE_B.md](docs/JD_TRAINING_STAGE_B.md)。
+它不是题库，而是一个能根据你的真实项目、目标岗位和历史弱项持续追问、打分、复盘的训练 Agent。产品方向与未来演化见 [docs/VISION.md](docs/VISION.md)，当前主线见 [docs/PLAN.md](docs/PLAN.md) 和 [docs/PRODUCT_UPGRADE_PLAN.md](docs/PRODUCT_UPGRADE_PLAN.md)，阶段 B 的已完成设计记录见 [docs/JD_TRAINING_STAGE_B.md](docs/JD_TRAINING_STAGE_B.md)。
 
 ## 它能做什么
 
-1. **基础知识训练** —— 围绕 Go、Redis、Kafka、网络等后端核心主题，由 Agent 出题、评分、追问，模拟真实面试官的连续追问节奏。
-2. **项目面试训练** —— 导入你的 GitHub 仓库后，系统会在后台异步分析代码并持续更新导入进度；导航区会显示全局导入通知，失败任务也可以直接重试，完成后再围绕技术选型、架构 trade-off、难点和个人贡献进行深挖训练。
-3. **训练复盘** —— 每轮训练结束后生成复盘卡，指出亮点、漏洞和下一步建议。
-4. **薄弱点记忆** —— 系统持续记录你答得差的主题和表达卡壳点，并在后续训练中优先针对这些弱项出题。
+1. **基础知识训练** —— 当前已支持 Go、Redis、Kafka、MySQL、系统设计、分布式、网络、微服务、Docker & K8s 共 9 个主题，支持 `2-5` 轮连续问答和 `intensity=auto`。
+2. **项目面试训练** —— 导入 GitHub 仓库后，系统会在后台异步分析代码并持续更新导入进度；导航区会显示全局导入通知，失败任务可以直接重试，完成后再围绕技术选型、架构 trade-off、难点和个人贡献进行深挖训练。
+3. **岗位 JD 训练** —— 支持多份 JD 管理、分析历史、默认 JD、训练前显式绑定；JD 变成 `stale` 后会阻止新训练绑定，但旧成功快照仍可回看。
+4. **训练复盘与推荐** —— 每轮训练结束后生成复盘卡，给出 `top_fix`、亮点、漏洞和推荐下一轮训练参数。
+5. **弱项记忆与历史回看** —— 系统持续记录薄弱点，按有效热度生成 `today_focus` / `recommended_track`，并提供历史页、弱项趋势图和首页待复习入口。
 
 ## 目录结构
 
@@ -18,11 +19,10 @@ practicehelper/
   web/                  # Vue 3 前端
   server/               # Go API 服务
   sidecar/              # Python AI sidecar
-  docs/                 # 产品文档（PRD / ARCHITECTURE / PLAN）
-  data/                 # SQLite 数据库（本地生成，不入库）
+  docs/                 # 产品文档（VISION / ROADMAP / PRD / PLAN / ARCHITECTURE）
+  data/                 # SQLite 数据库、seed 与本地日志（本地生成，不入库）
   scripts/              # 开发脚本
   styles/               # 设计资源
-  tests/                # 跨模块测试
   .tools/               # 本地开发工具（golangci-lint 等）
   Makefile              # 统一开发命令入口
 ```
@@ -126,12 +126,15 @@ make dev-server-hot
 `make e2e-live` 默认会读取 `scripts/e2e_live.sample.json`，按固定画像、固定两轮回答跑完整主线：
 
 - 保存画像
+- 创建、分析并激活一份 JD
 - 后台导入项目
 - 项目画像编辑并保存后再恢复原值
 - basics 训练一轮
 - project 训练一轮
 - 拉取两张 review
+- 校验 session / review 是否固定绑定 JD 分析快照
 - 校验 dashboard 的 top weakness、`today_focus`、`recommended_track` 是否绑定到同一条弱项
+- 校验 JD 变成 `stale` 后，训练绑定会被阻止，dashboard 推荐会回退到 generic
 - 校验回答提交流式状态序列是否覆盖 `answer_received` → `answer_saved` → `review_saved`
 
 如果你只想替换仓库地址，不需要改样例文件，直接传参即可：
@@ -168,26 +171,26 @@ cd server && ../.tools/bin/air -c .air.toml
 - [x] 基础知识训练闭环（出题 + 评分 + 追问 + 复盘）
 - [x] 项目训练闭环（基于项目上下文的出题 + 追问 + 复盘）
 - [x] weakness memory 与 dashboard 推荐
-- [x] 前端 6 个页面完整交互（HomeView / ProfileView / ProjectsView / TrainView / SessionView / ReviewView）
+- [x] 前端 8 个页面完整交互（HomeView / ProfileView / JobTargetsView / ProjectsView / TrainView / SessionView / ReviewView / HistoryView）
 - [x] 请求级结构化日志、日志落盘、训练恢复入口、日期倒计时修复
 - [x] 训练创建 / 回答提交阶段的可见等待态
 - [x] 训练创建 / 回答提交的流式输出与推理摘要展示
 - [x] 可回放的真实端到端 smoke 脚本（`scripts/e2e_live.py` / `make e2e-live` / `scripts/e2e_live.sample.json`）
 - [x] 端到端验证（配置真实 LLM 后可用 `make e2e-live` 跑通完整流程）
 - [x] 训练体验做稳（答题反馈 V2、推荐质量与弱项衰减、题库扩充、追问保守表达）
-- [ ] 阶段 B：岗位视角训练收口（独立 JD 页面、多 JD 管理、分析历史、训练前选择 JD、JD 绑定验证）
+- [x] 阶段 B：岗位视角训练收口（独立 JD 页面、多 JD 管理、分析历史、训练前选择 JD、JD 绑定验证）
+- [x] 会话历史页、弱项趋势图与首页待复习入口
+- [x] 多轮训练（`max_turns=2-5`）、复盘推荐下一轮、`review_pending -> retry-review` 恢复入口
 
 ## 当前主线
 
-当前主线已经从“训练体验做稳”切到“岗位视角接入”：
+当前主线已经从“岗位视角接入”切到“训练深度与留存升级”：
 
-- 阶段 A 已完成，重点问题已经从“能不能用”转到“练的是不是目标岗位要的内容”
-- 下一步不再优先继续打磨 Phase 7 小边角，而是把阶段 B 收口到真正可依赖的产品级主链路：
-  - 独立 JD 页面
-  - 多 JD 管理与分析历史
-  - 训练前手动选择 JD
-  - basics / project 的出题、评分、复盘都固定绑定所选 JD 快照
-  - JD 不可用时给出明确状态和阻塞原因
-  - live E2E 覆盖 JD 绑定训练与 stale 阻塞验证
+- 阶段 A / B 已完成，系统已经不再只回答“能不能练一次”，而是在回答“能不能持续练、越练越准”
+- 当前更值得继续收口的是真缺口，而不是重复修已经完成的阶段 B：
+  - `os` / `docker_k8s` 的题库边界和 basics 混合出题
+  - 复习计划从 session 级入口补到更直接的弱项级入口
+  - 评估审计从骨架补到真正可追踪：`prompt_hash` / `model_name` / 详情面板
+  - LangGraph 在保持薄壳定位前提下继续做最小必要节点化
 
-详细方案见 [docs/JD_TRAINING_STAGE_B.md](docs/JD_TRAINING_STAGE_B.md)。
+详细方案见 [docs/PLAN.md](docs/PLAN.md) 和 [docs/PRODUCT_UPGRADE_PLAN.md](docs/PRODUCT_UPGRADE_PLAN.md)。

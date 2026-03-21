@@ -187,16 +187,16 @@ Go API 不再同步等待整个导入结束，而是先创建 `project_import_jo
 
 这决定了系统不能只依赖“一条 prompt”，而需要靠状态机、记忆、检索、结构化输出约束和日志链路共同保证质量。
 
-## 3.8 设计建议
+## 3.8 设计建议与当前收口状态
 
-结合上面的环境特性，当前版本最值得优先加强的是以下几点：
+结合上面的环境特性，更适合把设计建议拆成“已落地 / 部分落地 / 仍待补齐”，避免继续把已经完成的收口项写成纯 future work。
 
-1. **给评分和追问增加证据绑定**：让 `gaps`、`weakness_hits`、`followup_question` 尽量对应到用户回答片段或具体 repo chunk，减少“脑补式判断”。
-2. **把评分 rubric 程序化收口**：把总分拆成正确性、结构性、深度、trade-off、表达清晰度等稳定维度，再由程序侧汇总，降低 LLM 随机波动。
-3. **补强状态机异常路径**：明确流式与非流式的一致性、重复提交保护、超时后的恢复策略、review 失败时的中间状态处理。
-4. **给弱项记忆增加衰减和阈值**：区分“偶发卡壳”和“稳定弱项”，避免因为单次误判长期污染 `weakness_tags`。
-5. **在项目分析中保留置信度意识**：证据不足时宁可保守表达，也不要把不确定推断写成确定事实。
-6. **继续保持 LangGraph 的薄壳定位**：当前最重要的是检索质量、评分稳定性和状态安全，而不是引入更复杂的多 agent 编排。
+1. **证据绑定 ⬜ 仍待补齐**：`gaps`、`weakness_hits`、`followup_question` 目前还没有直接引用用户原文或具体 repo chunk；这一点仍是减少“脑补式判断”的关键缺口。
+2. **评分 rubric 程序化 🟡 部分落地**：基础题模板已经能提供 `score_weights`，sidecar prompt 也按 rubric 产出 `score_breakdown`；但总分和最终裁决仍主要依赖 LLM 一次性给出，程序侧还没有把多维评分稳定汇总成统一判定。
+3. **状态机异常路径 🟡 已补主要护栏，但还没完全收口**：回答提交的原子抢占、`review_pending -> retry-review` 恢复、流式阶段事件和失败回滚都已经存在；但 stream / non-stream 一致性和更系统的端到端异常回归还需要继续补。
+4. **弱项记忆衰减与复习入口 🟡 部分落地**：`effectiveSeverity`、`weakness_snapshots`、`review_schedule`、首页待复习卡片都已落地；但当前复习仍偏 session 级，还没有做到 weakness 级直接开练。
+5. **保守表达与置信度意识 ✅ 已落地基础约束**：`analyze_repo`、`analyze_job_target`、`evaluate_answer` prompt 已明确要求“证据不足时保守表达”；但还没有进一步把证据来源显式展示给用户。
+6. **LangGraph 薄壳定位 🟡 已稳定，但仍有深化空间**：`generate_question` / `evaluate_answer` 已不是单节点占位；`analyze_repo` / `generate_review` 仍保持简单 flow，当前优先级仍然是训练质量和状态安全，而不是继续堆图复杂度。
 
 ## 4. 数据库 Schema
 

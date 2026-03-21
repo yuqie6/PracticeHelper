@@ -92,10 +92,12 @@
 - 评分、追问和复盘都已引用 JD 关注点
 - session / review / dashboard 都已能回看当前轮次绑定的 JD
 
-### 仍建议补的验收
+### 验收现状
 
-- 用 live E2E 再验证一轮 `succeeded / stale / running / failed` 四种 JD 状态下的前端阻断与回看语义
-- 持续把文档改成当前真实状态，避免继续把阶段 B 写成“当前主线”
+- `scripts/e2e_live.py` 已覆盖 JD 创建 -> 分析成功 -> 激活 -> basics / project 训练绑定 -> review 回看 -> `stale` 阻断 -> dashboard 从 `job_target` 回退到 `generic`
+- `job_target_service` / repo 层测试已覆盖 `running` / `failed` / `stale` 的不可绑定语义，以及 `latest_successful_analysis` 在失败或过期后的保留逻辑
+- web 侧 `jobTargetStatus` 与训练入口文案已经把 `idle / running / failed / stale / succeeded` 五种状态拆开处理，阶段 B 现在可以视为产品级收口
+- 后续如果继续补 `running / failed` 的 live UI smoke，更适合作为阶段 C 的回归测试，而不是阶段 B 的未完成项
 
 ---
 
@@ -108,15 +110,17 @@
 ### 当前代码已经具备的基础
 
 - 多轮训练流已经落地，`max_turns` 可配，追问按独立 turn 持久化
-- 历史页、分页筛选和弱项趋势图已经落地
+- 历史页、分页筛选、弱项趋势图和首页待复习卡片已经落地
 - 题库已经外置到 seed 文件，并扩到 9 个 topic
-- `intensity=auto`、复习计划表和基础评估日志骨架已经存在
+- `intensity=auto`、`review_schedule`、`evaluation_logs` 审计骨架和 due review 完成接口已经存在
 - LangGraph 已经不再是全量单节点图，`generate_question` 和 `evaluate_answer` 有了最小编排
+- 默认 JD、`recommendation_scope` 和 generic fallback 语义已经收口，岗位模式不再是阶段 C 之前的阻塞项
 
 ### 本阶段优先补的缺口
 
 - 补齐题库策略的剩余缺口：`os` / `docker_k8s` 的定位和 basics 混合出题
-- 把 LangGraph、复习计划和评估审计从“半成品骨架”补到“用户可感知的完整能力”
+- 把复习计划和评估审计从“骨架可见”补到“真正可追踪”：待复习从 session 级提示推进到更直接的弱项级入口，评估日志补 `prompt_hash` / `model_name` / 前端详情面板
+- 继续把 LangGraph 编排从最小可用补到可验证节点化，但仍保持薄壳定位
 - 继续保持 P2 体验项延后，不让暗色模式、动效和导出抢主线
 
 ### 完成标准

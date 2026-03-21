@@ -1,5 +1,7 @@
 # 阶段 B - JD 岗位视角训练方案
 
+> 状态：已完成。本文保留为阶段 B 的设计记录，同时同步 2026-03-21 的实现口径。
+
 ## 1. 背景
 
 阶段 A 已经解决了“这套训练能不能用、用起来顺不顺”的问题。
@@ -31,6 +33,16 @@
 - 一轮训练同时绑定多份 JD
 - 训练时手动选择某次历史分析快照
 - 岗位要求可视化大盘
+
+### 当前已经落地
+
+- 独立 `job-targets` 页面、多 JD 列表、原文编辑、分析历史和默认 JD 激活已经可用
+- `job_targets` / `job_target_analysis_runs` / `training_sessions.job_target_id` / `job_target_analysis_id` 都已经落库
+- `TrainView` 已支持显式选择 JD；`idle / running / failed / stale` 都会阻止新训练绑定并显示原因
+- 未显式选择 JD 时，只有 `succeeded` 的默认 JD 才会自动带入训练和 dashboard 推荐；不可用时会回退到 generic
+- basics / project 的出题、评分、追问和复盘都已读取 JD 分析快照
+- session / review / dashboard 都能回看绑定的 JD；`latest_successful_analysis` 会在 `stale` / `failed` 后保留只读回看
+- `scripts/e2e_live.py` 已覆盖 success -> bind -> stale fallback 的真实主链路
 
 ---
 
@@ -385,24 +397,27 @@
 
 ---
 
-## 9. 验收标准
+## 9. 当前验收现状
 
-第一版完成后，至少要能跑通下面这条链路：
+当前已经能跑通的主链路是：
 
-1. 新建两份 JD
-2. 对其中一份 JD 连续分析两次，并能看到历史记录
-3. 在 TrainView 选择这份 JD 开一轮 basics 训练
-4. 问题内容明显引用岗位要求
-5. 评分和复盘明确提到岗位要求的能力点
-6. 回看 session / review 时，能确认本轮绑定的是哪份 JD、哪次分析快照
+1. 新建 JD -> 分析成功 -> 激活为默认 JD
+2. 在 TrainView 显式或隐式绑定这份 JD 开启 basics / project 训练
+3. session / review 固定回看 `job_target_id` / `job_target_analysis_id`
+4. dashboard 的 `recommendation_scope` 在 JD ready 时切到 `job_target`
+5. 修改原文后 JD 变成 `stale`，新训练会被 `job_target_not_ready` 阻止，但旧成功快照仍可回看
+6. `scripts/e2e_live.py` 已覆盖这条成功链路和 `stale` 回退语义
 
-如果这 6 步有任意一步做不到，阶段 B 第一版都不算完成。
+仍需继续补的主要是回归层验证，不再是阶段 B 的功能缺口：
+
+- `running / failed` 的 live UI smoke 还没有打包成同一条真实 E2E 脚本
+- 这两类状态的不可绑定语义、快照保留和提示文案，目前主要由 repo / service / web tests 保证
 
 ---
 
 ## 10. 默认实现假设
 
-这份方案默认以下决策已经锁定：
+这份方案里的以下决策，已经成为当前实现边界：
 
 - JD 走独立页面，不进画像页
 - 支持多 JD
