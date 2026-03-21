@@ -58,6 +58,40 @@ def test_render_prompt_with_meta_updates_hash_after_replacements() -> None:
     assert rendered.prompt_hash != raw_prompt.prompt_hash
 
 
+def test_evaluate_answer_prompts_require_depth_and_repo_tools_for_all_sets() -> None:
+    for prompt_set_id in ("stable-v1", "candidate-v1"):
+        prompt = load_prompt_with_meta("evaluate_answer_system.md", prompt_set_id)
+
+        assert "recall_training_context" in prompt.content
+        assert "search_repo_chunks" in prompt.content
+        assert "record_observation" in prompt.content
+        assert "update_knowledge" in prompt.content
+        assert "set_depth_signal" in prompt.content
+        assert "skip_followup" in prompt.content
+        assert "extend" in prompt.content
+
+
+def test_generate_review_prompts_require_history_and_next_session_tools_for_all_sets() -> None:
+    for prompt_set_id in ("stable-v1", "candidate-v1"):
+        prompt = load_prompt_with_meta("generate_review_system.md", prompt_set_id)
+
+        assert "recall_training_context" in prompt.content
+        assert "recall_session_summaries" in prompt.content
+        assert "get_session_detail" in prompt.content
+        assert "record_observation" in prompt.content
+        assert "update_knowledge" in prompt.content
+        assert "suggest_next_session" in prompt.content
+
+
+def test_generate_question_prompts_require_context_and_project_search_for_all_sets() -> None:
+    for prompt_set_id in ("stable-v1", "candidate-v1"):
+        prompt = load_prompt_with_meta("generate_question_system.md", prompt_set_id)
+
+        assert "recall_training_context" in prompt.content
+        assert "search_repo_chunks" in prompt.content
+        assert "不要调用行动工具" in prompt.content
+
+
 def test_list_prompt_sets_endpoint_returns_registry_items() -> None:
     response = main.list_prompt_sets_endpoint()
 

@@ -62,6 +62,10 @@ class FakeStreamModelClient(FakeModelClient):
     def __init__(self, responses: list[ChatCompletionResult]) -> None:
         super().__init__(responses)
 
+    def create_completion(self, *, messages, tools=None, temperature=0.2):
+        self.calls.append({"messages": messages, "tools": tools, "temperature": temperature})
+        raise ModelClientError("stream-only fake")
+
     def create_completion_stream(self, *, messages, temperature=0.2):
         self.calls.append({"messages": messages, "temperature": temperature, "stream": True})
         yield ChatCompletionStreamChunk(
@@ -72,6 +76,10 @@ class FakeStreamModelClient(FakeModelClient):
 class FakeEvaluateStreamModelClient(FakeModelClient):
     def __init__(self, responses: list[ChatCompletionResult]) -> None:
         super().__init__(responses)
+
+    def create_completion(self, *, messages, tools=None, temperature=0.2):
+        self.calls.append({"messages": messages, "tools": tools, "temperature": temperature})
+        raise ModelClientError("stream-only fake")
 
     def create_completion_stream(self, *, messages, temperature=0.2):
         self.calls.append({"messages": messages, "temperature": temperature, "stream": True})
@@ -87,6 +95,10 @@ class FakeEvaluateStreamModelClient(FakeModelClient):
 class FakeReviewStreamModelClient(FakeModelClient):
     def __init__(self, responses: list[ChatCompletionResult]) -> None:
         super().__init__(responses)
+
+    def create_completion(self, *, messages, tools=None, temperature=0.2):
+        self.calls.append({"messages": messages, "tools": tools, "temperature": temperature})
+        raise ModelClientError("stream-only fake")
 
     def create_completion_stream(self, *, messages, temperature=0.2):
         self.calls.append({"messages": messages, "temperature": temperature, "stream": True})
@@ -194,21 +206,14 @@ class FakeAnalyzeRepoGraphRuntime:
         )
 
 
-class FlakyEvaluateGraphRuntime:
+class SimpleEvaluateGraphRuntime:
     def __init__(self) -> None:
         self.calls = 0
-        self.retry_feedback: list[str] = []
 
     def evaluate_answer_task(
         self, request: EvaluateAnswerRequest
     ) -> TaskExecutionResult[EvaluationResult]:
         self.calls += 1
-        self.retry_feedback.append(request.retry_feedback)
-        if self.calls == 1:
-            return TaskExecutionResult(
-                result=EvaluationResult(score=80, score_breakdown={"准确性": 80}),
-                raw_output='{"score":80}',
-            )
         return TaskExecutionResult(
             result=EvaluationResult(
                 score=82,
@@ -223,35 +228,14 @@ class FlakyEvaluateGraphRuntime:
         )
 
 
-class AlwaysInvalidEvaluateGraphRuntime:
+class SimpleGenerateReviewGraphRuntime:
     def __init__(self) -> None:
         self.calls = 0
-
-    def evaluate_answer_task(
-        self, request: EvaluateAnswerRequest
-    ) -> TaskExecutionResult[EvaluationResult]:
-        self.calls += 1
-        return TaskExecutionResult(
-            result=EvaluationResult(score=80, score_breakdown={"准确性": 80}),
-            raw_output='{"score":80}',
-        )
-
-
-class FlakyGenerateReviewGraphRuntime:
-    def __init__(self) -> None:
-        self.calls = 0
-        self.retry_feedback: list[str] = []
 
     def generate_review_task(
         self, request: GenerateReviewRequest
     ) -> TaskExecutionResult[ReviewCard]:
         self.calls += 1
-        self.retry_feedback.append(request.retry_feedback)
-        if self.calls == 1:
-            return TaskExecutionResult(
-                result=ReviewCard(overall="总结", score_breakdown={"准确性": 70}),
-                raw_output='{"overall":"总结"}',
-            )
         return TaskExecutionResult(
             result=ReviewCard(
                 overall="总结",
@@ -654,8 +638,376 @@ def test_evaluate_prompt_bundle_includes_retry_feedback_when_present() -> None:
     assert "missing strengths/gaps" in user_prompt
 
 
-def test_evaluate_answer_graph_retries_after_invalid_output() -> None:
-    runtime = FlakyEvaluateGraphRuntime()
+def test_evaluate_answer_task_retries_inside_agent_loop_after_validation_failure() -> None:
+    client = FakeModelClient(
+        [
+            ChatCompletionResult(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call_ctx",
+                        "function": {
+                            "name": "recall_training_context",
+                            "arguments": "{}",
+                        },
+                    }
+                ],
+            ),
+            ChatCompletionResult(
+                content='{"score":80,"score_breakdown":{"准确性":80}}',
+                tool_calls=[],
+            ),
+            ChatCompletionResult(
+                content=(
+                    '{"score":82,"score_breakdown":{"准确性":82},"strengths":["主线清楚"],'
+                    '"gaps":["例子不够具体"],"followup_question":"如果线上抖动，你会先看什么？",'
+                    '"followup_expected_points":["先止血","再定位"],"weakness_hits":[]}'
+                ),
+                tool_calls=[],
+            ),
+        ]
+    )
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=client,
+    )
+
+    result = runtime.evaluate_answer_task(
+        EvaluateAnswerRequest(
+            mode="basics",
+            topic="redis",
+            question="Redis 为什么快？",
+            expected_points=["内存访问", "事件循环"],
+            answer="因为它在内存里。",
+            turn_index=1,
+            max_turns=2,
+        )
+    )
+
+    assert result.result.followup_question == "如果线上抖动，你会先看什么？"
+    assert len(client.calls) == 3
+    assert any(
+        message["role"] == "user" and "missing strengths/gaps" in message["content"]
+        for message in client.calls[-1]["messages"]
+    )
+
+
+def test_evaluate_answer_task_accepts_skip_followup_signal_without_followup_output() -> None:
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=FakeModelClient(
+            [
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_ctx",
+                            "function": {
+                                "name": "recall_training_context",
+                                "arguments": "{}",
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_depth",
+                            "function": {
+                                "name": "set_depth_signal",
+                                "arguments": '{"depth_signal":"skip_followup"}',
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content=(
+                        '{"score":91,"score_breakdown":{"准确性":91},"headline":"可以直接收口",'
+                        '"strengths":["主线清楚"],"gaps":["还可以补更多案例"],"suggestion":"继续保持",'
+                        '"followup_question":"","followup_expected_points":[],"weakness_hits":[]}'
+                    ),
+                    tool_calls=[],
+                ),
+            ]
+        ),
+    )
+
+    result = runtime.evaluate_answer_task(
+        EvaluateAnswerRequest(
+            mode="basics",
+            topic="redis",
+            question="Redis 为什么快？",
+            expected_points=["内存访问", "事件循环"],
+            answer="因为主要在内存里，事件循环模型也简单。",
+            turn_index=1,
+            max_turns=2,
+        )
+    )
+
+    assert result.side_effects["depth_signal"] == "skip_followup"
+    assert result.result.followup_question == ""
+
+
+def test_evaluate_answer_task_accepts_extend_signal_with_followup_on_last_turn() -> None:
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=FakeModelClient(
+            [
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_ctx",
+                            "function": {
+                                "name": "recall_training_context",
+                                "arguments": "{}",
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_depth",
+                            "function": {
+                                "name": "set_depth_signal",
+                                "arguments": '{"depth_signal":"extend"}',
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content=(
+                        '{"score":66,"score_breakdown":{"准确性":66},"headline":"还需要继续追问",'
+                        '"strengths":["主线大体对"],"gaps":["止血顺序不完整"],"suggestion":"补具体排查顺序",'
+                        '"followup_question":"如果线上抖动，你先止血还是先定位？为什么？",'
+                        '"followup_expected_points":["先止血","再定位","说明取舍"],"weakness_hits":[]}'
+                    ),
+                    tool_calls=[],
+                ),
+            ]
+        ),
+    )
+
+    result = runtime.evaluate_answer_task(
+        EvaluateAnswerRequest(
+            mode="basics",
+            topic="redis",
+            question="Redis 为什么快？",
+            expected_points=["内存访问", "事件循环"],
+            answer="因为主要在内存里。",
+            turn_index=2,
+            max_turns=2,
+        )
+    )
+
+    assert result.side_effects["depth_signal"] == "extend"
+    assert "如果线上抖动" in result.result.followup_question
+
+
+def test_evaluate_answer_task_raises_after_agent_loop_validation_budget_is_exhausted() -> None:
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=FakeModelClient(
+            [
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_ctx",
+                            "function": {
+                                "name": "recall_training_context",
+                                "arguments": "{}",
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content='{"score":80,"score_breakdown":{"准确性":80}}',
+                    tool_calls=[],
+                ),
+                ChatCompletionResult(
+                    content='{"score":81,"score_breakdown":{"准确性":81}}',
+                    tool_calls=[],
+                ),
+                ChatCompletionResult(
+                    content='{"score":82,"score_breakdown":{"准确性":82}}',
+                    tool_calls=[],
+                ),
+            ]
+        ),
+    )
+
+    with pytest.raises(ModelClientError, match="missing strengths/gaps"):
+        runtime.evaluate_answer_task(
+            EvaluateAnswerRequest(
+                mode="basics",
+                topic="redis",
+                question="Redis 为什么快？",
+                expected_points=["内存访问", "事件循环"],
+                answer="因为它在内存里。",
+                turn_index=1,
+                max_turns=2,
+            )
+        )
+
+
+def test_generate_review_task_retries_inside_agent_loop_after_validation_failure() -> None:
+    client = FakeModelClient(
+        [
+            ChatCompletionResult(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call_ctx",
+                        "function": {
+                            "name": "recall_training_context",
+                            "arguments": "{}",
+                        },
+                    }
+                ],
+            ),
+            ChatCompletionResult(
+                content='{"overall":"总结","score_breakdown":{"准确性":70}}',
+                tool_calls=[],
+            ),
+            ChatCompletionResult(
+                content=(
+                    '{"overall":"总结","top_fix":"先补最关键缺口","top_fix_reason":"这是当前最影响说服力的部分",'
+                    '"highlights":["主线清楚"],"gaps":["案例不够具体"],"suggested_topics":["redis"],'
+                    '"next_training_focus":["补细节"],"recommended_next":{"mode":"basics","topic":"redis","reason":"补短板"},'
+                    '"score_breakdown":{"准确性":70}}'
+                ),
+                tool_calls=[],
+            ),
+        ]
+    )
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=client,
+    )
+
+    result = runtime.generate_review_task(
+        GenerateReviewRequest(
+            session=TrainingSession(id="sess_1", mode="basics", topic="redis"),
+            turns=[
+                TrainingTurn(
+                    question="Redis 为什么快？",
+                    expected_points=["内存访问", "事件循环"],
+                    answer="因为它在内存里。",
+                )
+            ],
+        )
+    )
+
+    assert result.result.top_fix == "先补最关键缺口"
+    assert len(client.calls) == 3
+    assert any(
+        message["role"] == "user" and "missing top_fix" in message["content"]
+        for message in client.calls[-1]["messages"]
+    )
+
+
+def test_generate_review_task_accepts_recommended_next_from_side_effects_only() -> None:
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=FakeModelClient(
+            [
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_ctx",
+                            "function": {
+                                "name": "recall_training_context",
+                                "arguments": "{}",
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_next",
+                            "function": {
+                                "name": "suggest_next_session",
+                                "arguments": (
+                                    '{"mode":"basics","topic":"redis","reason":"先补缓存击穿止血顺序"}'
+                                ),
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content=(
+                        '{"overall":"总结","top_fix":"先补最关键缺口","top_fix_reason":"这是当前最影响说服力的部分",'
+                        '"highlights":["主线清楚"],"gaps":["案例不够具体"],"suggested_topics":["redis"],'
+                        '"next_training_focus":["补细节"],"recommended_next":null,"score_breakdown":{"准确性":70}}'
+                    ),
+                    tool_calls=[],
+                ),
+            ]
+        ),
+    )
+
+    result = runtime.generate_review_task(
+        GenerateReviewRequest(
+            session=TrainingSession(id="sess_1", mode="basics", topic="redis"),
+            turns=[
+                TrainingTurn(
+                    question="Redis 为什么快？",
+                    expected_points=["内存访问", "事件循环"],
+                    answer="因为它在内存里。",
+                )
+            ],
+        )
+    )
+
+    assert result.result.recommended_next is None
+    assert result.side_effects["recommended_next"]["topic"] == "redis"
+
+
+def test_evaluate_answer_graph_wraps_runtime_result_envelope() -> None:
+    runtime = SimpleEvaluateGraphRuntime()
     graph = _build_evaluate_answer_graph(runtime)
 
     result = graph.invoke(
@@ -672,37 +1024,14 @@ def test_evaluate_answer_graph_retries_after_invalid_output() -> None:
         }
     )
 
-    assert runtime.calls == 2
+    assert runtime.calls == 1
     assert isinstance(result["result"], EvaluateAnswerEnvelope)
     assert result["result"].result.followup_question == "如果线上抖动，你会先看什么？"
-    assert runtime.retry_feedback[1] == "missing strengths/gaps"
     assert result["result"].side_effects.depth_signal == "normal"
 
 
-def test_evaluate_answer_graph_raises_after_retry_budget_is_exhausted() -> None:
-    runtime = AlwaysInvalidEvaluateGraphRuntime()
-    graph = _build_evaluate_answer_graph(runtime)
-
-    with pytest.raises(ModelClientError, match="missing strengths/gaps"):
-        graph.invoke(
-            {
-                "request": EvaluateAnswerRequest(
-                    mode="basics",
-                    topic="redis",
-                    question="Redis 为什么快？",
-                    expected_points=["内存访问", "事件循环"],
-                    answer="因为它在内存里。",
-                    turn_index=1,
-                    max_turns=2,
-                )
-            }
-        )
-
-    assert runtime.calls == 2
-
-
-def test_generate_review_graph_retries_after_invalid_output() -> None:
-    runtime = FlakyGenerateReviewGraphRuntime()
+def test_generate_review_graph_wraps_runtime_result_envelope() -> None:
+    runtime = SimpleGenerateReviewGraphRuntime()
     graph = _build_generate_review_graph(runtime)
 
     result = graph.invoke(
@@ -720,10 +1049,9 @@ def test_generate_review_graph_retries_after_invalid_output() -> None:
         }
     )
 
-    assert runtime.calls == 2
+    assert runtime.calls == 1
     assert isinstance(result["result"], GenerateReviewEnvelope)
     assert result["result"].result.top_fix == "先补最关键缺口"
-    assert runtime.retry_feedback[1] == "missing top_fix"
 
 
 def test_evaluate_answer_returns_side_effects_from_action_tools() -> None:
@@ -952,6 +1280,213 @@ def test_review_prompt_bundle_includes_retry_feedback_when_present() -> None:
 
     assert "上一次输出没有过校验" in user_prompt
     assert "missing top_fix" in user_prompt
+
+
+def test_stream_generate_question_uses_agent_loop_before_fallback() -> None:
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=FakeModelClient(
+            [
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_context",
+                            "function": {
+                                "name": "recall_training_context",
+                                "arguments": "{}",
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content=(
+                        '{"question":"请讲讲 Redis 一致性。",'
+                        '"expected_points":["目标","取舍","失败兜底","适用边界"]}'
+                    ),
+                    tool_calls=[],
+                ),
+            ]
+        ),
+    )
+
+    events = list(
+        runtime.stream_generate_question(
+            GenerateQuestionRequest(mode="basics", topic="redis", intensity="standard")
+        )
+    )
+
+    context_events = [event for event in events if event["type"] == "context"]
+    result_event = events[-1]
+    assert context_events[0]["name"] == "recall_training_context"
+    assert result_event["type"] == "result"
+    assert result_event["data"]["result"]["question"] == "请讲讲 Redis 一致性。"
+    assert '"question":"请讲讲 Redis 一致性。"' in result_event["data"]["raw_output"]
+
+
+def test_stream_evaluate_answer_uses_agent_loop_and_emits_side_effects() -> None:
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=FakeModelClient(
+            [
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_context",
+                            "function": {
+                                "name": "recall_training_context",
+                                "arguments": "{}",
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_observation",
+                            "function": {
+                                "name": "record_observation",
+                                "arguments": (
+                                    '{"category":"pattern","content":"回答主线清楚，但案例不够具体。",'
+                                    '"tags":["redis"],"topic":"redis","relevance":0.9}'
+                                ),
+                            },
+                        },
+                        {
+                            "id": "call_depth",
+                            "function": {
+                                "name": "set_depth_signal",
+                                "arguments": '{"depth_signal":"skip_followup"}',
+                            },
+                        },
+                    ],
+                ),
+                ChatCompletionResult(
+                    content=(
+                        '{"score":88,"score_breakdown":{"准确性":88},"headline":"主线到位",'
+                        '"strengths":["主线清楚"],"gaps":["案例不够具体"],'
+                        '"suggestion":"补真实案例","followup_question":"",'
+                        '"followup_expected_points":[],"weakness_hits":[]}'
+                    ),
+                    tool_calls=[],
+                ),
+            ]
+        ),
+    )
+
+    events = list(
+        runtime.stream_evaluate_answer(
+            EvaluateAnswerRequest(
+                mode="basics",
+                topic="redis",
+                question="Redis 为什么快？",
+                expected_points=["内存访问", "事件循环"],
+                answer="因为它主要在内存里。",
+                turn_index=1,
+                max_turns=2,
+            )
+        )
+    )
+
+    context_names = [event["name"] for event in events if event["type"] == "context"]
+    result_event = events[-1]
+    assert "recall_training_context" in context_names
+    assert "record_observation" in context_names
+    assert "set_depth_signal" in context_names
+    assert result_event["type"] == "result"
+    assert result_event["data"]["result"]["score"] == 88
+    assert result_event["data"]["side_effects"]["depth_signal"] == "skip_followup"
+    assert len(result_event["data"]["side_effects"]["observations"]) == 1
+
+
+def test_stream_generate_review_uses_agent_loop_and_emits_recommended_next_side_effect() -> None:
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=FakeModelClient(
+            [
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_context",
+                            "function": {
+                                "name": "recall_training_context",
+                                "arguments": "{}",
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_next",
+                            "function": {
+                                "name": "suggest_next_session",
+                                "arguments": (
+                                    '{"mode":"basics","topic":"redis",'
+                                    '"reason":"继续补缓存一致性表达"}'
+                                ),
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content=(
+                        '{"overall":"总结","top_fix":"先补缓存一致性取舍",'
+                        '"top_fix_reason":"这是这轮最缺说服力的地方",'
+                        '"highlights":["主线清楚"],"gaps":["案例偏少"],'
+                        '"suggested_topics":["redis"],"next_training_focus":["补细节"],'
+                        '"score_breakdown":{"准确性":80}}'
+                    ),
+                    tool_calls=[],
+                ),
+            ]
+        ),
+    )
+
+    events = list(
+        runtime.stream_generate_review(
+            GenerateReviewRequest(
+                session=TrainingSession(id="sess_1", mode="basics", topic="redis"),
+                turns=[
+                    TrainingTurn(
+                        question="Redis 为什么快？",
+                        expected_points=["内存访问", "事件循环"],
+                        answer="因为它主要在内存里。",
+                    )
+                ],
+            )
+        )
+    )
+
+    context_names = [event["name"] for event in events if event["type"] == "context"]
+    result_event = events[-1]
+    assert "recall_training_context" in context_names
+    assert "suggest_next_session" in context_names
+    assert result_event["type"] == "result"
+    assert result_event["data"]["result"]["top_fix"] == "先补缓存一致性取舍"
+    assert result_event["data"]["side_effects"]["recommended_next"]["topic"] == "redis"
 
 
 def test_stream_generate_question_result_event_wraps_raw_output() -> None:

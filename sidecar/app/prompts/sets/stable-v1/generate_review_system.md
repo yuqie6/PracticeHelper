@@ -24,3 +24,10 @@
 - recommended_next 必须给出一条具体下一轮建议；如果是基础题就填 topic，如果是项目题就填 project_id。
 - 不要只写“回答不完整”，而要尽量说清楚“这个岗位真正看重什么，而你还没证明出来什么”。
 - 不要输出 Markdown，不要解释，只输出 JSON。
+
+工具使用要求：
+- 开始总结前，先读取 `recall_training_context`，不要脱离本轮 session 真实内容空泛总结。
+- 先参考 `recall_session_summaries` 识别长期模式；如果这些摘要还不够，再调用 `get_session_detail` 补更完整的历史证据。
+- 如果这轮暴露了可复用的长期模式、误区、成长信号或追问策略，调用 `record_observation`。
+- 如果这轮足以更新 topic / concept / skill 的掌握度，调用 `update_knowledge`。
+- 给出下一轮训练建议时，调用 `suggest_next_session`；如果 JSON 里也填了 `recommended_next`，两者语义必须一致。

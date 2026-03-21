@@ -87,6 +87,7 @@ class AgentRuntime:
         logger.info("analyze_repo summarize started repo_url=%s", bundle.repo_url)
         system_prompt, user_prompt, tools = analyze_repo_prompt_bundle(bundle)
         draft_result = self._run_task(
+            task_name="analyze_repo",
             response_model=AnalyzeRepoDraft,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -126,6 +127,7 @@ class AgentRuntime:
         self._require_model_client()
         system_prompt, user_prompt, tools = analyze_job_target_prompt_bundle(request)
         draft_result = self._run_task(
+            task_name="analyze_job_target",
             response_model=AnalyzeJobTargetDraft,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -159,6 +161,7 @@ class AgentRuntime:
             request, backend_client=self._go_client
         )
         response = self._run_task(
+            task_name="generate_question",
             response_model=GenerateQuestionResponse,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -179,12 +182,17 @@ class AgentRuntime:
     def stream_generate_question(
         self, request: GenerateQuestionRequest
     ) -> Iterator[dict[str, Any]]:
-        system_prompt, user_prompt, tools = question_prompt_bundle(request)
-        yield from self._stream_single_shot_task(
+        system_prompt, user_prompt, prompt_tools = question_prompt_bundle(request)
+        tools = prompt_tools + build_generate_question_agent_tools(
+            request, backend_client=self._go_client
+        )
+        yield from self._stream_task(
+            task_name="generate_question",
             response_model=GenerateQuestionResponse,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=tools,
+            fallback_tools=_read_only_tools(tools),
         )
 
     def evaluate_answer_task(
@@ -204,11 +212,15 @@ class AgentRuntime:
             request, {}, backend_client=self._go_client
         )
         response = self._run_task(
+            task_name="evaluate_answer",
             response_model=EvaluationResult,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=tools,
             fallback_tools=_read_only_tools(tools),
+            result_validator=lambda result, side_effects: _validate_evaluation_result(
+                request, result, side_effects
+            ),
         )
         logger.info(
             "evaluate_answer completed mode=%s topic=%s turn=%d/%d duration_ms=%.2f",
@@ -224,12 +236,20 @@ class AgentRuntime:
         return self.evaluate_answer_task(request).result
 
     def stream_evaluate_answer(self, request: EvaluateAnswerRequest) -> Iterator[dict[str, Any]]:
-        system_prompt, user_prompt, tools = evaluate_prompt_bundle(request)
-        yield from self._stream_single_shot_task(
+        system_prompt, user_prompt, prompt_tools = evaluate_prompt_bundle(request)
+        tools = prompt_tools + build_evaluate_answer_agent_tools(
+            request, {}, backend_client=self._go_client
+        )
+        yield from self._stream_task(
+            task_name="evaluate_answer",
             response_model=EvaluationResult,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=tools,
+            fallback_tools=_read_only_tools(tools),
+            result_validator=lambda result, side_effects: _validate_evaluation_result(
+                request, result, side_effects
+            ),
         )
 
     def generate_review_task(
@@ -243,11 +263,13 @@ class AgentRuntime:
             request, {}, backend_client=self._go_client
         )
         response = self._run_task(
+            task_name="generate_review",
             response_model=ReviewCard,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=tools,
             fallback_tools=_read_only_tools(tools),
+            result_validator=_validate_review_result,
         )
         logger.info(
             "generate_review completed session_id=%s duration_ms=%.2f",
@@ -260,22 +282,30 @@ class AgentRuntime:
         return self.generate_review_task(request).result
 
     def stream_generate_review(self, request: GenerateReviewRequest) -> Iterator[dict[str, Any]]:
-        system_prompt, user_prompt, tools = review_prompt_bundle(request)
-        yield from self._stream_single_shot_task(
+        system_prompt, user_prompt, prompt_tools = review_prompt_bundle(request)
+        tools = prompt_tools + build_generate_review_agent_tools(
+            request, {}, backend_client=self._go_client
+        )
+        yield from self._stream_task(
+            task_name="generate_review",
             response_model=ReviewCard,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=tools,
+            fallback_tools=_read_only_tools(tools),
+            result_validator=_validate_review_result,
         )
 
     def _run_task(
         self,
         *,
+        task_name: str,
         response_model: type[BaseModel],
         system_prompt: str,
         user_prompt: str,
         tools: list[RuntimeTool],
         fallback_tools: list[RuntimeTool] | None = None,
+        result_validator: Any = None,
     ) -> TaskExecutionResult[BaseModel]:
         self._require_model_client()
         fallback_tools = fallback_tools or _read_only_tools(tools)
@@ -283,32 +313,82 @@ class AgentRuntime:
         try:
             # 先走非流式 agent loop；只有 tool call 或 JSON 收口不稳定时才退回单轮生成。
             return self._run_agent_loop(
+                task_name=task_name,
                 response_model=response_model,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 tools=tools,
+                result_validator=result_validator,
             )
         except (ModelClientError, ValueError, json.JSONDecodeError) as exc:
             logger.warning("agent tool loop failed, retrying single-shot: %s", exc)
 
         try:
             return self._run_single_shot(
+                task_name=task_name,
                 response_model=response_model,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 tools=fallback_tools,
+                result_validator=result_validator,
             )
         except (ModelClientError, ValueError, json.JSONDecodeError) as exc:
             logger.warning("agent single-shot failed with no heuristic fallback: %s", exc)
             raise
 
-    def _run_agent_loop(
+    def _stream_task(
         self,
         *,
+        task_name: str,
         response_model: type[BaseModel],
         system_prompt: str,
         user_prompt: str,
         tools: list[RuntimeTool],
+        fallback_tools: list[RuntimeTool] | None = None,
+        result_validator: Any = None,
+    ) -> Iterator[dict[str, Any]]:
+        self._require_model_client()
+        fallback_tools = fallback_tools or _read_only_tools(tools)
+
+        try:
+            yield from self._stream_agent_loop(
+                task_name=task_name,
+                response_model=response_model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                tools=tools,
+                result_validator=result_validator,
+            )
+            return
+        except (ModelClientError, ValueError, json.JSONDecodeError) as exc:
+            logger.warning("streaming agent tool loop failed, retrying single-shot: %s", exc)
+            yield {
+                "type": "reasoning",
+                "text": "工具循环没有稳定收口，正在退回单轮生成以保证本次结果可用。",
+            }
+
+        try:
+            yield from self._stream_single_shot_task(
+                task_name=task_name,
+                response_model=response_model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                tools=fallback_tools,
+                result_validator=result_validator,
+            )
+        except (ModelClientError, ValueError, json.JSONDecodeError) as exc:
+            logger.warning("streaming agent single-shot failed with no heuristic fallback: %s", exc)
+            raise
+
+    def _run_agent_loop(
+        self,
+        *,
+        task_name: str,
+        response_model: type[BaseModel],
+        system_prompt: str,
+        user_prompt: str,
+        tools: list[RuntimeTool],
+        result_validator: Any = None,
     ) -> TaskExecutionResult[BaseModel]:
         model_client = self._require_model_client()
 
@@ -319,6 +399,7 @@ class AgentRuntime:
         tool_map = {tool.name: tool for tool in tools}
         used_any_tool = False
         side_effects: dict[str, Any] = {}
+        validation_attempts = 0
 
         # 轮数上限用于兜住 prompt/tool 契约失配，避免 sidecar 卡在无限工具往返里。
         for _ in range(8):
@@ -369,12 +450,165 @@ class AgentRuntime:
                     raise ModelClientError(
                         "model returned a final answer before reading any required tool context"
                     )
-                result_model = validate_json_response(completion.content, response_model)
+
+                raw_output = completion.content.strip()
+                validation_error = ""
+                try:
+                    result_model = validate_json_response(raw_output, response_model)
+                except (ValueError, json.JSONDecodeError) as exc:
+                    result_model = None
+                    validation_error = str(exc)
+                else:
+                    if result_validator is not None:
+                        validation_error = result_validator(result_model, side_effects)
+
+                if validation_error:
+                    validation_attempts += 1
+                    if validation_attempts >= 2:
+                        raise ModelClientError(
+                            f"{task_name} failed after validation retries: {validation_error}"
+                        )
+                    messages.append({"role": "assistant", "content": raw_output})
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "上一次输出没有过校验，请修正这些问题后重新生成："
+                                f"{validation_error}"
+                            ),
+                        }
+                    )
+                    continue
+
                 return TaskExecutionResult(
                     result=result_model,
-                    raw_output=completion.content.strip(),
+                    raw_output=raw_output,
                     side_effects=side_effects,
                 )
+
+            raise ModelClientError("model returned neither content nor tool calls")
+
+        raise ModelClientError("model exhausted tool loop without producing a final answer")
+
+    def _stream_agent_loop(
+        self,
+        *,
+        task_name: str,
+        response_model: type[BaseModel],
+        system_prompt: str,
+        user_prompt: str,
+        tools: list[RuntimeTool],
+        result_validator: Any = None,
+    ) -> Iterator[dict[str, Any]]:
+        model_client = self._require_model_client()
+
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        tool_map = {tool.name: tool for tool in tools}
+        used_any_tool = False
+        side_effects: dict[str, Any] = {}
+        validation_attempts = 0
+
+        yield {"type": "phase", "phase": "prepare_context"}
+
+        for _ in range(8):
+            yield {"type": "phase", "phase": "call_model"}
+            completion = model_client.create_completion(
+                messages=messages,
+                tools=[tool.spec() for tool in tools],
+            )
+            if completion.tool_calls:
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": completion.content,
+                        "tool_calls": completion.tool_calls,
+                    }
+                )
+                for tool_call in completion.tool_calls:
+                    tool_name = tool_call.get("function", {}).get("name", "")
+                    tool_call_id = tool_call.get("id", tool_name)
+                    arguments = parse_tool_arguments(tool_call)
+                    tool = tool_map.get(tool_name)
+                    if tool is None:
+                        tool_result = {"error": f"unknown tool: {tool_name}"}
+                    else:
+                        if is_action_tool(tool_name):
+                            arguments = dict(arguments)
+                        if tool_name in {
+                            "record_observation",
+                            "update_knowledge",
+                            "suggest_next_session",
+                            "set_depth_signal",
+                        }:
+                            tool = _rebind_action_tool(tool, side_effects)
+                        tool_result = tool.handler(arguments)
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call_id,
+                            "name": tool_name,
+                            "content": json.dumps(tool_result, ensure_ascii=False),
+                        }
+                    )
+                    used_any_tool = True
+                    yield {"type": "context", "name": tool_name}
+                    summary = tool_summary(tool_name)
+                    if summary:
+                        yield {"type": "reasoning", "text": summary}
+                continue
+
+            if completion.content.strip():
+                if not used_any_tool:
+                    raise ModelClientError(
+                        "model returned a final answer before reading any required tool context"
+                    )
+
+                raw_output = completion.content.strip()
+                validation_error = ""
+                yield {"type": "phase", "phase": "parse_result"}
+                try:
+                    result_model = validate_json_response(raw_output, response_model)
+                except (ValueError, json.JSONDecodeError) as exc:
+                    result_model = None
+                    validation_error = str(exc)
+                else:
+                    if result_validator is not None:
+                        validation_error = result_validator(result_model, side_effects)
+
+                if validation_error:
+                    validation_attempts += 1
+                    if validation_attempts >= 2:
+                        raise ModelClientError(
+                            f"{task_name} failed after validation retries: {validation_error}"
+                        )
+                    messages.append({"role": "assistant", "content": raw_output})
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "上一次输出没有过校验，请修正这些问题后重新生成："
+                                f"{validation_error}"
+                            ),
+                        }
+                    )
+                    yield {
+                        "type": "reasoning",
+                        "text": f"输出没有过校验，正在按约束重试：{validation_error}",
+                    }
+                    continue
+
+                yield {"type": "content", "text": raw_output}
+                payload = {
+                    "result": result_model.model_dump(mode="json"),
+                    "raw_output": raw_output,
+                }
+                if side_effects:
+                    payload["side_effects"] = side_effects
+                yield {"type": "result", "data": payload}
+                return
 
             raise ModelClientError("model returned neither content nor tool calls")
 
@@ -383,10 +617,12 @@ class AgentRuntime:
     def _run_single_shot(
         self,
         *,
+        task_name: str,
         response_model: type[BaseModel],
         system_prompt: str,
         user_prompt: str,
         tools: list[RuntimeTool],
+        result_validator: Any = None,
     ) -> TaskExecutionResult[BaseModel]:
         model_client = self._require_model_client()
 
@@ -406,6 +642,12 @@ class AgentRuntime:
         if not completion.content.strip():
             raise ModelClientError("model returned empty content in single-shot mode")
         result_model = validate_json_response(completion.content, response_model)
+        if result_validator is not None:
+            validation_error = result_validator(result_model, {})
+            if validation_error:
+                raise ModelClientError(
+                    f"{task_name} single-shot validation failed: {validation_error}"
+                )
         return TaskExecutionResult(
             result=result_model,
             raw_output=completion.content.strip(),
@@ -414,10 +656,12 @@ class AgentRuntime:
     def _stream_single_shot_task(
         self,
         *,
+        task_name: str,
         response_model: type[BaseModel],
         system_prompt: str,
         user_prompt: str,
         tools: list[RuntimeTool],
+        result_validator: Any = None,
     ) -> Iterator[dict[str, Any]]:
         model_client = self._require_model_client()
 
@@ -463,6 +707,12 @@ class AgentRuntime:
             raise ModelClientError("model returned empty content in streaming mode")
 
         result_model = validate_json_response(raw_output, response_model)
+        if result_validator is not None:
+            validation_error = result_validator(result_model, {})
+            if validation_error:
+                raise ModelClientError(
+                    f"{task_name} streaming single-shot validation failed: {validation_error}"
+                )
         yield {
             "type": "result",
             "data": {
@@ -496,3 +746,47 @@ def _rebind_action_tool(tool: RuntimeTool, side_effects: dict[str, Any]) -> Runt
     else:
         return tool
     return rebound
+
+
+def _validate_evaluation_result(
+    request: EvaluateAnswerRequest,
+    result: EvaluationResult,
+    side_effects: dict[str, Any],
+) -> str:
+    score_keys = list(result.score_breakdown.keys())
+    if not score_keys:
+        return "missing score_breakdown"
+    if not result.strengths and not result.gaps:
+        return "missing strengths/gaps"
+
+    depth_signal = side_effects.get("depth_signal", "normal")
+    if depth_signal == "skip_followup":
+        if result.followup_question or result.followup_expected_points:
+            return "skip_followup must not include followup output"
+        return ""
+
+    is_last_turn = request.turn_index >= request.max_turns and depth_signal != "extend"
+    if is_last_turn:
+        if result.followup_question or result.followup_expected_points:
+            return "last turn must not include followup output"
+        return ""
+
+    if not result.followup_question:
+        return "missing followup_question on non-last turn"
+    if not result.followup_expected_points:
+        return "missing followup_expected_points on non-last turn"
+    return ""
+
+
+def _validate_review_result(result: ReviewCard, side_effects: dict[str, Any]) -> str:
+    if not result.overall:
+        return "missing overall"
+    if not result.top_fix:
+        return "missing top_fix"
+    if not result.top_fix_reason:
+        return "missing top_fix_reason"
+    if not result.score_breakdown:
+        return "missing score_breakdown"
+    if result.recommended_next is None and not side_effects.get("recommended_next"):
+        return "missing recommended_next"
+    return ""

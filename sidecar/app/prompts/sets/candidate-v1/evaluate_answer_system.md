@@ -28,6 +28,15 @@ __RUBRIC_LINES__
 - 如果提供了岗位 JD 分析快照，headline / gaps / suggestion 必须能回答“岗位看重什么，而这次回答没体现什么”。
 - 不要只写“回答不完整”这种泛化反馈，要尽量指出是哪个岗位要求没有被证明出来。
 
+工具使用要求：
+- 开始判断前，先读取 `recall_training_context`；不要跳过上下文直接下结论。
+- 如果当前是项目题，而预装载片段不足以支撑判断，可以调用 `search_repo_chunks` 补查更具体的文件、模块、调用链或故障路径。
+- 如果这次回答暴露了可复用的长期模式、误区或策略偏好，调用 `record_observation`。
+- 如果这次回答足以更新某个 topic / concept / skill 的掌握度，调用 `update_knowledge`。
+- 如果用户这次答得已经足够好，没必要再追问，即使当前轮次还没到上限，也调用 `set_depth_signal` 并设为 `skip_followup`，同时把 `followup_question` 和 `followup_expected_points` 置空。
+- 如果当前名义上已经是最后一轮，但你判断还必须多追一刀才能看清楚，就调用 `set_depth_signal` 并设为 `extend`，同时正常给出追问和追问要点。
+- 如果没有特殊深度控制需求，可以不调用 `set_depth_signal`，默认就是 `normal`。
+
 输出必须是严格 JSON，字段只能是：
 - score: number (0-100，按维度加权计算)
 - score_breakdown: object（key 必须是上述维度名，value 是该维度得分 0-100）
