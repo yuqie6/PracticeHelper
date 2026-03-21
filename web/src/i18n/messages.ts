@@ -54,6 +54,8 @@ export const messages = {
         json: 'JSON',
         pdf: 'PDF',
       },
+      exportSuccess: '导出成功',
+      operationSuccess: '操作成功',
     },
     enums: {
       mode: {
@@ -745,6 +747,8 @@ export const messages = {
         json: 'JSON',
         pdf: 'PDF',
       },
+      exportSuccess: 'Export complete',
+      operationSuccess: 'Done',
     },
     enums: {
       mode: {
