@@ -43,25 +43,11 @@ func (s *Service) getAgentContext(
 	if err != nil {
 		return nil, err
 	}
-	observations, err := s.repo.ListRelevantObservations(
-		ctx,
-		params.SessionID,
-		params.ProjectID,
-		params.JobTargetID,
-		params.Topic,
-		defaultLimit(params.ObservationLimit, 4),
-	)
+	observations, err := s.loadObservationMemory(ctx, params)
 	if err != nil {
 		return nil, err
 	}
-	summaries, err := s.repo.ListRelevantSessionMemorySummaries(
-		ctx,
-		params.Topic,
-		params.ProjectID,
-		params.JobTargetID,
-		params.SessionID,
-		defaultLimit(params.SessionSummaryLimit, 3),
-	)
+	summaries, err := s.loadSessionSummaryMemory(ctx, params)
 	if err != nil {
 		return nil, err
 	}

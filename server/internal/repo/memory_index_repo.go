@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"practicehelper/server/internal/domain"
 )
@@ -118,6 +119,83 @@ func (s *Store) ListMemoryIndexEntries(
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate memory index entries: %w", err)
+	}
+
+	return items, nil
+}
+
+func (s *Store) SearchMemoryIndexEntries(
+	ctx context.Context,
+	memoryType string,
+	topic string,
+	projectID string,
+	jobTargetID string,
+	excludeSessionID string,
+	limit int,
+) ([]domain.MemoryIndexEntry, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	topic = normalizeTopicLabel(topic)
+	projectID = strings.TrimSpace(projectID)
+	jobTargetID = strings.TrimSpace(jobTargetID)
+	excludeSessionID = strings.TrimSpace(excludeSessionID)
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, memory_type, scope_type, scope_id, topic, project_id, session_id, job_target_id,
+			tags_json, entities_json, summary, salience, confidence, freshness,
+			ref_table, ref_id, created_at, updated_at
+		FROM memory_index
+		WHERE memory_type = ? AND (? = '' OR session_id <> ?) AND (
+			(? <> '' AND (project_id = ? OR (scope_type = 'project' AND scope_id = ?))) OR
+			(? <> '' AND (job_target_id = ? OR (scope_type = 'job_target' AND scope_id = ?))) OR
+			(? <> '' AND topic = ?) OR
+			(scope_type = 'global' AND (? = '' OR topic = '' OR topic = ?)) OR
+			(? = '' AND ? = '' AND ? = '' AND scope_type = 'global')
+		)
+		ORDER BY
+			CASE
+				WHEN ? <> '' AND (project_id = ? OR (scope_type = 'project' AND scope_id = ?)) THEN 0
+				WHEN ? <> '' AND (job_target_id = ? OR (scope_type = 'job_target' AND scope_id = ?)) THEN 1
+				WHEN ? <> '' AND topic = ? THEN 2
+				WHEN scope_type = 'global' AND (? = '' OR topic = '' OR topic = ?) THEN 3
+				ELSE 4
+			END,
+			salience DESC,
+			confidence DESC,
+			freshness DESC,
+			updated_at DESC
+		LIMIT ?
+	`,
+		memoryType,
+		excludeSessionID, excludeSessionID,
+		projectID, projectID, projectID,
+		jobTargetID, jobTargetID, jobTargetID,
+		topic, topic,
+		topic, topic,
+		topic, projectID, jobTargetID,
+		projectID, projectID, projectID,
+		jobTargetID, jobTargetID, jobTargetID,
+		topic, topic,
+		topic, topic,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("search memory index entries: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	items := make([]domain.MemoryIndexEntry, 0, limit)
+	for rows.Next() {
+		item, err := scanMemoryIndexEntry(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, *item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate memory index search results: %w", err)
 	}
 
 	return items, nil

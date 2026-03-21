@@ -155,11 +155,26 @@ func (s *Store) UpsertKnowledgeNodes(
 		if node == nil {
 			continue
 		}
+		if node.ParentID != "" {
+			if err := s.ensureKnowledgeEdgeTx(
+				ctx,
+				tx,
+				node.ParentID,
+				nodeID,
+				domain.KnowledgeEdgeContains,
+			); err != nil {
+				return err
+			}
+		}
+		topic, err := s.resolveRootTopicTx(ctx, tx, node)
+		if err != nil {
+			return err
+		}
 		indexEntries = append(indexEntries, domain.MemoryIndexEntry{
 			MemoryType: "knowledge_node",
 			ScopeType:  node.ScopeType,
 			ScopeID:    node.ScopeID,
-			Topic:      rootTopicForNode(node),
+			Topic:      topic,
 			SessionID:  sessionID,
 			Summary:    node.Label,
 			Salience:   0.55,
@@ -448,14 +463,54 @@ func (s *Store) getKnowledgeNodeByIDTx(
 	return node, nil
 }
 
-func rootTopicForNode(node *domain.KnowledgeNode) string {
+func (s *Store) ensureKnowledgeEdgeTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	sourceID string,
+	targetID string,
+	edgeType string,
+) error {
+	if sourceID == "" || targetID == "" || edgeType == "" {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO knowledge_edges (source_id, target_id, edge_type, created_at)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(source_id, target_id, edge_type) DO NOTHING
+	`, sourceID, targetID, edgeType, nowUTC()); err != nil {
+		return fmt.Errorf("ensure knowledge edge %s -> %s (%s): %w", sourceID, targetID, edgeType, err)
+	}
+	return nil
+}
+
+func (s *Store) resolveRootTopicTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	node *domain.KnowledgeNode,
+) (string, error) {
 	if node == nil {
-		return ""
+		return "", nil
 	}
 	if node.NodeType == domain.KnowledgeNodeTypeTopic {
-		return node.Label
+		return node.Label, nil
 	}
-	return ""
+
+	parentID := node.ParentID
+	for depth := 0; depth < 8 && parentID != ""; depth++ {
+		parent, err := s.getKnowledgeNodeByIDTx(ctx, tx, parentID)
+		if err != nil {
+			return "", err
+		}
+		if parent == nil {
+			return "", nil
+		}
+		if parent.NodeType == domain.KnowledgeNodeTypeTopic {
+			return parent.Label, nil
+		}
+		parentID = parent.ParentID
+	}
+
+	return "", nil
 }
 
 func maxFloat(left float64, right float64) float64 {

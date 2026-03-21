@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"practicehelper/server/internal/domain"
 )
@@ -153,6 +154,54 @@ func (s *Store) ListRelevantObservations(
 	}
 
 	return items, nil
+}
+
+func (s *Store) GetObservationsByIDs(
+	ctx context.Context,
+	ids []string,
+) ([]domain.AgentObservation, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, 0, len(ids))
+	for _, id := range ids {
+		args = append(args, id)
+	}
+
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
+		SELECT id, session_id, scope_type, scope_id, topic, category, content, tags_json, relevance, created_at, archived_at
+		FROM agent_observations
+		WHERE archived_at = '' AND id IN (%s)
+	`, placeholders), args...)
+	if err != nil {
+		return nil, fmt.Errorf("get observations by ids: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	byID := make(map[string]domain.AgentObservation, len(ids))
+	for rows.Next() {
+		item, err := scanAgentObservation(rows)
+		if err != nil {
+			return nil, err
+		}
+		byID[item.ID] = *item
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate observations by ids: %w", err)
+	}
+
+	ordered := make([]domain.AgentObservation, 0, len(ids))
+	for _, id := range ids {
+		item, ok := byID[id]
+		if !ok {
+			continue
+		}
+		ordered = append(ordered, item)
+	}
+
+	return ordered, nil
 }
 
 func (s *Store) archiveExcessObservationsTx(ctx context.Context, tx *sql.Tx) error {

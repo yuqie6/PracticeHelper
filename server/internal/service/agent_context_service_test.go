@@ -148,6 +148,116 @@ func TestPersistReviewStoresSessionMemorySummary(t *testing.T) {
 	}
 }
 
+func TestGetAgentContextUsesMemoryIndexPlanner(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	if err := store.CreateObservations(ctx, "sess_obs_project", []domain.AgentObservation{
+		{
+			ID:        "obs_project",
+			SessionID: "sess_obs_project",
+			ScopeType: domain.MemoryScopeProject,
+			ScopeID:   "proj_1",
+			Topic:     "redis",
+			Category:  "pattern",
+			Content:   "项目里的缓存一致性答法更值得优先调取。",
+			Relevance: 0.55,
+		},
+		{
+			ID:        "obs_topic",
+			SessionID: "sess_obs_topic",
+			ScopeType: domain.MemoryScopeGlobal,
+			Topic:     "redis",
+			Category:  "pattern",
+			Content:   "通用 Redis 观察作为第二优先级。",
+			Relevance: 0.95,
+		},
+		{
+			ID:        "obs_noise",
+			SessionID: "sess_obs_noise",
+			ScopeType: domain.MemoryScopeGlobal,
+			Topic:     "kafka",
+			Category:  "pattern",
+			Content:   "不相关的 Kafka 观察不应被带进来。",
+			Relevance: 0.99,
+		},
+	}); err != nil {
+		t.Fatalf("CreateObservations() error = %v", err)
+	}
+
+	if err := store.UpsertSessionMemorySummary(ctx, &domain.SessionMemorySummary{
+		ID:               "sm_project",
+		SessionID:        "sess_prev_project",
+		Mode:             domain.ModeProject,
+		Topic:            "redis",
+		ProjectID:        "proj_1",
+		Summary:          "项目场景下的 Redis 总结应该排第一。",
+		RecommendedFocus: []string{"项目里的缓存一致性取舍"},
+		Salience:         0.6,
+	}); err != nil {
+		t.Fatalf("UpsertSessionMemorySummary() project error = %v", err)
+	}
+	if err := store.UpsertSessionMemorySummary(ctx, &domain.SessionMemorySummary{
+		ID:               "sm_topic",
+		SessionID:        "sess_prev_topic",
+		Mode:             domain.ModeBasics,
+		Topic:            "redis",
+		Summary:          "同 topic 的历史总结应该排在第二层。",
+		RecommendedFocus: []string{"Redis 基础表达"},
+		Salience:         0.95,
+	}); err != nil {
+		t.Fatalf("UpsertSessionMemorySummary() topic error = %v", err)
+	}
+	if err := store.UpsertSessionMemorySummary(ctx, &domain.SessionMemorySummary{
+		ID:               "sm_noise",
+		SessionID:        "sess_prev_noise",
+		Mode:             domain.ModeBasics,
+		Topic:            "kafka",
+		Summary:          "不相关的 Kafka 总结不应被带进来。",
+		RecommendedFocus: []string{"Kafka 基础"},
+		Salience:         0.99,
+	}); err != nil {
+		t.Fatalf("UpsertSessionMemorySummary() noise error = %v", err)
+	}
+
+	svc := New(store, nil)
+	agentContext, err := svc.getAgentContext(ctx, agentContextParams{
+		Topic:               "redis",
+		ProjectID:           "proj_1",
+		SessionID:           "sess_current",
+		ObservationLimit:    2,
+		SessionSummaryLimit: 2,
+		KnowledgeNodeLimit:  2,
+	})
+	if err != nil {
+		t.Fatalf("getAgentContext() error = %v", err)
+	}
+
+	if len(agentContext.Observations) != 2 {
+		t.Fatalf("expected 2 observations, got %d", len(agentContext.Observations))
+	}
+	if agentContext.Observations[0].ID != "obs_project" {
+		t.Fatalf("expected project observation first, got %q", agentContext.Observations[0].ID)
+	}
+	if agentContext.Observations[1].ID != "obs_topic" {
+		t.Fatalf("expected topic observation second, got %q", agentContext.Observations[1].ID)
+	}
+
+	if len(agentContext.SessionSummaries) != 2 {
+		t.Fatalf("expected 2 session summaries, got %d", len(agentContext.SessionSummaries))
+	}
+	if agentContext.SessionSummaries[0].ID != "sm_project" {
+		t.Fatalf("expected project summary first, got %q", agentContext.SessionSummaries[0].ID)
+	}
+	if agentContext.SessionSummaries[1].ID != "sm_topic" {
+		t.Fatalf("expected topic summary second, got %q", agentContext.SessionSummaries[1].ID)
+	}
+}
+
 func newAgentContextTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 

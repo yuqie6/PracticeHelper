@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"practicehelper/server/internal/domain"
 )
@@ -181,6 +182,56 @@ func (s *Store) ListRelevantSessionMemorySummaries(
 	}
 
 	return items, nil
+}
+
+func (s *Store) GetSessionMemorySummariesByIDs(
+	ctx context.Context,
+	ids []string,
+) ([]domain.SessionMemorySummary, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, 0, len(ids))
+	for _, id := range ids {
+		args = append(args, id)
+	}
+
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
+		SELECT id, session_id, mode, topic, project_id, job_target_id, prompt_set_id, summary,
+			strengths_json, gaps_json, misconceptions_json, growth_json,
+			recommended_focus_json, salience, created_at, updated_at
+		FROM session_memory_summaries
+		WHERE id IN (%s)
+	`, placeholders), args...)
+	if err != nil {
+		return nil, fmt.Errorf("get session memory summaries by ids: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	byID := make(map[string]domain.SessionMemorySummary, len(ids))
+	for rows.Next() {
+		item, err := scanSessionMemorySummary(rows)
+		if err != nil {
+			return nil, err
+		}
+		byID[item.ID] = *item
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate session memory summaries by ids: %w", err)
+	}
+
+	ordered := make([]domain.SessionMemorySummary, 0, len(ids))
+	for _, id := range ids {
+		item, ok := byID[id]
+		if !ok {
+			continue
+		}
+		ordered = append(ordered, item)
+	}
+
+	return ordered, nil
 }
 
 func (s *Store) getSessionMemorySummaryTx(

@@ -1327,6 +1327,162 @@ func TestCreateEvaluationLogPersistsEntry(t *testing.T) {
 	}
 }
 
+func TestSearchMemoryIndexEntriesPrioritizesProjectAndFiltersUnrelatedGlobal(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	if err := store.CreateObservations(ctx, "sess_obs_project", []domain.AgentObservation{
+		{
+			ID:        "obs_project",
+			SessionID: "sess_obs_project",
+			ScopeType: domain.MemoryScopeProject,
+			ScopeID:   "proj_1",
+			Topic:     "redis",
+			Category:  "pattern",
+			Content:   "项目上下文里的缓存一致性模式",
+			Relevance: 0.55,
+		},
+		{
+			ID:        "obs_topic",
+			SessionID: "sess_obs_topic",
+			ScopeType: domain.MemoryScopeGlobal,
+			Topic:     "redis",
+			Category:  "pattern",
+			Content:   "通用 Redis 表达模式",
+			Relevance: 0.95,
+		},
+		{
+			ID:        "obs_noise",
+			SessionID: "sess_obs_noise",
+			ScopeType: domain.MemoryScopeGlobal,
+			Topic:     "kafka",
+			Category:  "pattern",
+			Content:   "不相关的 Kafka 观察",
+			Relevance: 0.99,
+		},
+	}); err != nil {
+		t.Fatalf("CreateObservations() error = %v", err)
+	}
+
+	entries, err := store.SearchMemoryIndexEntries(
+		ctx,
+		"observation",
+		"redis",
+		"proj_1",
+		"",
+		"",
+		4,
+	)
+	if err != nil {
+		t.Fatalf("SearchMemoryIndexEntries() error = %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 relevant entries, got %d", len(entries))
+	}
+	if entries[0].RefID != "obs_project" {
+		t.Fatalf("expected project observation first, got %q", entries[0].RefID)
+	}
+	if entries[1].RefID != "obs_topic" {
+		t.Fatalf("expected topic observation second, got %q", entries[1].RefID)
+	}
+}
+
+func TestUpsertKnowledgeNodesCreatesContainsEdgeAndIndexesByRootTopic(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	if err := store.EnsureKnowledgeSeeds(ctx); err != nil {
+		t.Fatalf("EnsureKnowledgeSeeds() error = %v", err)
+	}
+
+	subgraph, err := store.GetKnowledgeSubgraph(ctx, "redis", "", 2)
+	if err != nil {
+		t.Fatalf("GetKnowledgeSubgraph() seed error = %v", err)
+	}
+	if len(subgraph.Nodes) == 0 {
+		t.Fatal("expected redis topic seed node")
+	}
+	root := subgraph.Nodes[0]
+
+	if err := store.UpsertKnowledgeNodes(ctx, "sess_knowledge_update", []domain.KnowledgeUpdate{
+		{
+			ScopeType:   domain.MemoryScopeGlobal,
+			ParentID:    root.ID,
+			Label:       "cache_consistency",
+			NodeType:    domain.KnowledgeNodeTypeConcept,
+			Proficiency: 2.5,
+			Confidence:  0.8,
+			Evidence:    "回答里能说出一致性目标，但 trade-off 还不够完整。",
+		},
+	}); err != nil {
+		t.Fatalf("UpsertKnowledgeNodes() error = %v", err)
+	}
+
+	subgraph, err = store.GetKnowledgeSubgraph(ctx, "redis", "", 6)
+	if err != nil {
+		t.Fatalf("GetKnowledgeSubgraph() updated error = %v", err)
+	}
+
+	var (
+		conceptID    string
+		containsEdge bool
+	)
+	for _, node := range subgraph.Nodes {
+		if node.Label == "cache_consistency" {
+			conceptID = node.ID
+			break
+		}
+	}
+	if conceptID == "" {
+		t.Fatal("expected concept node to be present in subgraph")
+	}
+	for _, edge := range subgraph.Edges {
+		if edge.SourceID == root.ID &&
+			edge.TargetID == conceptID &&
+			edge.EdgeType == domain.KnowledgeEdgeContains {
+			containsEdge = true
+			break
+		}
+	}
+	if !containsEdge {
+		t.Fatal("expected contains edge between redis topic and cache_consistency concept")
+	}
+
+	entries, err := store.SearchMemoryIndexEntries(
+		ctx,
+		"knowledge_node",
+		"redis",
+		"",
+		"",
+		"",
+		10,
+	)
+	if err != nil {
+		t.Fatalf("SearchMemoryIndexEntries() knowledge error = %v", err)
+	}
+
+	found := false
+	for _, entry := range entries {
+		if entry.RefID == conceptID {
+			found = true
+			if entry.Topic != "redis" {
+				t.Fatalf("expected indexed topic redis, got %q", entry.Topic)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected concept node to be searchable through memory index by root topic")
+	}
+}
+
 func openTestStore(t *testing.T) (*Store, error) {
 	t.Helper()
 
