@@ -66,8 +66,8 @@ describe('review helpers', () => {
 
     expect(normalizeEvaluationRawOutput(entry)).toBe('{"score":82}');
     expect(hasEvaluationRawOutput(entry)).toBe(true);
-    expect(hasEvaluationRawOutput(makeEvaluationLog({ raw_output: '   ' }))).toBe(
-      false,
-    );
+    expect(
+      hasEvaluationRawOutput(makeEvaluationLog({ raw_output: '   ' })),
+    ).toBe(false);
   });
 });

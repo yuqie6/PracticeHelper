@@ -73,18 +73,22 @@ export function buildOnboardingHref(step: OnboardingStepKey): string {
 }
 
 export function buildOnboardingSnapshot(
-  dashboard: {
-    profile?: unknown;
-    current_session?: unknown;
-    recent_sessions?: unknown[];
-  } | null | undefined,
+  dashboard:
+    | {
+        profile?: unknown;
+        current_session?: unknown;
+        recent_sessions?: unknown[];
+      }
+    | null
+    | undefined,
   projects: unknown[] | null | undefined,
 ): OnboardingSnapshot {
   return {
     hasProfile: Boolean(dashboard?.profile),
     hasProjects: Boolean(projects?.length),
     hasSessions: Boolean(
-      dashboard?.current_session || (dashboard?.recent_sessions?.length ?? 0) > 0,
+      dashboard?.current_session ||
+      (dashboard?.recent_sessions?.length ?? 0) > 0,
     ),
   };
 }

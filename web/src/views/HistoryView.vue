@@ -1,60 +1,82 @@
 <template>
-  <section class="neo-page space-y-6">
-    <header class="neo-panel bg-[var(--neo-yellow)]">
-      <p class="neo-kicker bg-white">{{ t('history.hero.kicker') }}</p>
-      <h1 class="text-xl font-black md:text-2xl">
-        {{ t('history.hero.title') }}
-      </h1>
+  <section class="neo-page history-page space-y-6 xl:space-y-8">
+    <header class="neo-panel-hero history-stage bg-[var(--neo-yellow)]">
+      <div class="history-stage-copy">
+        <p class="neo-kicker bg-white">{{ t('history.hero.kicker') }}</p>
+        <h1 class="history-stage-title">{{ t('history.hero.title') }}</h1>
+        <p class="history-stage-note">
+          {{
+            t('history.batch.description', {
+              format: exportFormatLabel,
+            })
+          }}
+        </p>
+      </div>
+
+      <div class="history-stage-stats">
+        <article class="history-stage-stat">
+          <span>{{ sessions.length }}</span>
+          <small>{{ t('history.openAction') }}</small>
+        </article>
+        <article class="history-stage-stat">
+          <span>{{ selectedCount }}</span>
+          <small>{{ t('history.batch.kicker') }}</small>
+        </article>
+        <article class="history-stage-stat">
+          <span>{{ totalPages }}</span>
+          <small>{{ t('history.hero.kicker') }}</small>
+        </article>
+      </div>
     </header>
 
-    <div class="grid gap-3 md:flex md:flex-wrap">
-      <select v-model="filters.mode" class="neo-select w-full md:w-auto">
-        <option value="">{{ t('history.filters.allModes') }}</option>
-        <option value="basics">{{ formatModeLabel(t, 'basics') }}</option>
-        <option value="project">{{ formatModeLabel(t, 'project') }}</option>
-      </select>
-      <select v-model="filters.topic" class="neo-select w-full md:w-auto">
-        <option value="">{{ t('history.filters.allTopics') }}</option>
-        <option v-for="topic in availableTopics" :key="topic" :value="topic">
-          {{ formatTopicLabel(t, topic) }}
-        </option>
-      </select>
-      <select v-model="filters.status" class="neo-select w-full md:w-auto">
-        <option value="">{{ t('history.filters.allStatuses') }}</option>
-        <option value="completed">
-          {{ formatStatusLabel(t, 'completed') }}
-        </option>
-        <option value="waiting_answer">
-          {{ formatStatusLabel(t, 'waiting_answer') }}
-        </option>
-        <option value="review_pending">
-          {{ formatStatusLabel(t, 'review_pending') }}
-        </option>
-      </select>
-    </div>
+    <div class="history-shell">
+      <aside class="history-side">
+        <section class="neo-panel history-filter-panel">
+          <div class="history-section-head">
+            <div class="space-y-2">
+              <p class="neo-kicker bg-[var(--neo-blue)]">
+                {{ t('history.filters.allModes') }}
+              </p>
+              <h2 class="history-section-title">
+                {{ t('history.hero.kicker') }}
+              </h2>
+            </div>
+          </div>
 
-    <div v-if="isLoading" class="space-y-3">
-      <div v-for="n in 5" :key="n" class="neo-skeleton h-24" />
-    </div>
+          <div class="history-filter-grid">
+            <select v-model="filters.mode" class="neo-select w-full">
+              <option value="">{{ t('history.filters.allModes') }}</option>
+              <option value="basics">{{ formatModeLabel(t, 'basics') }}</option>
+              <option value="project">
+                {{ formatModeLabel(t, 'project') }}
+              </option>
+            </select>
+            <select v-model="filters.topic" class="neo-select w-full">
+              <option value="">{{ t('history.filters.allTopics') }}</option>
+              <option
+                v-for="topic in availableTopics"
+                :key="topic"
+                :value="topic"
+              >
+                {{ formatTopicLabel(t, topic) }}
+              </option>
+            </select>
+            <select v-model="filters.status" class="neo-select w-full">
+              <option value="">{{ t('history.filters.allStatuses') }}</option>
+              <option value="completed">
+                {{ formatStatusLabel(t, 'completed') }}
+              </option>
+              <option value="waiting_answer">
+                {{ formatStatusLabel(t, 'waiting_answer') }}
+              </option>
+              <option value="review_pending">
+                {{ formatStatusLabel(t, 'review_pending') }}
+              </option>
+            </select>
+          </div>
+        </section>
 
-    <div v-else-if="!sessions.length" class="neo-panel bg-white">
-      <p class="neo-note">{{ t('history.empty') }}</p>
-    </div>
-
-    <NoticePanel
-      v-if="exportError"
-      tone="error"
-      dismissible
-      :title="t('history.exportErrorTitle')"
-      :message="exportError"
-      @dismiss="exportError = ''"
-    />
-
-    <div v-else class="space-y-3">
-      <div class="neo-panel-soft sticky top-4 z-10 space-y-3">
-        <div
-          class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
-        >
+        <section class="neo-panel-soft history-batch-panel">
           <div class="space-y-2">
             <p class="neo-kicker bg-[var(--neo-green)]">
               {{ t('history.batch.kicker') }}
@@ -70,136 +92,163 @@
               }}
             </p>
           </div>
-          <div class="flex flex-col gap-3 lg:items-end">
-            <label class="w-full space-y-2 sm:w-44">
-              <span class="text-xs font-black uppercase tracking-[0.08em]">
-                {{ t('common.exportFormatLabel') }}
-              </span>
-              <select v-model="exportFormat" class="neo-select">
-                <option
-                  v-for="item in exportFormatOptions"
-                  :key="item.value"
-                  :value="item.value"
-                >
-                  {{ item.label }}
-                </option>
-              </select>
-            </label>
-            <div class="flex flex-col gap-3 sm:flex-row">
-              <button
-                type="button"
-                class="neo-button w-full bg-white sm:w-auto"
-                @click="toggleSelectAll"
-              >
-                {{
-                  allSelectedOnPage
-                    ? t('history.batch.clearPageAction', {
-                        count: sessions.length,
-                      })
-                    : t('history.batch.selectPageAction', {
-                        count: sessions.length,
-                      })
-                }}
-              </button>
-              <button
-                type="button"
-                class="neo-button w-full bg-white sm:w-auto"
-                :disabled="selectedCount === 0"
-                @click="clearSelection"
-              >
-                {{ t('history.batch.clearAllAction') }}
-              </button>
-              <button
-                type="button"
-                class="neo-button-dark w-full sm:w-auto"
-                :disabled="selectedCount === 0 || isExporting"
-                @click="exportSelected"
-              >
-                {{
-                  isExporting
-                    ? t('history.batch.exportingAction')
-                    : t('history.batch.exportAction', {
-                        count: selectedCount,
-                        format: exportFormatLabel,
-                      })
-                }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <article
-        v-for="item in sessions"
-        :key="item.id"
-        class="neo-panel bg-white"
-      >
-        <div class="flex items-start gap-3">
-          <label class="flex shrink-0 items-center pt-1">
-            <input
-              class="neo-checkbox"
-              type="checkbox"
-              :checked="selectedSessionIds.includes(item.id)"
-              @change="toggleSelected(item.id)"
-            />
+          <label class="space-y-2">
+            <span class="text-xs font-black uppercase tracking-[0.08em]">
+              {{ t('common.exportFormatLabel') }}
+            </span>
+            <select v-model="exportFormat" class="neo-select">
+              <option
+                v-for="item in exportFormatOptions"
+                :key="item.value"
+                :value="item.value"
+              >
+                {{ item.label }}
+              </option>
+            </select>
           </label>
 
-          <RouterLink
-            :to="resolveSessionLink(item)"
-            class="block flex-1 space-y-3 transition-transform hover:-translate-y-0.5"
-          >
-            <div
-              class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+          <div class="history-batch-actions">
+            <button
+              type="button"
+              class="neo-button w-full bg-white"
+              @click="toggleSelectAll"
             >
-              <div class="space-y-2">
-                <span class="block text-base font-black">
-                  {{ formatModeLabel(t, item.mode) }}
-                  <template v-if="item.topic">
-                    · {{ formatTopicLabel(t, item.topic) }}</template
+              {{
+                allSelectedOnPage
+                  ? t('history.batch.clearPageAction', {
+                      count: sessions.length,
+                    })
+                  : t('history.batch.selectPageAction', {
+                      count: sessions.length,
+                    })
+              }}
+            </button>
+            <button
+              type="button"
+              class="neo-button w-full bg-white"
+              :disabled="selectedCount === 0"
+              @click="clearSelection"
+            >
+              {{ t('history.batch.clearAllAction') }}
+            </button>
+            <button
+              type="button"
+              class="neo-button-dark w-full"
+              :disabled="selectedCount === 0 || isExporting"
+              @click="exportSelected"
+            >
+              {{
+                isExporting
+                  ? t('history.batch.exportingAction')
+                  : t('history.batch.exportAction', {
+                      count: selectedCount,
+                      format: exportFormatLabel,
+                    })
+              }}
+            </button>
+          </div>
+        </section>
+
+        <NoticePanel
+          v-if="exportError"
+          tone="error"
+          dismissible
+          :title="t('history.exportErrorTitle')"
+          :message="exportError"
+          @dismiss="exportError = ''"
+        />
+      </aside>
+
+      <main class="history-main">
+        <div v-if="isLoading" class="space-y-3">
+          <div v-for="n in 5" :key="n" class="neo-skeleton h-24" />
+        </div>
+
+        <section
+          v-else-if="!sessions.length"
+          class="neo-panel history-empty-panel"
+        >
+          <p class="neo-note">{{ t('history.empty') }}</p>
+        </section>
+
+        <section v-else class="neo-panel history-results-panel">
+          <div class="history-section-head">
+            <div class="space-y-2">
+              <p class="neo-kicker bg-[var(--neo-yellow)]">
+                {{ t('history.openAction') }}
+              </p>
+              <h2 class="history-section-title">
+                {{ t('history.hero.title') }}
+              </h2>
+            </div>
+            <span class="neo-badge bg-white">
+              {{ currentPage }} / {{ totalPages }}
+            </span>
+          </div>
+
+          <article v-for="item in sessions" :key="item.id" class="history-row">
+            <label class="flex shrink-0 items-center pt-1">
+              <input
+                class="neo-checkbox"
+                type="checkbox"
+                :checked="selectedSessionIds.includes(item.id)"
+                @change="toggleSelected(item.id)"
+              />
+            </label>
+
+            <RouterLink :to="resolveSessionLink(item)" class="history-row-link">
+              <div class="history-row-top">
+                <div class="space-y-2">
+                  <span class="block text-base font-black">
+                    {{ formatModeLabel(t, item.mode) }}
+                    <template v-if="item.topic">
+                      · {{ formatTopicLabel(t, item.topic) }}</template
+                    >
+                    <template v-if="item.project_name">
+                      · {{ item.project_name }}</template
+                    >
+                  </span>
+                  <span
+                    v-if="item.prompt_set"
+                    class="neo-badge bg-[var(--neo-blue)]"
                   >
-                  <template v-if="item.project_name">
-                    · {{ item.project_name }}</template
-                  >
-                </span>
-                <span
-                  v-if="item.prompt_set"
-                  class="neo-badge bg-[var(--neo-blue)]"
-                >
-                  {{
-                    t('history.promptSetBadge', { name: item.prompt_set.label })
-                  }}
+                    {{
+                      t('history.promptSetBadge', {
+                        name: item.prompt_set.label,
+                      })
+                    }}
+                  </span>
+                </div>
+                <span class="text-sm font-semibold">
+                  {{ formatStatusLabel(t, item.status) }}
                 </span>
               </div>
-              <span class="text-sm font-semibold">
-                {{ formatStatusLabel(t, item.status) }}
-              </span>
-            </div>
-            <div
-              class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <span v-if="item.job_target" class="neo-note">
-                {{ item.job_target.title }}
-              </span>
-              <span v-else class="neo-note">{{
-                t('history.noJobTarget')
-              }}</span>
-              <span class="text-sm font-black">
-                {{ item.total_score > 0 ? item.total_score : '—' }}
-              </span>
-            </div>
-            <div
-              class="flex flex-col gap-2 text-xs font-semibold sm:flex-row sm:items-center sm:justify-between"
-            >
-              <span class="neo-note">
-                {{ new Date(item.updated_at).toLocaleString() }}
-              </span>
-              <span class="neo-badge bg-[var(--neo-yellow)]">
-                {{ t('history.openAction') }}
-              </span>
-            </div>
-          </RouterLink>
-        </div>
-      </article>
+
+              <div class="history-row-middle">
+                <span v-if="item.job_target" class="neo-note">
+                  {{ item.job_target.title }}
+                </span>
+                <span v-else class="neo-note">{{
+                  t('history.noJobTarget')
+                }}</span>
+                <span class="text-sm font-black">
+                  {{ item.total_score > 0 ? item.total_score : '—' }}
+                </span>
+              </div>
+
+              <div class="history-row-bottom">
+                <span class="neo-note">
+                  {{ new Date(item.updated_at).toLocaleString() }}
+                </span>
+                <span class="neo-badge bg-[var(--neo-yellow)]">
+                  {{ t('history.openAction') }}
+                </span>
+              </div>
+            </RouterLink>
+          </article>
+        </section>
+      </main>
     </div>
 
     <div
@@ -372,3 +421,194 @@ function resolveSessionLink(item: TrainingSessionSummary) {
   return item.review_id ? `/reviews/${item.review_id}` : `/sessions/${item.id}`;
 }
 </script>
+
+<style scoped>
+.history-page {
+  position: relative;
+}
+
+.history-stage {
+  display: grid;
+  gap: 1.5rem;
+  overflow: hidden;
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--neo-yellow) 88%, white) 0%,
+    color-mix(in srgb, var(--neo-yellow) 60%, var(--neo-green)) 100%
+  );
+}
+
+.history-stage::before {
+  content: '';
+  position: absolute;
+  inset: 1rem;
+  border: 1px solid color-mix(in srgb, var(--neo-border) 20%, transparent);
+  pointer-events: none;
+}
+
+.history-stage-copy,
+.history-stage-stats {
+  position: relative;
+  z-index: 1;
+}
+
+.history-stage-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.history-stage-title {
+  font-size: clamp(2.1rem, 6vw, 4.5rem);
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  line-height: 0.95;
+  margin: 0;
+  max-width: 11ch;
+  text-transform: uppercase;
+}
+
+.history-stage-note {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.7;
+  margin: 0;
+  max-width: 38rem;
+}
+
+.history-stage-stats {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.history-stage-stat {
+  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
+  border: 2px solid var(--neo-border);
+  box-shadow: 6px 6px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.history-stage-stat span {
+  font-size: clamp(2.4rem, 8vw, 4rem);
+  font-weight: 900;
+  letter-spacing: -0.08em;
+  line-height: 0.9;
+}
+
+.history-stage-stat small {
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.history-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.history-side,
+.history-main {
+  min-width: 0;
+}
+
+.history-filter-panel,
+.history-results-panel,
+.history-empty-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.history-section-head {
+  align-items: end;
+  border-bottom: 2px solid
+    color-mix(in srgb, var(--neo-border) 18%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-bottom: 1rem;
+}
+
+.history-section-title {
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.history-filter-grid,
+.history-batch-actions {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.history-row {
+  border-top: 1px solid color-mix(in srgb, var(--neo-border) 18%, transparent);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding-top: 1rem;
+}
+
+.history-row:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.history-row-link {
+  display: grid;
+  gap: 0.85rem;
+  transition: transform 180ms ease;
+}
+
+.history-row-link:hover {
+  transform: translateX(4px);
+}
+
+.history-row-top,
+.history-row-middle,
+.history-row-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+@media (min-width: 768px) {
+  .history-stage-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .history-row-top,
+  .history-row-middle,
+  .history-row-bottom {
+    align-items: center;
+    flex-direction: row;
+    justify-content: space-between;
+  }
+}
+
+@media (min-width: 1280px) {
+  .history-stage {
+    align-items: start;
+    grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.85fr);
+  }
+
+  .history-shell {
+    align-items: start;
+    grid-template-columns: minmax(18rem, 21rem) minmax(0, 1fr);
+  }
+
+  .history-side {
+    position: sticky;
+    top: 1.5rem;
+  }
+}
+</style>

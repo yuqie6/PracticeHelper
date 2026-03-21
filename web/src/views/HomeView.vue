@@ -1,97 +1,95 @@
 <template>
-  <section class="neo-page space-y-6">
-    <div
-      v-if="showOnboarding"
-      class="neo-panel space-y-4 bg-[var(--neo-yellow)]"
-    >
-      <p class="neo-kicker bg-white">{{ t('home.onboarding.kicker') }}</p>
-      <h2 class="text-xl font-black">{{ t('home.onboarding.title') }}</h2>
-      <p class="text-sm font-semibold">
-        {{ t('home.onboarding.description') }}
-      </p>
-      <ol class="space-y-3">
-        <li
-          v-for="step in onboardingSteps"
-          :key="step.key"
-          class="border-2 border-black md:border-4"
-          :class="onboardingStepClass(step.status)"
-        >
-          <RouterLink
-            :to="step.href"
-            class="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div class="flex items-start gap-3">
-              <span class="neo-badge bg-white">
-                {{ step.index }}
-              </span>
-              <div class="space-y-1">
-                <p class="text-base font-black">
-                  {{ step.label }}
-                </p>
-                <p class="neo-note">
-                  {{ step.hint }}
-                </p>
+  <section class="neo-page home-page space-y-6 xl:space-y-8">
+    <div class="home-stage-grid">
+      <section class="neo-panel-hero home-stage-main bg-[var(--neo-yellow)]">
+        <div class="home-stage-copy">
+          <p class="neo-kicker bg-white">{{ t('home.hero.kicker') }}</p>
+          <h2 class="home-stage-title">
+            {{ dashboard?.today_focus ?? t('common.firstTrainingHint') }}
+          </h2>
+          <p class="home-stage-support">
+            {{ heroSupport }}
+          </p>
+
+          <div class="home-stage-actions">
+            <RouterLink to="/train" class="neo-button-red w-full sm:w-auto">
+              {{ t('home.hero.actionPrimary') }}
+            </RouterLink>
+            <RouterLink
+              to="/projects"
+              class="neo-button w-full bg-white sm:w-auto"
+            >
+              {{ t('home.hero.actionSecondary') }}
+            </RouterLink>
+          </div>
+
+          <div v-if="showOnboarding" class="home-stage-steps">
+            <RouterLink
+              v-for="step in onboardingSteps"
+              :key="step.key"
+              :to="step.href"
+              class="home-stage-step"
+              :class="onboardingStepClass(step.status)"
+            >
+              <div class="flex items-start gap-3">
+                <span class="neo-badge bg-white">{{ step.index }}</span>
+                <div class="space-y-1">
+                  <p class="text-base font-black">
+                    {{ step.label }}
+                  </p>
+                  <p class="neo-note">
+                    {{ step.hint }}
+                  </p>
+                </div>
               </div>
-            </div>
-            <span class="text-xs font-black uppercase tracking-[0.08em]">
-              {{ t(`home.onboarding.status.${step.status}`) }}
-            </span>
-          </RouterLink>
-        </li>
-      </ol>
-    </div>
-
-    <div class="neo-grid xl:grid-cols-[1fr_1fr]">
-      <div class="neo-panel-hero flex flex-col bg-[var(--neo-yellow)] xl:p-10">
-        <p class="neo-kicker bg-white">{{ t('home.hero.kicker') }}</p>
-        <p class="text-lg font-bold leading-7 xl:text-xl">
-          {{ dashboard?.today_focus ?? t('common.firstTrainingHint') }}
-        </p>
-        <div class="mt-auto flex flex-col gap-3 pt-4 sm:flex-row sm:flex-wrap">
-          <RouterLink to="/train" class="neo-button-red w-full sm:w-auto">
-            {{ t('home.hero.actionPrimary') }}
-          </RouterLink>
-          <RouterLink
-            to="/projects"
-            class="neo-button w-full bg-white sm:w-auto"
-          >
-            {{ t('home.hero.actionSecondary') }}
-          </RouterLink>
-        </div>
-      </div>
-
-      <div class="neo-grid">
-        <div class="neo-panel bg-[var(--neo-blue)]">
-          <p class="neo-kicker bg-white">{{ t('home.deadline.kicker') }}</p>
-          <h3 class="text-xl font-black uppercase tracking-[0.06em]">
-            {{ t('home.deadline.title') }}
-          </h3>
-          <div class="mt-4 space-y-3">
-            <p class="text-6xl font-black">
-              {{ dashboard?.days_until_deadline ?? '--' }}
-            </p>
-            <p class="text-sm font-bold uppercase tracking-[0.08em]">
-              {{ t('common.daysRemainingLabel') }}
-            </p>
-            <p class="neo-note">
-              {{
-                dashboard?.days_until_deadline == null
-                  ? t('common.setDeadlineHint')
-                  : dashboard?.recommended_track
-              }}
-            </p>
+              <span class="home-stage-step-status">
+                {{ t(`home.onboarding.status.${step.status}`) }}
+              </span>
+            </RouterLink>
           </div>
         </div>
 
-        <div class="neo-panel">
+        <div class="home-stage-visual" aria-hidden="true">
+          <div class="home-stage-ring home-stage-ring-lg"></div>
+          <div class="home-stage-ring home-stage-ring-sm"></div>
+          <div class="home-stage-banner">{{ t('app.name') }}</div>
+          <div class="home-stage-chip home-stage-chip-deadline">
+            <span>{{ deadlineDisplay }}</span>
+            <small>{{ t('common.daysRemainingLabel') }}</small>
+          </div>
+          <div class="home-stage-chip home-stage-chip-reviews">
+            <span>{{ dueReviewDisplay }}</span>
+            <small>{{ t('home.dueReviews.kicker') }}</small>
+          </div>
+        </div>
+      </section>
+
+      <div class="home-stage-sidebar">
+        <article class="neo-panel home-signal home-signal-blue">
+          <p class="neo-kicker bg-white">{{ t('home.deadline.kicker') }}</p>
+          <h3 class="home-signal-title">{{ t('home.deadline.title') }}</h3>
+          <p class="home-signal-value">
+            {{ dashboard?.days_until_deadline ?? '--' }}
+          </p>
+          <p class="home-signal-label">{{ t('common.daysRemainingLabel') }}</p>
+          <p class="neo-note">
+            {{
+              dashboard?.days_until_deadline == null
+                ? t('common.setDeadlineHint')
+                : dashboard?.recommended_track
+            }}
+          </p>
+        </article>
+
+        <article class="neo-panel home-signal home-signal-paper">
           <p class="neo-kicker bg-[var(--neo-green)]">
             {{ t('home.currentSession.kicker') }}
           </p>
           <template v-if="currentSession">
-            <h3 class="text-xl font-black uppercase tracking-[0.06em]">
+            <h3 class="home-signal-title">
               {{ t('home.currentSession.title') }}
             </h3>
-            <p class="mt-3 text-base font-semibold">
+            <p class="home-signal-copy">
               {{
                 t('home.currentSession.description', {
                   name: formatSessionName(currentSession),
@@ -99,14 +97,14 @@
                 })
               }}
             </p>
-            <p class="neo-note mt-3">
+            <p class="neo-note">
               {{
                 t('common.lastUpdated', {
                   value: formatUpdatedAt(currentSession.updated_at),
                 })
               }}
             </p>
-            <p v-if="currentSession.job_target" class="neo-note mt-2">
+            <p v-if="currentSession.job_target" class="neo-note">
               {{
                 t('home.currentSession.jobTargetDescription', {
                   name: currentSession.job_target.title,
@@ -115,237 +113,329 @@
             </p>
             <RouterLink
               :to="buildSessionTarget(currentSession)"
-              class="neo-button-dark mt-4"
+              class="neo-button-dark mt-auto w-full"
             >
               {{ t('common.resume') }}
             </RouterLink>
           </template>
           <template v-else>
-            <h3 class="text-xl font-black uppercase tracking-[0.06em]">
+            <h3 class="home-signal-title">
               {{ t('home.currentSession.emptyTitle') }}
             </h3>
-            <p class="neo-note mt-3">
+            <p class="neo-note">
               {{ t('home.currentSession.emptyDescription') }}
             </p>
-          </template>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="dueReviews.length" class="neo-panel bg-[var(--neo-yellow)]">
-      <p class="neo-kicker bg-white">{{ t('home.dueReviews.kicker') }}</p>
-      <p class="text-sm font-semibold">
-        {{ t('home.dueReviews.description', { count: dueReviews.length }) }}
-      </p>
-      <div class="mt-3 grid gap-3 sm:flex sm:flex-wrap">
-        <div
-          v-for="item in dueReviews.slice(0, 5)"
-          :key="item.id"
-          class="border-2 border-black bg-white px-3 py-3 md:border-4"
-        >
-          <div
-            class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div class="space-y-1">
-              <p class="text-sm font-black uppercase">
-                {{
-                  item.weakness_kind
-                    ? formatWeaknessKindLabel(t, item.weakness_kind)
-                    : t('home.dueReviews.review')
-                }}
-              </p>
-              <p class="text-base font-bold">
-                {{
-                  resolveDueReviewHeadline(item) ||
-                  (item.topic
-                    ? formatTopicLabel(t, item.topic)
-                    : t('home.dueReviews.review'))
-                }}
-              </p>
-              <p class="neo-note">
-                {{
-                  item.topic
-                    ? t('home.dueReviews.topicHint', {
-                        topic: formatTopicLabel(t, item.topic),
-                      })
-                    : t('home.dueReviews.genericHint')
-                }}
-              </p>
-            </div>
-            <div class="flex flex-col gap-2 sm:w-auto sm:min-w-[10rem]">
-              <RouterLink
-                :to="buildDueReviewTarget(item)"
-                class="neo-button-dark w-full"
-              >
-                {{ t('home.dueReviews.startAction') }}
-              </RouterLink>
-              <button
-                class="neo-button w-full bg-white text-xs"
-                :aria-busy="completeMutation.isPending.value"
-                @click="completeMutation.mutate(item.id)"
-              >
-                {{ t('home.dueReviews.markDone') }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="neo-grid md:grid-cols-2 xl:grid-cols-4">
-      <StatCard
-        :kicker="t('home.cards.weaknessKicker')"
-        kicker-class="bg-[var(--neo-red)]"
-        :title="t('home.cards.weaknessTitle')"
-        :value="String(dashboard?.weaknesses?.length ?? 0)"
-        :description="weaknessSummary"
-      />
-      <StatCard
-        :kicker="t('home.cards.trackKicker')"
-        kicker-class="bg-[var(--neo-yellow)]"
-        :title="t('home.cards.trackTitle')"
-        :description="
-          dashboard?.recommended_track ?? t('common.noRecommendation')
-        "
-      />
-      <StatCard
-        :kicker="t('home.cards.jobTargetKicker')"
-        kicker-class="bg-[var(--neo-green)]"
-        :title="t('home.cards.jobTargetTitle')"
-        :description="jobTargetSummary"
-      />
-      <StatCard
-        :kicker="t('home.cards.profileKicker')"
-        kicker-class="bg-[var(--neo-blue)]"
-        :title="t('home.cards.profileTitle')"
-        :value="String(dashboard?.recent_sessions?.length ?? 0)"
-        :description="profileSummary"
-      />
-    </div>
-
-    <div class="neo-grid lg:grid-cols-[0.9fr_1.1fr]">
-      <div class="neo-panel">
-        <p class="neo-kicker bg-[var(--neo-red)]">
-          {{ t('home.sections.weaknesses') }}
-        </p>
-        <ul class="neo-stagger-list space-y-3">
-          <li
-            v-for="item in dashboard?.weaknesses ?? []"
-            :key="item.id"
-            class="flex items-center justify-between border-2 border-black bg-white px-3 py-3 md:border-4"
-          >
-            <div>
-              <p class="text-sm font-black uppercase">
-                {{ formatWeaknessKindLabel(t, item.kind) }}
-              </p>
-              <p class="text-lg font-bold">{{ item.label }}</p>
-            </div>
-            <span class="neo-badge bg-[var(--neo-yellow)]">
-              {{ t('common.severity', { value: item.severity.toFixed(2) }) }}
-            </span>
-          </li>
-          <li
-            v-if="!dashboard?.weaknesses.length"
-            class="space-y-2 border-2 border-black bg-[var(--neo-paper)] px-4 py-4 md:border-4"
-          >
-            <p class="neo-note">{{ t('home.sections.weaknessesEmpty') }}</p>
-            <RouterLink to="/train" class="neo-button-dark text-xs">
+            <RouterLink to="/train" class="neo-button-dark mt-auto w-full">
               {{ t('home.hero.actionPrimary') }}
             </RouterLink>
-          </li>
-        </ul>
-        <div v-if="trends.length" class="mt-4 space-y-2">
-          <p class="neo-subheading">{{ t('home.sections.weaknessTrends') }}</p>
-          <div
-            v-for="trend in trends"
-            :key="trend.id"
-            class="flex flex-col items-start gap-3 border-2 border-black bg-white px-3 py-2 sm:flex-row sm:items-center md:border-4"
-          >
-            <span class="w-24 truncate text-xs font-bold">{{
-              trend.label
-            }}</span>
-            <svg
-              v-if="trend.points.length >= 2"
-              viewBox="0 0 160 40"
-              class="h-10 w-40 flex-shrink-0"
-              preserveAspectRatio="none"
-            >
-              <path
-                :d="sparklinePath(trend)"
-                fill="none"
-                stroke="var(--neo-red)"
-                stroke-width="2"
-              />
-              <circle
-                :cx="sparklineEndpoints(trend).first.x"
-                :cy="sparklineEndpoints(trend).first.y"
-                r="3"
-                fill="var(--neo-red)"
-              />
-              <circle
-                :cx="sparklineEndpoints(trend).last.x"
-                :cy="sparklineEndpoints(trend).last.y"
-                r="3"
-                fill="var(--neo-red)"
-              />
-            </svg>
-            <span v-else class="text-xs text-gray-400">—</span>
-          </div>
-        </div>
-      </div>
+          </template>
+        </article>
 
-      <div class="neo-panel">
-        <div class="flex items-center justify-between gap-3">
-          <p class="neo-kicker bg-[var(--neo-green)]">
-            {{ t('home.sections.sessions') }}
+        <article
+          v-if="primaryDueReview"
+          class="neo-panel home-signal home-signal-red"
+        >
+          <p class="neo-kicker bg-white">{{ t('home.dueReviews.kicker') }}</p>
+          <h3 class="home-signal-title">
+            {{ formatDueReviewHeadline(primaryDueReview) }}
+          </h3>
+          <p class="neo-note">
+            {{ formatDueReviewHint(primaryDueReview) }}
           </p>
-          <p class="text-sm font-semibold">{{ sessionSummary }}</p>
-        </div>
-        <ul class="neo-stagger-list space-y-3">
-          <li
-            v-for="session in dashboard?.recent_sessions ?? []"
-            :key="session.id"
-          >
-            <RouterLink :to="buildSessionTarget(session)" class="neo-link-card">
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <div>
+          <div class="home-signal-actions">
+            <RouterLink
+              :to="buildDueReviewTarget(primaryDueReview)"
+              class="neo-button-dark w-full"
+            >
+              {{ t('home.dueReviews.startAction') }}
+            </RouterLink>
+            <button
+              class="neo-button w-full bg-white text-xs"
+              :aria-busy="completeMutation.isPending.value"
+              @click="completeMutation.mutate(primaryDueReview.id)"
+            >
+              {{ t('home.dueReviews.markDone') }}
+            </button>
+          </div>
+        </article>
+
+        <article v-else class="neo-panel home-signal home-signal-green">
+          <p class="neo-kicker bg-white">
+            {{ t('home.cards.jobTargetKicker') }}
+          </p>
+          <h3 class="home-signal-title">
+            {{ t('home.cards.jobTargetTitle') }}
+          </h3>
+          <p class="home-signal-copy">
+            {{ jobTargetSummary }}
+          </p>
+          <RouterLink to="/job-targets" class="neo-button-dark mt-auto w-full">
+            {{ t('app.nav.jobs') }}
+          </RouterLink>
+        </article>
+      </div>
+    </div>
+
+    <section class="neo-panel home-metric-strip">
+      <div class="home-metric-grid">
+        <article
+          v-for="item in summaryTiles"
+          :key="item.kicker"
+          class="home-metric-cell"
+        >
+          <p class="neo-kicker" :class="item.kickerClass">{{ item.kicker }}</p>
+          <p v-if="item.value" class="home-metric-value">{{ item.value }}</p>
+          <h3 class="home-metric-title">{{ item.title }}</h3>
+          <p class="neo-note home-metric-note">{{ item.description }}</p>
+        </article>
+      </div>
+    </section>
+
+    <div class="home-detail-grid">
+      <div class="home-detail-main">
+        <section class="neo-panel home-section">
+          <div class="home-section-head">
+            <div class="space-y-2">
+              <p class="neo-kicker bg-[var(--neo-red)]">
+                {{ t('home.sections.weaknesses') }}
+              </p>
+              <h3 class="home-section-title">
+                {{ t('home.cards.weaknessTitle') }}
+              </h3>
+            </div>
+            <p class="neo-note home-section-summary">{{ weaknessSummary }}</p>
+          </div>
+
+          <ul class="home-list">
+            <li
+              v-for="item in dashboard?.weaknesses ?? []"
+              :key="item.id"
+              class="home-list-row"
+            >
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="space-y-1">
                   <p class="text-sm font-black uppercase">
-                    {{ formatModeLabel(t, session.mode) }}
+                    {{ formatWeaknessKindLabel(t, item.kind) }}
                   </p>
-                  <p class="text-lg font-bold">
-                    {{ formatSessionName(session) }}
+                  <p class="text-xl font-black">
+                    {{ item.label }}
                   </p>
                 </div>
-                <span class="neo-badge bg-[var(--neo-blue)]">{{
-                  session.total_score.toFixed(1)
-                }}</span>
+                <span class="neo-badge bg-[var(--neo-yellow)]">
+                  {{
+                    t('common.severity', { value: item.severity.toFixed(2) })
+                  }}
+                </span>
               </div>
-              <div
-                class="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm font-semibold"
+            </li>
+            <li v-if="!dashboard?.weaknesses.length" class="home-empty-row">
+              <p class="neo-note">{{ t('home.sections.weaknessesEmpty') }}</p>
+              <RouterLink to="/train" class="neo-button-dark text-xs">
+                {{ t('home.hero.actionPrimary') }}
+              </RouterLink>
+            </li>
+          </ul>
+
+          <div v-if="trends.length" class="home-trend-grid">
+            <div
+              v-for="trend in trends"
+              :key="trend.id"
+              class="home-trend-card"
+            >
+              <div class="flex items-center justify-between gap-3">
+                <p class="text-sm font-black uppercase">{{ trend.label }}</p>
+                <span class="neo-badge bg-white">
+                  {{ t('home.sections.weaknessTrends') }}
+                </span>
+              </div>
+              <svg
+                v-if="trend.points.length >= 2"
+                viewBox="0 0 160 40"
+                class="h-10 w-full"
+                preserveAspectRatio="none"
               >
-                <span>{{ formatStatusLabel(t, session.status) }}</span>
-                <span>{{ formatUpdatedAt(session.updated_at) }}</span>
-              </div>
-              <p v-if="session.job_target" class="neo-note mt-2">
-                {{
-                  t('home.sessions.jobTargetDescription', {
-                    name: session.job_target.title,
-                  })
-                }}
+                <path
+                  :d="sparklinePath(trend)"
+                  fill="none"
+                  stroke="var(--neo-red)"
+                  stroke-width="2"
+                />
+                <circle
+                  :cx="sparklineEndpoints(trend).first.x"
+                  :cy="sparklineEndpoints(trend).first.y"
+                  r="3"
+                  fill="var(--neo-red)"
+                />
+                <circle
+                  :cx="sparklineEndpoints(trend).last.x"
+                  :cy="sparklineEndpoints(trend).last.y"
+                  r="3"
+                  fill="var(--neo-red)"
+                />
+              </svg>
+              <span v-else class="text-xs text-gray-400">—</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="neo-panel home-section">
+          <div class="home-section-head">
+            <div class="space-y-2">
+              <p class="neo-kicker bg-[var(--neo-green)]">
+                {{ t('home.sections.sessions') }}
               </p>
-            </RouterLink>
-          </li>
-          <li
-            v-if="!dashboard?.recent_sessions.length"
-            class="space-y-2 border-2 border-black bg-[var(--neo-paper)] px-4 py-4 md:border-4"
-          >
-            <p class="neo-note">{{ t('home.sections.sessionsEmpty') }}</p>
-            <RouterLink to="/train" class="neo-button-dark text-xs">
-              {{ t('home.hero.actionPrimary') }}
-            </RouterLink>
-          </li>
-        </ul>
+              <h3 class="home-section-title">
+                {{ t('home.cards.sessionTitle') }}
+              </h3>
+            </div>
+            <p class="neo-note home-section-summary">{{ sessionSummary }}</p>
+          </div>
+
+          <ul class="home-list">
+            <li
+              v-for="session in dashboard?.recent_sessions ?? []"
+              :key="session.id"
+              class="home-list-row"
+            >
+              <RouterLink
+                :to="buildSessionTarget(session)"
+                class="home-link-row"
+              >
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="space-y-1">
+                    <p class="text-sm font-black uppercase">
+                      {{ formatModeLabel(t, session.mode) }}
+                    </p>
+                    <p class="text-xl font-black">
+                      {{ formatSessionName(session) }}
+                    </p>
+                  </div>
+                  <span class="neo-badge bg-[var(--neo-blue)]">
+                    {{ session.total_score.toFixed(1) }}
+                  </span>
+                </div>
+                <div
+                  class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm font-semibold"
+                >
+                  <span>{{ formatStatusLabel(t, session.status) }}</span>
+                  <span>{{ formatUpdatedAt(session.updated_at) }}</span>
+                </div>
+                <p v-if="session.job_target" class="neo-note mt-3">
+                  {{
+                    t('home.sections.jobTargetDescription', {
+                      name: session.job_target.title,
+                    })
+                  }}
+                </p>
+              </RouterLink>
+            </li>
+            <li
+              v-if="!dashboard?.recent_sessions.length"
+              class="home-empty-row"
+            >
+              <p class="neo-note">{{ t('home.sections.sessionsEmpty') }}</p>
+              <RouterLink to="/train" class="neo-button-dark text-xs">
+                {{ t('home.hero.actionPrimary') }}
+              </RouterLink>
+            </li>
+          </ul>
+        </section>
       </div>
+
+      <aside class="home-detail-side">
+        <section
+          v-if="dueReviews.length"
+          class="neo-panel home-queue-panel bg-[var(--neo-yellow)]"
+        >
+          <div class="space-y-2">
+            <p class="neo-kicker bg-white">{{ t('home.dueReviews.kicker') }}</p>
+            <h3 class="home-section-title">
+              {{
+                t('home.dueReviews.description', { count: dueReviews.length })
+              }}
+            </h3>
+          </div>
+
+          <div class="home-queue-list">
+            <article
+              v-for="item in dueReviews.slice(0, 5)"
+              :key="item.id"
+              class="home-queue-item"
+            >
+              <div class="space-y-1">
+                <p class="text-sm font-black uppercase">
+                  {{
+                    item.weakness_kind
+                      ? formatWeaknessKindLabel(t, item.weakness_kind)
+                      : t('home.dueReviews.review')
+                  }}
+                </p>
+                <p class="text-lg font-black">
+                  {{ formatDueReviewHeadline(item) }}
+                </p>
+                <p class="neo-note">{{ formatDueReviewHint(item) }}</p>
+              </div>
+              <div class="home-queue-actions">
+                <RouterLink
+                  :to="buildDueReviewTarget(item)"
+                  class="neo-button-dark w-full"
+                >
+                  {{ t('home.dueReviews.startAction') }}
+                </RouterLink>
+                <button
+                  class="neo-button w-full bg-white text-xs"
+                  :aria-busy="completeMutation.isPending.value"
+                  @click="completeMutation.mutate(item.id)"
+                >
+                  {{ t('home.dueReviews.markDone') }}
+                </button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section
+          v-else-if="currentOnboardingStep"
+          class="neo-panel home-queue-panel bg-[var(--neo-green)]"
+        >
+          <div class="space-y-2">
+            <p class="neo-kicker bg-white">{{ t('home.onboarding.kicker') }}</p>
+            <h3 class="home-section-title">
+              {{ currentOnboardingStep.label }}
+            </h3>
+          </div>
+          <p class="neo-note">{{ currentOnboardingStep.hint }}</p>
+          <div class="flex items-center gap-3">
+            <span class="neo-badge bg-white">
+              {{ currentOnboardingStep.index }}
+            </span>
+            <span class="text-sm font-black uppercase tracking-[0.08em]">
+              {{ t(`home.onboarding.status.${currentOnboardingStep.status}`) }}
+            </span>
+          </div>
+          <RouterLink
+            :to="currentOnboardingStep.href"
+            class="neo-button-dark w-full"
+          >
+            {{ currentOnboardingStep.label }}
+          </RouterLink>
+        </section>
+
+        <section v-else class="neo-panel home-queue-panel bg-[var(--neo-blue)]">
+          <div class="space-y-2">
+            <p class="neo-kicker bg-white">{{ t('home.cards.trackKicker') }}</p>
+            <h3 class="home-section-title">
+              {{ t('home.cards.trackTitle') }}
+            </h3>
+          </div>
+          <p class="neo-note">
+            {{ dashboard?.recommended_track ?? t('common.noRecommendation') }}
+          </p>
+          <RouterLink to="/train" class="neo-button-dark w-full">
+            {{ t('home.hero.actionPrimary') }}
+          </RouterLink>
+        </section>
+      </aside>
     </div>
   </section>
 </template>
@@ -362,10 +452,10 @@ import {
   getWeaknessTrends,
   listDueReviews,
   listProjects,
+  type ReviewScheduleItem,
   type TrainingSessionSummary,
   type WeaknessTrend,
 } from '../api/client';
-import StatCard from '../components/StatCard.vue';
 import {
   buildDueReviewTarget,
   resolveDueReviewHeadline,
@@ -417,6 +507,7 @@ const dashboard = computed(() => data.value ?? null);
 const trends = computed(() => trendsData.value ?? []);
 const dueReviews = computed(() => dueReviewsData.value ?? []);
 const projects = computed(() => projectsData.value ?? []);
+const primaryDueReview = computed(() => dueReviews.value[0] ?? null);
 const completeMutation = useMutation({
   mutationFn: (id: number) => completeDueReview(id),
   onSuccess: () => {
@@ -448,6 +539,9 @@ const onboardingSteps = computed(() =>
     href: buildOnboardingHref(step.key),
   })),
 );
+const currentOnboardingStep = computed(
+  () => onboardingSteps.value.find((step) => step.status !== 'done') ?? null,
+);
 const weaknessSummary = computed(() => {
   locale.value;
   return describeWeakness(dashboard.value, t);
@@ -476,6 +570,50 @@ const jobTargetSummary = computed(() => {
       name: active.title,
     },
   );
+});
+const heroSupport = computed(() => {
+  locale.value;
+  return (
+    dashboard.value?.recommended_track ?? t('common.nextRecommendationHint')
+  );
+});
+const deadlineDisplay = computed(() => {
+  const days = dashboard.value?.days_until_deadline;
+  return days == null ? '--' : String(days).padStart(2, '0');
+});
+const dueReviewDisplay = computed(() =>
+  String(dueReviews.value.length).padStart(2, '0'),
+);
+const summaryTiles = computed(() => {
+  locale.value;
+  return [
+    {
+      kicker: t('home.cards.weaknessKicker'),
+      kickerClass: 'bg-[var(--neo-red)]',
+      title: t('home.cards.weaknessTitle'),
+      value: String(dashboard.value?.weaknesses?.length ?? 0),
+      description: weaknessSummary.value,
+    },
+    {
+      kicker: t('home.cards.trackKicker'),
+      kickerClass: 'bg-[var(--neo-yellow)]',
+      title: t('home.cards.trackTitle'),
+      description:
+        dashboard.value?.recommended_track ?? t('common.noRecommendation'),
+    },
+    {
+      kicker: t('home.cards.jobTargetKicker'),
+      kickerClass: 'bg-[var(--neo-green)]',
+      title: t('home.cards.jobTargetTitle'),
+      description: jobTargetSummary.value,
+    },
+    {
+      kicker: t('home.cards.profileKicker'),
+      kickerClass: 'bg-[var(--neo-blue)]',
+      title: t('home.cards.profileTitle'),
+      description: profileSummary.value,
+    },
+  ];
 });
 
 function formatSessionName(session: TrainingSessionSummary): string {
@@ -514,6 +652,23 @@ function formatUpdatedAt(raw: string): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(parsed);
+}
+
+function formatDueReviewHeadline(item: ReviewScheduleItem): string {
+  return (
+    resolveDueReviewHeadline(item) ||
+    (item.topic ? formatTopicLabel(t, item.topic) : t('home.dueReviews.review'))
+  );
+}
+
+function formatDueReviewHint(item: ReviewScheduleItem): string {
+  if (item.topic) {
+    return t('home.dueReviews.topicHint', {
+      topic: formatTopicLabel(t, item.topic),
+    });
+  }
+
+  return t('home.dueReviews.genericHint');
 }
 
 function sparklinePath(trend: WeaknessTrend): string {
@@ -559,3 +714,531 @@ function onboardingStepClass(status: OnboardingStepStatus): string {
   }
 }
 </script>
+
+<style scoped>
+.home-page {
+  position: relative;
+}
+
+.home-stage-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.home-stage-main {
+  display: grid;
+  gap: 1.5rem;
+  overflow: hidden;
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--neo-yellow) 88%, white) 0%,
+    color-mix(in srgb, var(--neo-yellow) 64%, var(--neo-red)) 100%
+  );
+}
+
+.home-stage-main::before {
+  content: '';
+  position: absolute;
+  inset: 1rem;
+  border: 1px solid color-mix(in srgb, var(--neo-border) 24%, transparent);
+  pointer-events: none;
+}
+
+.home-stage-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  position: relative;
+  z-index: 1;
+}
+
+.home-stage-title {
+  font-size: clamp(2.25rem, 7vw, 5.5rem);
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  line-height: 0.92;
+  margin: 0;
+  max-width: 10ch;
+  text-transform: uppercase;
+}
+
+.home-stage-support {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.7;
+  margin: 0;
+  max-width: 34rem;
+}
+
+.home-stage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.home-stage-steps {
+  border-top: 2px solid color-mix(in srgb, var(--neo-border) 22%, transparent);
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+  padding-top: 1rem;
+}
+
+.home-stage-step {
+  border: 2px solid var(--neo-border);
+  box-shadow: 4px 4px 0 0
+    rgba(var(--neo-shadow-rgb), calc(var(--neo-shadow-alpha) * 0.75));
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.home-stage-step:hover {
+  box-shadow: 8px 8px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
+  transform: translate(-2px, -2px);
+}
+
+.home-stage-step-status {
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.home-stage-visual {
+  min-height: 16rem;
+  position: relative;
+}
+
+.home-stage-ring {
+  border: 2px solid color-mix(in srgb, var(--neo-border) 20%, transparent);
+  border-radius: 999px;
+  position: absolute;
+}
+
+.home-stage-ring-lg {
+  height: 13rem;
+  right: -2rem;
+  top: 0.5rem;
+  width: 13rem;
+}
+
+.home-stage-ring-sm {
+  bottom: 1.5rem;
+  height: 7rem;
+  left: 1rem;
+  width: 7rem;
+}
+
+.home-stage-banner {
+  border: 2px solid var(--neo-border);
+  box-shadow: 4px 4px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
+  font-size: 0.78rem;
+  font-weight: 900;
+  left: 1rem;
+  letter-spacing: 0.24em;
+  padding: 0.55rem 0.85rem;
+  position: absolute;
+  text-transform: uppercase;
+  top: 1rem;
+  transform: rotate(-8deg);
+}
+
+.home-stage-chip {
+  --home-chip-rotate: 0deg;
+  animation: home-chip-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  background: color-mix(in srgb, var(--neo-surface) 92%, transparent);
+  border: 2px solid var(--neo-border);
+  box-shadow: 8px 8px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem 1.1rem;
+  position: absolute;
+}
+
+.home-stage-chip span {
+  font-size: clamp(2.5rem, 9vw, 4.8rem);
+  font-weight: 900;
+  letter-spacing: -0.08em;
+  line-height: 0.9;
+}
+
+.home-stage-chip small {
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  max-width: 11rem;
+  text-transform: uppercase;
+}
+
+.home-stage-chip-deadline {
+  --home-chip-rotate: 4deg;
+  right: 0.5rem;
+  top: 3.25rem;
+  transform: rotate(var(--home-chip-rotate));
+}
+
+.home-stage-chip-reviews {
+  --home-chip-rotate: -4deg;
+  bottom: 1rem;
+  left: 3rem;
+  transform: rotate(var(--home-chip-rotate));
+}
+
+.home-stage-sidebar {
+  display: grid;
+  gap: 1rem;
+}
+
+.home-signal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.home-signal-blue {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--neo-blue) 82%, white) 0%,
+    color-mix(in srgb, var(--neo-blue) 58%, var(--neo-paper)) 100%
+  );
+}
+
+.home-signal-paper {
+  background: var(--neo-paper);
+}
+
+.home-signal-red {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--neo-red) 72%, white) 0%,
+    color-mix(in srgb, var(--neo-red) 46%, var(--neo-paper)) 100%
+  );
+}
+
+.home-signal-green {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--neo-green) 78%, white) 0%,
+    color-mix(in srgb, var(--neo-green) 52%, var(--neo-paper)) 100%
+  );
+}
+
+.home-signal-title {
+  font-size: 1.2rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.home-signal-value {
+  font-size: clamp(3rem, 6vw, 4.8rem);
+  font-weight: 900;
+  letter-spacing: -0.08em;
+  line-height: 0.9;
+  margin: 0;
+}
+
+.home-signal-label {
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.home-signal-copy {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.7;
+  margin: 0;
+}
+
+.home-signal-actions {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: auto;
+}
+
+.home-metric-strip {
+  overflow: hidden;
+  padding: 0;
+}
+
+.home-metric-grid {
+  display: grid;
+}
+
+.home-metric-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 100%;
+  padding: 1.25rem;
+}
+
+.home-metric-cell + .home-metric-cell {
+  border-top: 2px solid color-mix(in srgb, var(--neo-border) 18%, transparent);
+}
+
+.home-metric-value {
+  font-size: 2.75rem;
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  line-height: 0.95;
+  margin: 0;
+}
+
+.home-metric-title {
+  font-size: 0.95rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.home-metric-note {
+  line-height: 1.7;
+  max-width: 30rem;
+}
+
+.home-detail-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.home-detail-main {
+  display: grid;
+  gap: 1rem;
+}
+
+.home-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.home-section-head {
+  align-items: end;
+  border-bottom: 2px solid
+    color-mix(in srgb, var(--neo-border) 18%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-bottom: 1rem;
+}
+
+.home-section-title {
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.home-section-summary {
+  line-height: 1.7;
+  margin: 0;
+  max-width: 28rem;
+}
+
+.home-list {
+  display: grid;
+  gap: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.home-list-row {
+  border-top: 1px solid color-mix(in srgb, var(--neo-border) 18%, transparent);
+  padding: 1rem 0;
+}
+
+.home-list-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.home-empty-row {
+  border-top: 1px solid color-mix(in srgb, var(--neo-border) 18%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 1rem;
+}
+
+.home-link-row {
+  display: block;
+  transition: transform 180ms ease;
+}
+
+.home-link-row:hover {
+  transform: translateX(4px);
+}
+
+.home-trend-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}
+
+.home-trend-card {
+  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
+  border: 2px solid var(--neo-border);
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.home-detail-side {
+  min-width: 0;
+}
+
+.home-queue-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.home-queue-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.home-queue-item {
+  background: color-mix(in srgb, var(--neo-surface) 88%, transparent);
+  border: 2px solid var(--neo-border);
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.home-queue-item:hover {
+  box-shadow: 8px 8px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
+  transform: translate(-2px, -2px);
+}
+
+.home-queue-actions {
+  display: grid;
+  gap: 0.65rem;
+}
+
+@keyframes home-chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) rotate(var(--home-chip-rotate)) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: rotate(var(--home-chip-rotate)) scale(1);
+  }
+}
+
+@media (min-width: 768px) {
+  .home-stage-grid {
+    gap: 1.5rem;
+  }
+
+  .home-stage-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .home-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .home-metric-cell:nth-child(2) {
+    border-top: 0;
+    border-left: 2px solid
+      color-mix(in srgb, var(--neo-border) 18%, transparent);
+  }
+
+  .home-metric-cell:nth-child(3),
+  .home-metric-cell:nth-child(4) {
+    border-top: 2px solid color-mix(in srgb, var(--neo-border) 18%, transparent);
+  }
+
+  .home-metric-cell:nth-child(4) {
+    border-left: 2px solid
+      color-mix(in srgb, var(--neo-border) 18%, transparent);
+  }
+}
+
+@media (min-width: 1280px) {
+  .home-stage-grid {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1.3fr) minmax(22rem, 0.7fr);
+  }
+
+  .home-stage-main {
+    align-items: stretch;
+    gap: 2rem;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.72fr);
+    min-height: 32rem;
+  }
+
+  .home-stage-visual {
+    min-height: auto;
+  }
+
+  .home-metric-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .home-metric-cell:nth-child(3),
+  .home-metric-cell:nth-child(4) {
+    border-top: 0;
+  }
+
+  .home-metric-cell + .home-metric-cell {
+    border-left: 2px solid
+      color-mix(in srgb, var(--neo-border) 18%, transparent);
+    border-top: 0;
+  }
+
+  .home-detail-grid {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
+  }
+
+  .home-queue-panel {
+    position: sticky;
+    top: 1.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-stage-step,
+  .home-stage-chip,
+  .home-link-row,
+  .home-queue-item {
+    animation: none;
+    transition: none;
+  }
+
+  .home-stage-step:hover,
+  .home-link-row:hover,
+  .home-queue-item:hover {
+    box-shadow: inherit;
+    transform: none;
+  }
+}
+</style>

@@ -1,10 +1,33 @@
 <template>
-  <section class="neo-page space-y-6">
-    <header class="neo-panel bg-[var(--neo-blue)]">
-      <p class="neo-kicker bg-white">{{ t('jobs.hero.kicker') }}</p>
-      <p class="text-base font-semibold">
-        {{ t('jobs.hero.description') }}
-      </p>
+  <section class="neo-page jobs-page space-y-6 xl:space-y-8">
+    <header class="neo-panel-hero jobs-stage bg-[var(--neo-blue)]">
+      <div class="jobs-stage-copy">
+        <p class="neo-kicker bg-white">{{ t('jobs.hero.kicker') }}</p>
+        <h1 class="jobs-stage-title">{{ t('app.nav.jobs') }}</h1>
+        <p class="jobs-stage-note">{{ t('jobs.hero.description') }}</p>
+      </div>
+
+      <div class="jobs-stage-side">
+        <article class="jobs-stage-stat">
+          <span>{{ jobTargets.length }}</span>
+          <small>{{ t('jobs.listTitle') }}</small>
+        </article>
+        <article class="jobs-stage-stat">
+          <span>{{ readyJobTargetCount }}</span>
+          <small>{{ t('jobs.readinessTitle') }}</small>
+        </article>
+        <article class="jobs-stage-stat">
+          <span>{{ analysisRuns.length }}</span>
+          <small>{{ t('jobs.historyTitle') }}</small>
+        </article>
+        <button
+          type="button"
+          class="neo-button-red w-full"
+          @click="startCreate"
+        >
+          {{ t('jobs.createAction') }}
+        </button>
+      </div>
     </header>
 
     <NoticePanel
@@ -32,81 +55,86 @@
       :message="activeError"
     />
 
-    <div class="neo-grid lg:grid-cols-[0.78fr_1.22fr]">
-      <div class="neo-panel space-y-4">
-        <div class="flex items-center justify-between gap-3">
-          <p class="neo-kicker bg-[var(--neo-yellow)]">
-            {{ t('jobs.listTitle') }}
-          </p>
-          <button type="button" class="neo-button-red" @click="startCreate">
-            {{ t('jobs.createAction') }}
-          </button>
-        </div>
-
-        <div v-if="jobTargets.length" class="neo-stagger-list space-y-3">
-          <button
-            v-for="target in jobTargets"
-            :key="target.id"
-            type="button"
-            class="w-full border-2 border-black bg-white px-4 py-3 text-left shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] md:border-4"
-            :class="{
-              'bg-[var(--neo-yellow)]': selectedJobTargetId === target.id,
-            }"
-            @click="selectTarget(target.id)"
-          >
-            <div class="flex items-center justify-between gap-3">
-              <div class="space-y-1">
-                <p class="text-sm font-black uppercase tracking-[0.08em]">
-                  {{ target.title }}
-                </p>
-                <p
-                  v-if="target.company_name"
-                  class="break-all text-sm font-semibold"
-                >
-                  {{ target.company_name }}
-                </p>
-              </div>
-              <span class="neo-badge bg-[var(--neo-green)]">
-                {{
-                  formatJobTargetAnalysisStatusLabel(
-                    t,
-                    target.latest_analysis_status,
-                  )
-                }}
-              </span>
+    <div class="jobs-shell">
+      <aside class="jobs-list-wrap">
+        <section class="neo-panel jobs-list-panel">
+          <div class="jobs-section-head">
+            <div class="space-y-2">
+              <p class="neo-kicker bg-[var(--neo-yellow)]">
+                {{ t('jobs.listTitle') }}
+              </p>
+              <h2 class="jobs-section-title">{{ t('jobs.listTitle') }}</h2>
             </div>
-            <p
-              v-if="activeJobTargetId === target.id"
-              class="mt-2 text-xs font-black uppercase tracking-[0.08em]"
-            >
-              {{ t('jobs.activeBadge') }}
-            </p>
-            <p class="mt-2 break-all text-xs font-semibold text-black/80">
-              {{
-                t('common.lastUpdated', {
-                  value: formatDateTime(target.updated_at),
-                })
-              }}
-            </p>
-          </button>
-        </div>
-        <p v-else class="neo-note">{{ t('jobs.emptyList') }}</p>
-      </div>
+            <span class="neo-badge bg-white">{{ jobTargets.length }}</span>
+          </div>
 
-      <div v-if="showEditor" class="space-y-6">
-        <div class="neo-panel space-y-4">
-          <div class="flex items-center justify-between gap-3">
-            <p class="neo-kicker bg-[var(--neo-red)]">
-              {{
-                selectedJobTarget
-                  ? t('jobs.editorTitle')
-                  : t('jobs.createTitle')
-              }}
-            </p>
-            <div
-              v-if="selectedJobTarget"
-              class="flex flex-col gap-3 sm:flex-row sm:flex-wrap"
+          <div v-if="jobTargets.length" class="jobs-list">
+            <button
+              v-for="target in jobTargets"
+              :key="target.id"
+              type="button"
+              class="jobs-list-row"
+              :class="{
+                'jobs-list-row-active': selectedJobTargetId === target.id,
+              }"
+              @click="selectTarget(target.id)"
             >
+              <div class="flex items-start justify-between gap-3">
+                <div class="space-y-1">
+                  <p class="text-sm font-black uppercase tracking-[0.08em]">
+                    {{ target.title }}
+                  </p>
+                  <p
+                    v-if="target.company_name"
+                    class="break-all text-sm font-semibold"
+                  >
+                    {{ target.company_name }}
+                  </p>
+                </div>
+                <span class="neo-badge bg-[var(--neo-green)]">
+                  {{
+                    formatJobTargetAnalysisStatusLabel(
+                      t,
+                      target.latest_analysis_status,
+                    )
+                  }}
+                </span>
+              </div>
+              <p
+                v-if="activeJobTargetId === target.id"
+                class="text-xs font-black uppercase tracking-[0.08em]"
+              >
+                {{ t('jobs.activeBadge') }}
+              </p>
+              <p class="break-all text-xs font-semibold text-black/80">
+                {{
+                  t('common.lastUpdated', {
+                    value: formatDateTime(target.updated_at),
+                  })
+                }}
+              </p>
+            </button>
+          </div>
+          <p v-else class="neo-note">{{ t('jobs.emptyList') }}</p>
+        </section>
+      </aside>
+
+      <div v-if="showEditor" class="jobs-detail">
+        <section class="neo-panel jobs-editor-panel">
+          <div class="jobs-section-head">
+            <div class="space-y-2">
+              <p class="neo-kicker bg-[var(--neo-red)]">
+                {{
+                  selectedJobTarget
+                    ? t('jobs.editorTitle')
+                    : t('jobs.createTitle')
+                }}
+              </p>
+              <h2 class="jobs-section-title">
+                {{ selectedJobTarget?.title || t('jobs.createTitle') }}
+              </h2>
+            </div>
+            <div v-if="selectedJobTarget" class="jobs-editor-actions">
               <button
                 type="button"
                 class="neo-button w-full bg-white sm:w-auto"
@@ -140,26 +168,28 @@
             {{ activeSelectionDescription }}
           </p>
 
-          <form class="space-y-4" @submit.prevent="submit">
-            <label class="space-y-2">
-              <span class="neo-subheading">{{ t('jobs.fields.title') }}</span>
-              <input
-                v-model="editor.title"
-                class="neo-input"
-                :placeholder="t('jobs.placeholders.title')"
-              />
-            </label>
+          <form class="jobs-editor-form" @submit.prevent="submit">
+            <div class="jobs-editor-grid">
+              <label class="space-y-2">
+                <span class="neo-subheading">{{ t('jobs.fields.title') }}</span>
+                <input
+                  v-model="editor.title"
+                  class="neo-input"
+                  :placeholder="t('jobs.placeholders.title')"
+                />
+              </label>
 
-            <label class="space-y-2">
-              <span class="neo-subheading">
-                {{ t('jobs.fields.companyName') }}
-              </span>
-              <input
-                v-model="editor.company_name"
-                class="neo-input"
-                :placeholder="t('jobs.placeholders.companyName')"
-              />
-            </label>
+              <label class="space-y-2">
+                <span class="neo-subheading">
+                  {{ t('jobs.fields.companyName') }}
+                </span>
+                <input
+                  v-model="editor.company_name"
+                  class="neo-input"
+                  :placeholder="t('jobs.placeholders.companyName')"
+                />
+              </label>
+            </div>
 
             <label class="space-y-2">
               <span class="neo-subheading">
@@ -184,48 +214,57 @@
               }}
             </button>
           </form>
-        </div>
+        </section>
 
-        <div v-if="selectedJobTarget" class="neo-panel space-y-4">
-          <p class="neo-kicker bg-[var(--neo-blue)]">
-            {{ t('jobs.readinessTitle') }}
-          </p>
-          <div
-            class="space-y-3 border-2 border-black bg-white px-4 py-4 md:border-4"
-          >
-            <p class="text-base font-black">
-              {{
-                formatJobTargetAnalysisStatusLabel(
-                  t,
-                  selectedJobTarget.latest_analysis_status,
-                )
-              }}
+        <div v-if="selectedJobTarget" class="jobs-insight-grid">
+          <section class="neo-panel jobs-info-panel">
+            <p class="neo-kicker bg-[var(--neo-blue)]">
+              {{ t('jobs.readinessTitle') }}
             </p>
-            <p class="neo-note">{{ selectedJobTargetReadinessDescription }}</p>
+            <div class="jobs-readiness-box">
+              <p class="text-base font-black">
+                {{
+                  formatJobTargetAnalysisStatusLabel(
+                    t,
+                    selectedJobTarget.latest_analysis_status,
+                  )
+                }}
+              </p>
+              <p class="neo-note">
+                {{ selectedJobTargetReadinessDescription }}
+              </p>
+            </div>
+          </section>
+
+          <section class="neo-panel jobs-info-panel">
+            <p class="neo-kicker bg-[var(--neo-green)]">
+              {{ t('jobs.latestAnalysisTitle') }}
+            </p>
+            <AnalysisResultPanel
+              v-if="selectedLatestAnalysis"
+              :analysis="selectedLatestAnalysis"
+              :description="latestSnapshotDescription"
+            />
+            <p v-else class="neo-note">{{ t('jobs.noLatestAnalysis') }}</p>
+          </section>
+        </div>
+
+        <section class="neo-panel jobs-history-panel">
+          <div class="jobs-section-head">
+            <div class="space-y-2">
+              <p class="neo-kicker bg-[var(--neo-yellow)]">
+                {{ t('jobs.historyTitle') }}
+              </p>
+              <h2 class="jobs-section-title">{{ t('jobs.historyTitle') }}</h2>
+            </div>
+            <span class="neo-badge bg-white">{{ analysisRuns.length }}</span>
           </div>
-        </div>
 
-        <div class="neo-panel space-y-4">
-          <p class="neo-kicker bg-[var(--neo-green)]">
-            {{ t('jobs.latestAnalysisTitle') }}
-          </p>
-          <AnalysisResultPanel
-            v-if="selectedLatestAnalysis"
-            :analysis="selectedLatestAnalysis"
-            :description="latestSnapshotDescription"
-          />
-          <p v-else class="neo-note">{{ t('jobs.noLatestAnalysis') }}</p>
-        </div>
-
-        <div class="neo-panel space-y-4">
-          <p class="neo-kicker bg-[var(--neo-yellow)]">
-            {{ t('jobs.historyTitle') }}
-          </p>
-          <div v-if="analysisRuns.length" class="neo-stagger-list space-y-3">
+          <div v-if="analysisRuns.length" class="jobs-history-list">
             <article
               v-for="run in analysisRuns"
               :key="run.id"
-              class="space-y-2 border-2 border-black bg-white px-4 py-4 md:border-4"
+              class="jobs-history-row"
             >
               <div class="flex items-center justify-between gap-3">
                 <p class="text-sm font-black uppercase tracking-[0.08em]">
@@ -251,17 +290,16 @@
             </article>
           </div>
           <p v-else class="neo-note">{{ t('jobs.historyEmpty') }}</p>
-        </div>
+        </section>
       </div>
 
-      <div v-else class="neo-panel space-y-3">
+      <section v-else class="neo-panel jobs-empty-panel">
         <p class="neo-kicker bg-[var(--neo-yellow)]">
           {{ t('jobs.noSelectionTitle') }}
         </p>
-        <p class="text-sm font-semibold">
-          {{ t('jobs.noSelectionDescription') }}
-        </p>
-      </div>
+        <h2 class="jobs-section-title">{{ t('app.nav.jobs') }}</h2>
+        <p class="neo-note">{{ t('jobs.noSelectionDescription') }}</p>
+      </section>
     </div>
   </section>
 </template>
@@ -314,6 +352,12 @@ const { data: profileData } = useQuery({
 });
 
 const jobTargets = computed(() => jobTargetsData.value ?? []);
+const readyJobTargetCount = computed(
+  () =>
+    jobTargets.value.filter(
+      (target) => target.latest_analysis_status === 'succeeded',
+    ).length,
+);
 const activeJobTargetId = computed(
   () => profileData.value?.active_job_target_id ?? '',
 );
@@ -554,3 +598,214 @@ function formatDateTime(value?: string) {
   return new Date(value).toLocaleString();
 }
 </script>
+
+<style scoped>
+.jobs-page {
+  position: relative;
+}
+
+.jobs-stage {
+  display: grid;
+  gap: 1.5rem;
+  overflow: hidden;
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--neo-blue) 84%, white) 0%,
+    color-mix(in srgb, var(--neo-blue) 58%, var(--neo-green)) 100%
+  );
+}
+
+.jobs-stage::before {
+  content: '';
+  position: absolute;
+  inset: 1rem;
+  border: 1px solid color-mix(in srgb, var(--neo-border) 20%, transparent);
+  pointer-events: none;
+}
+
+.jobs-stage-copy,
+.jobs-stage-side {
+  position: relative;
+  z-index: 1;
+}
+
+.jobs-stage-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.jobs-stage-title {
+  font-size: clamp(2.1rem, 6vw, 4.6rem);
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  line-height: 0.95;
+  margin: 0;
+  max-width: 10ch;
+  text-transform: uppercase;
+}
+
+.jobs-stage-note {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.7;
+  margin: 0;
+  max-width: 38rem;
+}
+
+.jobs-stage-side {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.jobs-stage-stat {
+  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
+  border: 2px solid var(--neo-border);
+  box-shadow: 6px 6px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.jobs-stage-stat span {
+  font-size: clamp(2.4rem, 8vw, 4rem);
+  font-weight: 900;
+  letter-spacing: -0.08em;
+  line-height: 0.9;
+}
+
+.jobs-stage-stat small {
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.jobs-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.jobs-list-panel,
+.jobs-editor-panel,
+.jobs-info-panel,
+.jobs-history-panel,
+.jobs-empty-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.jobs-section-head {
+  align-items: end;
+  border-bottom: 2px solid
+    color-mix(in srgb, var(--neo-border) 18%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-bottom: 1rem;
+}
+
+.jobs-section-title {
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.jobs-list,
+.jobs-history-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.jobs-list-row,
+.jobs-history-row,
+.jobs-readiness-box {
+  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
+  border: 2px solid var(--neo-border);
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.jobs-list-row:hover,
+.jobs-history-row:hover {
+  box-shadow: 8px 8px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
+  transform: translate(-2px, -2px);
+}
+
+.jobs-list-row-active {
+  background: color-mix(in srgb, var(--neo-yellow) 72%, white);
+}
+
+.jobs-detail {
+  display: grid;
+  gap: 1rem;
+}
+
+.jobs-editor-actions,
+.jobs-editor-form,
+.jobs-editor-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.jobs-insight-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .jobs-stage-side {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .jobs-editor-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .jobs-stage {
+    align-items: start;
+    grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.85fr);
+  }
+
+  .jobs-shell {
+    align-items: start;
+    grid-template-columns: minmax(18rem, 21rem) minmax(0, 1fr);
+  }
+
+  .jobs-list-wrap {
+    position: sticky;
+    top: 1.5rem;
+  }
+
+  .jobs-insight-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jobs-list-row,
+  .jobs-history-row {
+    transition: none;
+  }
+
+  .jobs-list-row:hover,
+  .jobs-history-row:hover {
+    box-shadow: inherit;
+    transform: none;
+  }
+}
+</style>

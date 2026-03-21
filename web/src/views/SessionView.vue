@@ -1,59 +1,31 @@
 <template>
-  <section class="neo-page space-y-6">
-    <header class="neo-panel bg-[var(--neo-yellow)]">
-      <p class="neo-kicker bg-white">{{ t('session.hero.kicker') }}</p>
-      <p class="text-base font-semibold">
-        {{ t('session.hero.description', { status: currentStatusLabel }) }}
-      </p>
-      <p v-if="session" class="mt-1 text-sm font-black">
-        {{
-          t('session.turnIndicator', {
-            current: currentTurnIndex,
-            total: session.max_turns,
-          })
-        }}
-      </p>
-    </header>
-
-    <div class="neo-panel space-y-2 bg-white">
-      <p class="neo-kicker bg-[var(--neo-blue)]">
-        {{ t('session.jobTargetTitle') }}
-      </p>
-      <p v-if="session?.job_target" class="text-base font-black">
-        {{ session.job_target.title }}
-      </p>
-      <p v-else class="text-sm font-semibold">
-        {{ t('session.jobTargetEmpty') }}
-      </p>
-      <p v-if="session?.job_target" class="neo-note">
-        {{ t('session.jobTargetDescription') }}
-      </p>
-    </div>
-
-    <div
-      v-if="showProgressPanel"
-      class="sticky top-4 z-10 space-y-4"
-      aria-live="polite"
-    >
-      <ProgressPanel
-        :kicker="t('session.processingKicker')"
-        :title="progressTitle"
-        :description="progressDescription"
-        :steps="progressSteps"
-        :active-index="progressStepIndex"
-      />
-
-      <div v-if="streamSections.length" class="max-h-[50vh] overflow-y-auto">
-        <StreamTracePanel
-          :kicker="t('session.processingKicker')"
-          :title="progressTitle"
-          :description="progressDescription"
-          :reasoning-title="t('session.reasoningTitle')"
-          :content-title="t('session.contentTitle')"
-          :sections="streamSections"
-        />
+  <section class="neo-page session-page space-y-6 xl:space-y-8">
+    <header class="neo-panel-hero session-stage bg-[var(--neo-yellow)]">
+      <div class="session-stage-copy">
+        <p class="neo-kicker bg-white">{{ t('session.hero.kicker') }}</p>
+        <h1 class="session-stage-title">
+          {{ currentTurn?.question || t('session.currentQuestion') }}
+        </h1>
+        <p class="session-stage-note">
+          {{ t('session.hero.description', { status: currentStatusLabel }) }}
+        </p>
       </div>
-    </div>
+
+      <div class="session-stage-stats">
+        <article class="session-stage-stat">
+          <span>{{ turnDisplay }}</span>
+          <small>{{ t('session.turnIndicator', { current: currentTurnIndex, total: session?.max_turns ?? 0 }) }}</small>
+        </article>
+        <article class="session-stage-stat">
+          <span>{{ latestScoreDisplay }}</span>
+          <small>{{ t('session.mainScore', { score: latestScoreDisplay }) }}</small>
+        </article>
+        <article class="session-stage-stat">
+          <span>{{ session?.job_target ? 'JD' : 'GEN' }}</span>
+          <small>{{ t('session.jobTargetTitle') }}</small>
+        </article>
+      </div>
+    </header>
 
     <NoticePanel
       v-if="submitError"
@@ -99,81 +71,151 @@
 
     <div
       v-else-if="session && currentTurn"
-      class="neo-grid lg:grid-cols-[1.1fr_0.9fr]"
+      class="session-shell"
     >
-      <div class="neo-panel space-y-4">
-        <p class="neo-kicker bg-[var(--neo-red)]">
-          {{ t('session.currentQuestion') }}
-        </p>
-        <div
-          v-if="followupIntent"
-          class="space-y-2 border-2 border-black bg-white px-4 py-4 md:border-4"
-        >
-          <p class="neo-subheading">{{ t('session.followupIntentTitle') }}</p>
-          <p class="text-sm font-semibold leading-6">{{ followupIntent }}</p>
-        </div>
-        <h3 class="text-2xl font-black">{{ currentTurn.question }}</h3>
-
-        <form
-          v-if="canAnswerCurrentSession"
-          class="space-y-4"
-          @submit.prevent="submit"
-        >
-          <Transition name="neo-turn" mode="out-in">
-            <div
-              v-if="showSubmittedAnswer"
-              key="submitted"
-              class="space-y-2 border-2 border-black bg-white px-4 py-4 md:border-4"
-            >
-              <p class="neo-subheading">
-                {{ t('session.submittedAnswerTitle') }}
+      <main class="session-main">
+        <section class="neo-panel session-question-panel">
+          <div class="session-section-head">
+            <div class="space-y-2">
+              <p class="neo-kicker bg-[var(--neo-red)]">
+                {{ t('session.currentQuestion') }}
               </p>
-              <p class="whitespace-pre-wrap text-sm font-semibold leading-6">
-                {{ submittedAnswer }}
-              </p>
-              <p class="neo-note">
-                {{ t('session.submittedAnswerDescription') }}
-              </p>
+              <h2 class="session-section-title">
+                {{
+                  t('session.turnIndicator', {
+                    current: currentTurnIndex,
+                    total: session.max_turns,
+                  })
+                }}
+              </h2>
             </div>
-            <div v-else key="draft" class="space-y-4">
-              <textarea
-                v-model="draftAnswer"
-                class="neo-textarea"
-                :placeholder="placeholderText"
-                :aria-label="placeholderText"
-                :disabled="isSubmitting || isBackgroundProcessing"
-                @keydown="handleAnswerKeydown"
-              />
-              <p class="neo-note">
-                {{ t('session.submitShortcutHint') }}
-              </p>
-              <button
-                type="submit"
-                class="neo-button-dark w-full sm:w-auto"
-                :class="{
-                  'animate-[neo-working_600ms_ease_infinite]': isSubmitting,
-                }"
-                :aria-busy="isSubmitting"
-                :disabled="isSubmitting || isBackgroundProcessing"
+            <span class="neo-badge bg-white">{{ currentStatusLabel }}</span>
+          </div>
+
+          <div
+            v-if="followupIntent"
+            class="session-intent-box"
+          >
+            <p class="neo-subheading">{{ t('session.followupIntentTitle') }}</p>
+            <p class="text-sm font-semibold leading-6">{{ followupIntent }}</p>
+          </div>
+
+          <h3 class="session-question-title">{{ currentTurn.question }}</h3>
+
+          <form
+            v-if="canAnswerCurrentSession"
+            class="session-answer-form"
+            @submit.prevent="submit"
+          >
+            <Transition name="neo-turn" mode="out-in">
+              <div
+                v-if="showSubmittedAnswer"
+                key="submitted"
+                class="session-submitted-box"
               >
-                {{ isSubmitting ? t('common.submitting') : t('common.submit') }}
-              </button>
-            </div>
-          </Transition>
-        </form>
-        <p v-else class="neo-note">
-          {{ t('session.answerLockedWhileProcessing') }}
-        </p>
-      </div>
+                <p class="neo-subheading">
+                  {{ t('session.submittedAnswerTitle') }}
+                </p>
+                <p class="whitespace-pre-wrap text-sm font-semibold leading-6">
+                  {{ submittedAnswer }}
+                </p>
+                <p class="neo-note">
+                  {{ t('session.submittedAnswerDescription') }}
+                </p>
+              </div>
+              <div v-else key="draft" class="space-y-4">
+                <textarea
+                  v-model="draftAnswer"
+                  class="neo-textarea session-answer-input"
+                  :placeholder="placeholderText"
+                  :aria-label="placeholderText"
+                  :disabled="isSubmitting || isBackgroundProcessing"
+                  @keydown="handleAnswerKeydown"
+                />
+                <div class="session-answer-footer">
+                  <p class="neo-note">
+                    {{ t('session.submitShortcutHint') }}
+                  </p>
+                  <button
+                    type="submit"
+                    class="neo-button-dark w-full sm:w-auto"
+                    :class="{
+                      'animate-[neo-working_600ms_ease_infinite]': isSubmitting,
+                    }"
+                    :aria-busy="isSubmitting"
+                    :disabled="isSubmitting || isBackgroundProcessing"
+                  >
+                    {{
+                      isSubmitting ? t('common.submitting') : t('common.submit')
+                    }}
+                  </button>
+                </div>
+              </div>
+            </Transition>
+          </form>
+          <p v-else class="neo-note">
+            {{ t('session.answerLockedWhileProcessing') }}
+          </p>
+        </section>
+      </main>
 
-      <div class="neo-panel space-y-4">
-        <p class="neo-kicker bg-[var(--neo-green)]">
-          {{ t('session.feedback') }}
-        </p>
-        <FeedbackPanel v-if="latestEvaluation" :evaluation="latestEvaluation" />
-        <p v-else class="neo-note">{{ t('session.feedbackEmpty') }}</p>
-      </div>
+      <aside class="session-side">
+        <section
+          v-if="showProgressPanel"
+          class="neo-panel session-side-panel"
+          aria-live="polite"
+        >
+          <ProgressPanel
+            :kicker="t('session.processingKicker')"
+            :title="progressTitle"
+            :description="progressDescription"
+            :steps="progressSteps"
+            :active-index="progressStepIndex"
+          />
+
+          <div v-if="streamSections.length" class="max-h-[50vh] overflow-y-auto">
+            <StreamTracePanel
+              :kicker="t('session.processingKicker')"
+              :title="progressTitle"
+              :description="progressDescription"
+              :reasoning-title="t('session.reasoningTitle')"
+              :content-title="t('session.contentTitle')"
+              :sections="streamSections"
+            />
+          </div>
+        </section>
+
+        <section class="neo-panel session-side-panel">
+          <p class="neo-kicker bg-[var(--neo-blue)]">
+            {{ t('session.jobTargetTitle') }}
+          </p>
+          <h2 class="session-section-title">
+            {{ session.job_target?.title || t('session.jobTargetEmpty') }}
+          </h2>
+          <p v-if="session.job_target" class="neo-note">
+            {{ t('session.jobTargetDescription') }}
+          </p>
+          <p v-else class="neo-note">
+            {{ t('session.jobTargetEmpty') }}
+          </p>
+          <p v-if="session.prompt_set" class="neo-note">
+            {{ session.prompt_set.label }} · {{ session.prompt_set.status }}
+          </p>
+        </section>
+
+        <section class="neo-panel session-side-panel">
+          <p class="neo-kicker bg-[var(--neo-green)]">
+            {{ t('session.feedback') }}
+          </p>
+          <FeedbackPanel v-if="latestEvaluation" :evaluation="latestEvaluation" />
+          <p v-else class="neo-note">{{ t('session.feedbackEmpty') }}</p>
+        </section>
+      </aside>
     </div>
+
+    <section v-else class="neo-panel session-side-panel">
+      <p class="neo-note">{{ t('common.loading') }}</p>
+    </section>
   </section>
 </template>
 
@@ -256,6 +298,16 @@ const currentStatusLabel = computed(() => {
   }
 
   return formatStatusLabel(t, session.value.status);
+});
+const turnDisplay = computed(
+  () => `${currentTurnIndex.value}/${session.value?.max_turns ?? 0}`,
+);
+const latestScoreDisplay = computed(() => {
+  const score = latestEvaluation.value?.score;
+  if (score == null || Number.isNaN(score)) {
+    return '--';
+  }
+  return Number(score).toFixed(1);
 });
 
 const placeholderText = computed(() =>
@@ -569,3 +621,186 @@ function buildProgressStepDefinitions(
   ];
 }
 </script>
+
+<style scoped>
+.session-page {
+  position: relative;
+}
+
+.session-stage {
+  display: grid;
+  gap: 1.5rem;
+  overflow: hidden;
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--neo-yellow) 88%, white) 0%,
+    color-mix(in srgb, var(--neo-yellow) 60%, var(--neo-red)) 100%
+  );
+}
+
+.session-stage::before {
+  content: '';
+  position: absolute;
+  inset: 1rem;
+  border: 1px solid color-mix(in srgb, var(--neo-border) 20%, transparent);
+  pointer-events: none;
+}
+
+.session-stage-copy,
+.session-stage-stats {
+  position: relative;
+  z-index: 1;
+}
+
+.session-stage-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.session-stage-title {
+  font-size: clamp(1.8rem, 5vw, 3.8rem);
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  margin: 0;
+  max-width: 16ch;
+}
+
+.session-stage-note {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.7;
+  margin: 0;
+  max-width: 40rem;
+}
+
+.session-stage-stats {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.session-stage-stat {
+  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
+  border: 2px solid var(--neo-border);
+  box-shadow: 6px 6px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.session-stage-stat span {
+  font-size: clamp(2rem, 7vw, 3.4rem);
+  font-weight: 900;
+  letter-spacing: -0.08em;
+  line-height: 0.9;
+}
+
+.session-stage-stat small {
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.session-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.session-main,
+.session-side {
+  display: grid;
+  gap: 1rem;
+}
+
+.session-question-panel,
+.session-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.session-section-head {
+  align-items: end;
+  border-bottom: 2px solid color-mix(in srgb, var(--neo-border) 18%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-bottom: 1rem;
+}
+
+.session-section-title {
+  font-size: 1.25rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.session-intent-box,
+.session-submitted-box {
+  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
+  border: 2px solid var(--neo-border);
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.session-question-title {
+  font-size: clamp(1.6rem, 4vw, 2.8rem);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.session-answer-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.session-answer-input {
+  min-height: 18rem;
+}
+
+.session-answer-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+@media (min-width: 768px) {
+  .session-stage-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .session-answer-footer {
+    align-items: center;
+    flex-direction: row;
+  }
+}
+
+@media (min-width: 1280px) {
+  .session-stage {
+    align-items: start;
+    grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.85fr);
+  }
+
+  .session-shell {
+    align-items: start;
+    grid-template-columns: minmax(0, 1.1fr) minmax(20rem, 0.9fr);
+  }
+
+  .session-side {
+    position: sticky;
+    top: 1.5rem;
+  }
+}
+</style>

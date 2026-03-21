@@ -141,10 +141,8 @@ export const messages = {
         running: '这份 JD 正在分析中，分析完成前无法用于训练。',
         succeeded:
           '本轮将使用这份 JD 当前的分析结果；训练开始后，后续修改不影响本轮。',
-        failed:
-          '这份 JD 最近一次分析失败，修正内容或重新分析后才能用于训练。',
-        stale:
-          '这份 JD 原文已变更，旧分析仅供回看；重新分析后才能用于训练。',
+        failed: '这份 JD 最近一次分析失败，修正内容或重新分析后才能用于训练。',
+        stale: '这份 JD 原文已变更，旧分析仅供回看；重新分析后才能用于训练。',
         unknown: '当前无法确认这份 JD 是否可用于训练，请在岗位页重新检查。',
       },
       trainFallback: {
@@ -163,10 +161,8 @@ export const messages = {
       jobsReadiness: {
         idle: '这份 JD 还没有分析结果，暂时无法用于新训练。',
         running: '这份 JD 正在分析中，分析完成前暂时无法用于新训练。',
-        succeeded:
-          '这份 JD 原文与最新分析一致，可直接用于新训练。',
-        failed:
-          '这份 JD 当前分析失败。修正内容或重新分析后可恢复。',
+        succeeded: '这份 JD 原文与最新分析一致，可直接用于新训练。',
+        failed: '这份 JD 当前分析失败。修正内容或重新分析后可恢复。',
         stale:
           '这份 JD 原文已变更，当前分析已过期。旧分析仅供回看，新训练不会使用。',
         unknown: '这份 JD 暂时无法确认是否可用于训练，请重新检查。',
@@ -253,8 +249,7 @@ export const messages = {
         jobTargetKicker: 'JD',
         jobTargetTitle: '当前岗位上下文',
         jobTargetEmpty: '当前没有默认 JD，推荐和训练按通用模式处理。',
-        jobTargetScoped:
-          '当前默认 JD 是 {name}，推荐和训练已按岗位要求调整。',
+        jobTargetScoped: '当前默认 JD 是 {name}，推荐和训练已按岗位要求调整。',
         jobTargetUnavailable:
           '当前默认 JD 是 {name}，但当前原文还没有可用分析结果；重新分析后才会恢复岗位视角。',
         profileKicker: 'Profile',
@@ -449,7 +444,8 @@ export const messages = {
       onboarding: {
         kicker: '最后一步',
         title: '开始第一轮训练',
-        description: '参数不用一次配很复杂，先开始一轮，首页和历史数据就会真正跑起来。',
+        description:
+          '参数不用一次配很复杂，先开始一轮，首页和历史数据就会真正跑起来。',
       },
       fields: {
         mode: '训练模式',

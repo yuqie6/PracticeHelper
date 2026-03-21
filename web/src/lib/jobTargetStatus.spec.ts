@@ -46,11 +46,7 @@ describe('job target status helpers', () => {
 
   it('falls back to unknown copy for unsupported status', () => {
     expect(
-      describeJobTargetStatus(
-        t,
-        'jobsReadiness',
-        'unexpected-status' as never,
-      ),
+      describeJobTargetStatus(t, 'jobsReadiness', 'unexpected-status' as never),
     ).toContain('暂时无法确认');
   });
 });

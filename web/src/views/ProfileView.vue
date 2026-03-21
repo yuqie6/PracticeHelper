@@ -1,5 +1,5 @@
 <template>
-  <section class="neo-page space-y-6">
+  <section class="neo-page profile-page space-y-6 xl:space-y-8">
     <NoticePanel
       v-if="loadError"
       tone="error"
@@ -15,243 +15,269 @@
       {{ t('common.retry') }}
     </button>
 
-    <!-- Summary header for returning users -->
-    <header v-if="isReturningUser" class="neo-panel bg-[var(--neo-blue)]">
-      <p class="neo-kicker bg-white">{{ t('profile.hero.kicker') }}</p>
-      <h2 class="text-xl font-black">{{ t('profile.hero.returningTitle') }}</h2>
-      <p class="mt-1 text-base font-semibold">
-        {{
-          t('profile.hero.returningDescription', {
-            role: form.target_role || '—',
-            company: form.target_company_type || '—',
-            stage: form.current_stage || '—',
-          })
-        }}
-      </p>
-      <div class="mt-3 flex flex-wrap gap-3">
-        <span
+    <header
+      v-if="!isLoading"
+      class="neo-panel-hero profile-stage"
+      :class="
+        isReturningUser ? 'bg-[var(--neo-blue)]' : 'bg-[var(--neo-yellow)]'
+      "
+    >
+      <div class="profile-stage-copy">
+        <p class="neo-kicker bg-white">{{ t('profile.hero.kicker') }}</p>
+        <h1 class="profile-stage-title">
+          {{
+            isReturningUser
+              ? t('profile.hero.returningTitle')
+              : t('profile.hero.newUserTitle')
+          }}
+        </h1>
+        <p class="profile-stage-note">
+          {{
+            isReturningUser
+              ? t('profile.hero.returningDescription', {
+                  role: form.target_role || '—',
+                  company: form.target_company_type || '—',
+                  stage: form.current_stage || '—',
+                })
+              : t('profile.hero.newUserDescription')
+          }}
+        </p>
+      </div>
+
+      <div class="profile-stage-stats">
+        <article
           v-if="dashboard?.days_until_deadline != null"
-          class="neo-badge bg-white"
+          class="profile-stage-stat"
         >
-          {{
-            t('profile.summaryStats.deadline', {
-              days: dashboard.days_until_deadline,
-            })
-          }}
-        </span>
-        <span v-if="techStacks.length" class="neo-badge bg-white">
-          {{
-            t('profile.summaryStats.techCount', { count: techStacks.length })
-          }}
-        </span>
-        <span class="neo-badge bg-white">
-          {{
-            t('profile.summaryStats.sessionCount', {
-              count: dashboard?.recent_sessions?.length ?? 0,
-            })
-          }}
-        </span>
+          <span>{{ dashboard.days_until_deadline }}</span>
+          <small>{{ t('common.daysRemainingLabel') }}</small>
+        </article>
+        <article class="profile-stage-stat">
+          <span>{{ techStacks.length }}</span>
+          <small>{{ t('profile.fields.techStacks') }}</small>
+        </article>
+        <article class="profile-stage-stat">
+          <span>{{ projects.length }}</span>
+          <small>{{ t('profile.fields.linkedProjects') }}</small>
+        </article>
+        <article class="profile-stage-stat">
+          <span>{{ systemWeaknesses.length }}</span>
+          <small>{{ t('profile.fields.systemWeaknesses') }}</small>
+        </article>
       </div>
     </header>
 
-    <!-- Guided header for new users -->
-    <header v-else-if="!isLoading" class="neo-panel bg-[var(--neo-yellow)]">
-      <p class="neo-kicker bg-white">{{ t('profile.hero.kicker') }}</p>
-      <h2 class="text-xl font-black">{{ t('profile.hero.newUserTitle') }}</h2>
-      <p class="mt-1 text-base font-semibold">
-        {{ t('profile.hero.newUserDescription') }}
-      </p>
-    </header>
+    <NoticePanel
+      v-if="saveError"
+      tone="error"
+      :title="t('profile.saveErrorTitle')"
+      :message="saveError"
+    />
 
-    <!-- Save success summary card -->
-    <div v-if="savedSummary" class="neo-panel space-y-3 bg-[var(--neo-green)]">
-      <p class="text-lg font-black">{{ t('profile.saveSuccess') }}</p>
-      <p class="text-base font-semibold">{{ savedSummary }}</p>
-      <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-        <RouterLink to="/train" class="neo-button-dark w-full sm:w-auto">{{
-          t('common.start')
-        }}</RouterLink>
-        <RouterLink to="/" class="neo-button w-full bg-white sm:w-auto">{{
-          t('app.nav.home')
-        }}</RouterLink>
-      </div>
-    </div>
-
-    <form class="space-y-6" @submit.prevent="submit">
-      <!-- Section A: Direction -->
-      <div class="neo-panel space-y-4">
-        <div>
-          <p class="neo-kicker bg-[var(--neo-red)]">A</p>
-          <h3 class="text-lg font-black">
-            {{ t('profile.sections.directionTitle') }}
-          </h3>
-          <p class="neo-note mt-1">{{ t('profile.sections.directionHint') }}</p>
-        </div>
-
-        <label class="space-y-2">
-          <span class="text-sm font-bold">{{
-            t('profile.fields.targetRole')
-          }}</span>
-          <input
-            v-model="form.target_role"
-            class="neo-input"
-            :class="{
-              '!border-[var(--neo-red)]': validationErrors.target_role,
-            }"
-            :placeholder="t('profile.placeholders.targetRole')"
-          />
-          <p
-            v-if="validationErrors.target_role"
-            class="text-xs font-bold text-[var(--neo-red)]"
-          >
-            {{ t('profile.validation.targetRoleRequired') }}
-          </p>
-        </label>
-
-        <div class="space-y-2">
-          <span class="text-sm font-bold">{{
-            t('profile.fields.targetCompanyType')
-          }}</span>
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="option in companyPresets"
-              :key="option.value"
-              type="button"
-              class="border-2 border-black px-3 py-1.5 text-sm font-bold md:border-4"
-              :class="
-                form.target_company_type === option.value
-                  ? 'bg-[var(--neo-yellow)]'
-                  : 'bg-white'
-              "
-              @click="form.target_company_type = option.value"
-            >
-              {{ option.label }}
-            </button>
+    <form class="profile-shell" @submit.prevent="submit">
+      <div class="profile-main">
+        <section class="neo-panel profile-section">
+          <div class="profile-section-head">
+            <div class="space-y-2">
+              <p class="neo-kicker bg-[var(--neo-red)]">A</p>
+              <h2 class="profile-section-title">
+                {{ t('profile.sections.directionTitle') }}
+              </h2>
+            </div>
+            <p class="neo-note profile-section-note">
+              {{ t('profile.sections.directionHint') }}
+            </p>
           </div>
-          <input
-            v-if="isCustomCompanyType"
-            v-model="form.target_company_type"
-            class="neo-input mt-2"
-            placeholder=""
-          />
-        </div>
-      </div>
 
-      <!-- Section B: Stage -->
-      <div class="neo-panel space-y-4">
-        <div>
-          <p class="neo-kicker bg-[var(--neo-blue)]">B</p>
-          <h3 class="text-lg font-black">
-            {{ t('profile.sections.stageTitle') }}
-          </h3>
-          <p class="neo-note mt-1">{{ t('profile.sections.stageHint') }}</p>
-        </div>
-
-        <div class="space-y-2">
-          <span class="text-sm font-bold">{{
-            t('profile.fields.currentStage')
-          }}</span>
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="option in stagePresets"
-              :key="option.value"
-              type="button"
-              class="border-2 border-black px-3 py-1.5 text-sm font-bold md:border-4"
-              :class="
-                form.current_stage === option.value
-                  ? 'bg-[var(--neo-yellow)]'
-                  : 'bg-white'
-              "
-              @click="form.current_stage = option.value"
+          <label class="space-y-2">
+            <span class="text-sm font-bold">{{
+              t('profile.fields.targetRole')
+            }}</span>
+            <input
+              v-model="form.target_role"
+              class="neo-input"
+              :class="{
+                '!border-[var(--neo-red)]': validationErrors.target_role,
+              }"
+              :placeholder="t('profile.placeholders.targetRole')"
+            />
+            <p
+              v-if="validationErrors.target_role"
+              class="text-xs font-bold text-[var(--neo-red)]"
             >
-              {{ option.label }}
-            </button>
-          </div>
-          <input
-            v-if="isCustomStage"
-            v-model="form.current_stage"
-            class="neo-input mt-2"
-            placeholder=""
-          />
-        </div>
+              {{ t('profile.validation.targetRoleRequired') }}
+            </p>
+          </label>
 
-        <label class="space-y-2">
-          <span class="text-sm font-bold">{{
-            t('profile.fields.applicationDeadline')
-          }}</span>
-          <input
-            v-model="form.application_deadline"
-            type="date"
-            class="neo-input"
-          />
-          <p v-if="!form.application_deadline" class="neo-note">
-            {{ t('profile.deadlineHint') }}
-          </p>
-        </label>
+          <div class="space-y-2">
+            <span class="text-sm font-bold">
+              {{ t('profile.fields.targetCompanyType') }}
+            </span>
+            <div class="profile-choice-grid">
+              <button
+                v-for="option in companyPresets"
+                :key="option.value"
+                type="button"
+                class="profile-choice"
+                :class="
+                  form.target_company_type === option.value
+                    ? 'profile-choice-active'
+                    : ''
+                "
+                @click="form.target_company_type = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+            <input
+              v-if="isCustomCompanyType"
+              v-model="form.target_company_type"
+              class="neo-input mt-2"
+              placeholder=""
+            />
+          </div>
+        </section>
+
+        <section class="neo-panel profile-section">
+          <div class="profile-section-head">
+            <div class="space-y-2">
+              <p class="neo-kicker bg-[var(--neo-blue)]">B</p>
+              <h2 class="profile-section-title">
+                {{ t('profile.sections.stageTitle') }}
+              </h2>
+            </div>
+            <p class="neo-note profile-section-note">
+              {{ t('profile.sections.stageHint') }}
+            </p>
+          </div>
+
+          <div class="space-y-2">
+            <span class="text-sm font-bold">{{
+              t('profile.fields.currentStage')
+            }}</span>
+            <div class="profile-choice-grid">
+              <button
+                v-for="option in stagePresets"
+                :key="option.value"
+                type="button"
+                class="profile-choice"
+                :class="
+                  form.current_stage === option.value
+                    ? 'profile-choice-active'
+                    : ''
+                "
+                @click="form.current_stage = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+            <input
+              v-if="isCustomStage"
+              v-model="form.current_stage"
+              class="neo-input mt-2"
+              placeholder=""
+            />
+          </div>
+
+          <label class="space-y-2">
+            <span class="text-sm font-bold">
+              {{ t('profile.fields.applicationDeadline') }}
+            </span>
+            <input
+              v-model="form.application_deadline"
+              type="date"
+              class="neo-input"
+            />
+            <p v-if="!form.application_deadline" class="neo-note">
+              {{ t('profile.deadlineHint') }}
+            </p>
+          </label>
+        </section>
+
+        <section class="neo-panel profile-section">
+          <div class="profile-section-head">
+            <div class="space-y-2">
+              <p class="neo-kicker bg-[var(--neo-green)]">C</p>
+              <h2 class="profile-section-title">
+                {{ t('profile.sections.techTitle') }}
+              </h2>
+            </div>
+            <p class="neo-note profile-section-note">
+              {{ t('profile.sections.techHint') }}
+            </p>
+          </div>
+
+          <div class="profile-tech-grid">
+            <div class="space-y-2">
+              <span class="text-sm font-bold">{{
+                t('profile.fields.techStacks')
+              }}</span>
+              <TagInput
+                v-model="techStacks"
+                :placeholder="t('profile.placeholders.techStacks')"
+                :suggestions="techSuggestions"
+              />
+            </div>
+
+            <div class="space-y-2">
+              <span class="text-sm font-bold">{{
+                t('profile.fields.weaknesses')
+              }}</span>
+              <TagInput
+                v-model="weaknesses"
+                :placeholder="t('profile.placeholders.weaknesses')"
+              />
+            </div>
+          </div>
+        </section>
       </div>
 
-      <!-- Section C: Tech -->
-      <div class="neo-panel space-y-4">
-        <div>
-          <p class="neo-kicker bg-[var(--neo-green)]">C</p>
-          <h3 class="text-lg font-black">
-            {{ t('profile.sections.techTitle') }}
-          </h3>
-          <p class="neo-note mt-1">{{ t('profile.sections.techHint') }}</p>
-        </div>
+      <aside class="profile-side">
+        <section
+          v-if="savedSummary"
+          class="neo-panel profile-side-panel bg-[var(--neo-green)]"
+        >
+          <p class="neo-kicker bg-white">{{ t('profile.saveSuccess') }}</p>
+          <h2 class="profile-section-title">{{ t('profile.saveSuccess') }}</h2>
+          <p class="neo-note">{{ savedSummary }}</p>
+          <div class="profile-side-actions">
+            <RouterLink to="/train" class="neo-button-dark w-full">
+              {{ t('common.start') }}
+            </RouterLink>
+            <RouterLink to="/" class="neo-button w-full bg-white">
+              {{ t('app.nav.home') }}
+            </RouterLink>
+          </div>
+        </section>
 
-        <div class="space-y-2">
-          <span class="text-sm font-bold">{{
-            t('profile.fields.techStacks')
-          }}</span>
-          <TagInput
-            v-model="techStacks"
-            :placeholder="t('profile.placeholders.techStacks')"
-            :suggestions="techSuggestions"
-          />
-        </div>
+        <section class="neo-panel profile-side-panel">
+          <p class="neo-kicker bg-[var(--neo-yellow)]">
+            {{ t('profile.fields.systemWeaknesses') }}
+          </p>
+          <h2 class="profile-section-title">
+            {{ t('profile.fields.linkedProjects') }}
+          </h2>
 
-        <div class="space-y-2">
-          <span class="text-sm font-bold">{{
-            t('profile.fields.weaknesses')
-          }}</span>
-          <TagInput
-            v-model="weaknesses"
-            :placeholder="t('profile.placeholders.weaknesses')"
-          />
-        </div>
-
-        <!-- System-tracked weaknesses -->
-        <div v-if="systemWeaknesses.length" class="space-y-2">
-          <span class="text-sm font-bold">{{
-            t('profile.fields.systemWeaknesses')
-          }}</span>
-          <div class="flex flex-wrap gap-2">
+          <div v-if="systemWeaknesses.length" class="profile-badge-cloud">
             <span
               v-for="w in systemWeaknesses"
               :key="w.id"
-              class="inline-flex items-center gap-1 border-2 border-black bg-[var(--neo-paper)] px-2 py-0.5 text-sm font-semibold"
+              class="profile-badge"
             >
               {{ w.label }}
-              <span class="text-xs font-bold opacity-60">{{
-                w.severity.toFixed(1)
-              }}</span>
+              <span class="text-xs font-bold opacity-60">
+                {{ w.severity.toFixed(1) }}
+              </span>
             </span>
           </div>
-        </div>
-        <p v-else class="neo-note">{{ t('profile.noSystemWeaknesses') }}</p>
+          <p v-else class="neo-note">{{ t('profile.noSystemWeaknesses') }}</p>
 
-        <!-- Linked projects -->
-        <div class="space-y-2">
-          <span class="text-sm font-bold">{{
-            t('profile.fields.linkedProjects')
-          }}</span>
-          <div v-if="projects.length" class="flex flex-wrap gap-2">
+          <div v-if="projects.length" class="profile-badge-cloud">
             <RouterLink
               v-for="p in projects"
               :key="p.id"
               :to="`/projects`"
-              class="inline-flex border-2 border-black bg-white px-2 py-0.5 text-sm font-bold hover:bg-[var(--neo-yellow)]"
+              class="profile-link-chip"
             >
               {{ p.name }}
             </RouterLink>
@@ -262,32 +288,40 @@
               {{ t('profile.goImportProject') }}
             </RouterLink>
           </p>
-        </div>
-      </div>
+        </section>
 
-      <div class="flex flex-wrap items-center gap-3">
-        <button
-          type="submit"
-          class="neo-button-dark w-full sm:w-auto"
-          :disabled="isSaving"
-        >
-          {{
-            isSaving
-              ? t('common.saving')
-              : isReturningUser
-                ? t('profile.saveAction')
-                : t('profile.saveAndTrain')
-          }}
-        </button>
-      </div>
+        <section class="neo-panel profile-side-panel">
+          <p class="neo-kicker bg-[var(--neo-blue)]">
+            {{ t('profile.hero.kicker') }}
+          </p>
+          <h2 class="profile-section-title">{{ form.target_role || '—' }}</h2>
+          <p class="neo-note">
+            {{
+              t('profile.hero.returningDescription', {
+                role: form.target_role || '—',
+                company: form.target_company_type || '—',
+                stage: form.current_stage || '—',
+              })
+            }}
+          </p>
+          <div class="profile-side-actions">
+            <button
+              type="submit"
+              class="neo-button-dark w-full"
+              :disabled="isSaving"
+            >
+              {{
+                isSaving
+                  ? t('common.saving')
+                  : isReturningUser
+                    ? t('profile.saveAction')
+                    : t('profile.saveAndTrain')
+              }}
+            </button>
+          </div>
+        </section>
+      </aside>
     </form>
-
-    <NoticePanel
-      v-if="saveError"
-      tone="error"
-      :title="t('profile.saveErrorTitle')"
-      :message="saveError"
-    />
   </section>
 </template>
 
@@ -510,3 +544,188 @@ function hasMeaningfulProfile(
   );
 }
 </script>
+
+<style scoped>
+.profile-page {
+  position: relative;
+}
+
+.profile-stage {
+  display: grid;
+  gap: 1.5rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.profile-stage::before {
+  content: '';
+  position: absolute;
+  inset: 1rem;
+  border: 1px solid color-mix(in srgb, var(--neo-border) 20%, transparent);
+  pointer-events: none;
+}
+
+.profile-stage-copy,
+.profile-stage-stats {
+  position: relative;
+  z-index: 1;
+}
+
+.profile-stage-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.profile-stage-title {
+  font-size: clamp(2.1rem, 6vw, 4.6rem);
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  line-height: 0.95;
+  margin: 0;
+  max-width: 12ch;
+  text-transform: uppercase;
+}
+
+.profile-stage-note {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.7;
+  margin: 0;
+  max-width: 38rem;
+}
+
+.profile-stage-stats {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.profile-stage-stat {
+  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
+  border: 2px solid var(--neo-border);
+  box-shadow: 6px 6px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.profile-stage-stat span {
+  font-size: clamp(2.4rem, 8vw, 4rem);
+  font-weight: 900;
+  letter-spacing: -0.08em;
+  line-height: 0.9;
+}
+
+.profile-stage-stat small {
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.profile-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.profile-main,
+.profile-side {
+  display: grid;
+  gap: 1rem;
+}
+
+.profile-section,
+.profile-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.profile-section-head {
+  align-items: end;
+  border-bottom: 2px solid
+    color-mix(in srgb, var(--neo-border) 18%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-bottom: 1rem;
+}
+
+.profile-section-title {
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.profile-section-note {
+  line-height: 1.7;
+  margin: 0;
+  max-width: 24rem;
+}
+
+.profile-choice-grid,
+.profile-badge-cloud,
+.profile-side-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.profile-choice,
+.profile-badge,
+.profile-link-chip {
+  align-items: center;
+  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
+  border: 2px solid var(--neo-border);
+  display: inline-flex;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.65rem 0.9rem;
+}
+
+.profile-choice {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.profile-choice-active {
+  background: color-mix(in srgb, var(--neo-yellow) 72%, white);
+}
+
+.profile-tech-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .profile-stage-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profile-tech-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .profile-stage {
+    align-items: start;
+    grid-template-columns: minmax(0, 1.1fr) minmax(18rem, 0.9fr);
+  }
+
+  .profile-shell {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
+  }
+
+  .profile-side {
+    position: sticky;
+    top: 1.5rem;
+  }
+}
+</style>
