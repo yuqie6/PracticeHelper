@@ -87,6 +87,8 @@ sidecar/app/
 2. **Single-shot 降级**：如果 tool-loop 失败（网络错误、JSON 解析失败等），将所有工具数据直接拼入 prompt，让 LLM 一次性输出结果。
 3. 两种模式都失败时，直接抛出异常，不做启发式兜底。
 
+这意味着当前 sidecar 已经是“带只读工具的受约束推理器”，但还不是带长期记忆、行动工具和渐进自主权的真正 agent。对应的后续升级方案见 [AGENT_DEEP_REDESIGN_PLAN.md](./AGENT_DEEP_REDESIGN_PLAN.md)。
+
 ### 3.2 仓库导入管线（repo_context.py）
 
 `analyze_repo` 被后台导入任务调用时：

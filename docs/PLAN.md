@@ -2,6 +2,8 @@
 
 本文档是当前阶段的执行计划。产品方向和阶段划分见 [VISION.md](./VISION.md)。
 
+如果后续要把 sidecar 从“带只读工具的 LLM pipeline”继续升级为“具备知识图谱记忆与渐进自主权的 ReAct agent”，当前仓库已经有一份按源码审校过的独立方案，见 [AGENT_DEEP_REDESIGN_PLAN.md](./AGENT_DEEP_REDESIGN_PLAN.md)。
+
 ## 已完成
 
 | Phase | 内容 | 交付物 |
@@ -122,6 +124,7 @@
 - 不再把已落地的多轮训练、弱项级待复习入口、评估审计面板重新写成“半成能力”
 - 把 Prompt 版本管理从 v1 继续补强：当前已有版本选择、A/B 对比和审计明细，但还没有在线编辑、更细粒度 flow 级切换和更强实验分析
 - 把检索升级视为独立未开始项审慎评估；当前项目训练仍是 SQLite FTS5，不要把 RAG 当成已经在做
+- 如果要继续推进 sidecar agent 化，按 [AGENT_DEEP_REDESIGN_PLAN.md](./AGENT_DEEP_REDESIGN_PLAN.md) 的 4 个 phase 渐进推进，而不是一次性推翻现有 stream / FSM / sidecar client 主链路
 - 继续保持 LangGraph 薄壳和 P2 体验项边界，不为了“更像 agent”继续扩图或顺手重做暗色模式、动效、导出
 
 ### 完成标准
