@@ -4,13 +4,14 @@ import json
 import logging
 import time
 from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel
 
 from app.config import Settings
 from app.llm_client import ModelClientError, OpenAICompatibleModelClient
-from app.repo_context import collect_repo_analysis_bundle
+from app.repo_context import RepoAnalysisBundle, collect_repo_analysis_bundle
 from app.runtime_prompts import (
     AnalyzeJobTargetDraft,
     AnalyzeRepoDraft,
@@ -41,6 +42,11 @@ from app.schemas import (
 
 logger = logging.getLogger(__name__)
 
+@dataclass(frozen=True)
+class TaskExecutionResult[ResultModelT: BaseModel]:
+    result: ResultModelT
+    raw_output: str = ""
+
 
 class AgentRuntime:
     def __init__(
@@ -54,13 +60,18 @@ class AgentRuntime:
         if self._model_client is None and settings.llm_enabled:
             self._model_client = OpenAICompatibleModelClient(settings)
 
-    def analyze_repo(self, request: AnalyzeRepoRequest) -> AnalyzeRepoResponse:
-        started_at = time.perf_counter()
-        logger.info("analyze_repo started repo_url=%s", request.repo_url)
+    def collect_repo_bundle(self, request: AnalyzeRepoRequest) -> RepoAnalysisBundle:
         self._require_model_client()
-        bundle = collect_repo_analysis_bundle(request, self._settings)
+        return collect_repo_analysis_bundle(request, self._settings)
+
+    def summarize_repo_bundle(
+        self,
+        bundle: RepoAnalysisBundle,
+    ) -> TaskExecutionResult[AnalyzeRepoResponse]:
+        started_at = time.perf_counter()
+        logger.info("analyze_repo summarize started repo_url=%s", bundle.repo_url)
         system_prompt, user_prompt, tools = analyze_repo_prompt_bundle(bundle)
-        draft = self._run_task(
+        draft_result = self._run_task(
             response_model=AnalyzeRepoDraft,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -71,48 +82,61 @@ class AgentRuntime:
             name=bundle.name,
             default_branch=bundle.default_branch,
             import_commit=bundle.import_commit,
-            summary=draft.summary,
+            summary=draft_result.result.summary,
             tech_stack=bundle.tech_stack,
-            highlights=draft.highlights,
-            challenges=draft.challenges,
-            tradeoffs=draft.tradeoffs,
-            ownership_points=draft.ownership_points,
-            followup_points=draft.followup_points,
+            highlights=draft_result.result.highlights,
+            challenges=draft_result.result.challenges,
+            tradeoffs=draft_result.result.tradeoffs,
+            ownership_points=draft_result.result.ownership_points,
+            followup_points=draft_result.result.followup_points,
             chunks=bundle.chunks,
         )
         logger.info(
-            "analyze_repo completed repo_url=%s duration_ms=%.2f",
-            request.repo_url,
+            "analyze_repo summarize completed repo_url=%s duration_ms=%.2f",
+            bundle.repo_url,
             (time.perf_counter() - started_at) * 1000,
         )
-        return response
+        return TaskExecutionResult(result=response, raw_output=draft_result.raw_output)
 
-    def analyze_job_target(self, request: AnalyzeJobTargetRequest) -> AnalyzeJobTargetResponse:
+    def analyze_repo(self, request: AnalyzeRepoRequest) -> AnalyzeRepoResponse:
+        bundle = self.collect_repo_bundle(request)
+        return self.summarize_repo_bundle(bundle).result
+
+    def analyze_job_target_task(
+        self,
+        request: AnalyzeJobTargetRequest,
+    ) -> TaskExecutionResult[AnalyzeJobTargetResponse]:
         started_at = time.perf_counter()
         logger.info("analyze_job_target started title=%s", request.title)
         self._require_model_client()
         system_prompt, user_prompt, tools = analyze_job_target_prompt_bundle(request)
-        draft = self._run_task(
+        draft_result = self._run_task(
             response_model=AnalyzeJobTargetDraft,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=tools,
         )
         response = AnalyzeJobTargetResponse(
-            summary=draft.summary,
-            must_have_skills=draft.must_have_skills,
-            bonus_skills=draft.bonus_skills,
-            responsibilities=draft.responsibilities,
-            evaluation_focus=draft.evaluation_focus,
+            summary=draft_result.result.summary,
+            must_have_skills=draft_result.result.must_have_skills,
+            bonus_skills=draft_result.result.bonus_skills,
+            responsibilities=draft_result.result.responsibilities,
+            evaluation_focus=draft_result.result.evaluation_focus,
         )
         logger.info(
             "analyze_job_target completed title=%s duration_ms=%.2f",
             request.title,
             (time.perf_counter() - started_at) * 1000,
         )
-        return response
+        return TaskExecutionResult(result=response, raw_output=draft_result.raw_output)
 
-    def generate_question(self, request: GenerateQuestionRequest) -> GenerateQuestionResponse:
+    def analyze_job_target(self, request: AnalyzeJobTargetRequest) -> AnalyzeJobTargetResponse:
+        return self.analyze_job_target_task(request).result
+
+    def generate_question_task(
+        self,
+        request: GenerateQuestionRequest,
+    ) -> TaskExecutionResult[GenerateQuestionResponse]:
         started_at = time.perf_counter()
         logger.info("generate_question started mode=%s topic=%s", request.mode, request.topic)
         system_prompt, user_prompt, tools = question_prompt_bundle(request)
@@ -130,6 +154,9 @@ class AgentRuntime:
         )
         return response
 
+    def generate_question(self, request: GenerateQuestionRequest) -> GenerateQuestionResponse:
+        return self.generate_question_task(request).result
+
     def stream_generate_question(
         self, request: GenerateQuestionRequest
     ) -> Iterator[dict[str, Any]]:
@@ -141,7 +168,10 @@ class AgentRuntime:
             tools=tools,
         )
 
-    def evaluate_answer(self, request: EvaluateAnswerRequest) -> EvaluationResult:
+    def evaluate_answer_task(
+        self,
+        request: EvaluateAnswerRequest,
+    ) -> TaskExecutionResult[EvaluationResult]:
         started_at = time.perf_counter()
         logger.info(
             "evaluate_answer started mode=%s topic=%s turn=%d/%d",
@@ -167,6 +197,9 @@ class AgentRuntime:
         )
         return response
 
+    def evaluate_answer(self, request: EvaluateAnswerRequest) -> EvaluationResult:
+        return self.evaluate_answer_task(request).result
+
     def stream_evaluate_answer(self, request: EvaluateAnswerRequest) -> Iterator[dict[str, Any]]:
         system_prompt, user_prompt, tools = evaluate_prompt_bundle(request)
         yield from self._stream_single_shot_task(
@@ -176,7 +209,10 @@ class AgentRuntime:
             tools=tools,
         )
 
-    def generate_review(self, request: GenerateReviewRequest) -> ReviewCard:
+    def generate_review_task(
+        self,
+        request: GenerateReviewRequest,
+    ) -> TaskExecutionResult[ReviewCard]:
         started_at = time.perf_counter()
         logger.info("generate_review started session_id=%s", request.session.id)
         system_prompt, user_prompt, tools = review_prompt_bundle(request)
@@ -192,6 +228,9 @@ class AgentRuntime:
             (time.perf_counter() - started_at) * 1000,
         )
         return response
+
+    def generate_review(self, request: GenerateReviewRequest) -> ReviewCard:
+        return self.generate_review_task(request).result
 
     def stream_generate_review(self, request: GenerateReviewRequest) -> Iterator[dict[str, Any]]:
         system_prompt, user_prompt, tools = review_prompt_bundle(request)
@@ -209,7 +248,7 @@ class AgentRuntime:
         system_prompt: str,
         user_prompt: str,
         tools: list[RuntimeTool],
-    ) -> BaseModel:
+    ) -> TaskExecutionResult[BaseModel]:
         self._require_model_client()
 
         try:
@@ -241,7 +280,7 @@ class AgentRuntime:
         system_prompt: str,
         user_prompt: str,
         tools: list[RuntimeTool],
-    ) -> BaseModel:
+    ) -> TaskExecutionResult[BaseModel]:
         model_client = self._require_model_client()
 
         messages: list[dict[str, Any]] = [
@@ -253,19 +292,19 @@ class AgentRuntime:
 
         # 轮数上限用于兜住 prompt/tool 契约失配，避免 sidecar 卡在无限工具往返里。
         for _ in range(4):
-            result = model_client.create_completion(
+            completion = model_client.create_completion(
                 messages=messages,
                 tools=[tool.spec() for tool in tools],
             )
-            if result.tool_calls:
+            if completion.tool_calls:
                 messages.append(
                     {
                         "role": "assistant",
-                        "content": result.content,
-                        "tool_calls": result.tool_calls,
+                        "content": completion.content,
+                        "tool_calls": completion.tool_calls,
                     }
                 )
-                for tool_call in result.tool_calls:
+                for tool_call in completion.tool_calls:
                     tool_name = tool_call.get("function", {}).get("name", "")
                     tool_call_id = tool_call.get("id", tool_name)
                     arguments = parse_tool_arguments(tool_call)
@@ -285,12 +324,16 @@ class AgentRuntime:
                     used_any_tool = True
                 continue
 
-            if result.content.strip():
+            if completion.content.strip():
                 if tools and not used_any_tool:
                     raise ModelClientError(
                         "model returned a final answer before reading any required tool context"
                     )
-                return validate_json_response(result.content, response_model)
+                result_model = validate_json_response(completion.content, response_model)
+                return TaskExecutionResult(
+                    result=result_model,
+                    raw_output=completion.content.strip(),
+                )
 
             raise ModelClientError("model returned neither content nor tool calls")
 
@@ -303,7 +346,7 @@ class AgentRuntime:
         system_prompt: str,
         user_prompt: str,
         tools: list[RuntimeTool],
-    ) -> BaseModel:
+    ) -> TaskExecutionResult[BaseModel]:
         model_client = self._require_model_client()
 
         context_dump = {tool.name: tool.handler({}) for tool in tools}
@@ -318,10 +361,14 @@ class AgentRuntime:
                 ),
             },
         ]
-        result = model_client.create_completion(messages=messages)
-        if not result.content.strip():
+        completion = model_client.create_completion(messages=messages)
+        if not completion.content.strip():
             raise ModelClientError("model returned empty content in single-shot mode")
-        return validate_json_response(result.content, response_model)
+        result_model = validate_json_response(completion.content, response_model)
+        return TaskExecutionResult(
+            result=result_model,
+            raw_output=completion.content.strip(),
+        )
 
     def _stream_single_shot_task(
         self,
@@ -364,18 +411,24 @@ class AgentRuntime:
                     chunks.append(chunk.content)
                     yield {"type": "content", "text": chunk.content}
         except ModelClientError:
-            result = model_client.create_completion(messages=messages)
-            if result.content:
-                chunks.append(result.content)
-                yield {"type": "content", "text": result.content}
+            completion = model_client.create_completion(messages=messages)
+            if completion.content:
+                chunks.append(completion.content)
+                yield {"type": "content", "text": completion.content}
 
         yield {"type": "phase", "phase": "parse_result"}
-        text = "".join(chunks).strip()
-        if not text:
+        raw_output = "".join(chunks).strip()
+        if not raw_output:
             raise ModelClientError("model returned empty content in streaming mode")
 
-        result_model = validate_json_response(text, response_model)
-        yield {"type": "result", "data": result_model.model_dump(mode="json")}
+        result_model = validate_json_response(raw_output, response_model)
+        yield {
+            "type": "result",
+            "data": {
+                "result": result_model.model_dump(mode="json"),
+                "raw_output": raw_output,
+            },
+        }
 
     def _require_model_client(self) -> OpenAICompatibleModelClient:
         if self._model_client is None:

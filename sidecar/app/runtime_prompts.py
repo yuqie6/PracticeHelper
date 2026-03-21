@@ -8,7 +8,6 @@ from app.prompt_loader import (
     PromptLoadResult,
     load_prompt,
     load_prompt_with_meta,
-    render_prompt,
     render_prompt_with_meta,
 )
 from app.repo_context import RepoAnalysisBundle
@@ -176,6 +175,8 @@ def evaluate_prompt_bundle(
         f"当前模式：{request.mode}，主题：{request.topic}，"
         f"是否为追问回答：{followup_label}，当前轮次：{turn_label}，是否绑定岗位 JD：{jd_label}"
     )
+    if request.retry_feedback:
+        user_prompt += f"\n上一次输出没有过校验，请修正这些问题后重新生成：{request.retry_feedback}"
     if is_last_turn:
         user_prompt += (
             "\n注意：这是最后一轮，不需要生成追问，"
@@ -214,6 +215,8 @@ def review_prompt_bundle(
     system_prompt = review_prompt_meta(request).content
     jd_label = "有" if request.job_target_analysis else "无"
     user_prompt = f"请根据整轮训练历史生成最终复盘卡。是否绑定岗位 JD：{jd_label}"
+    if request.retry_feedback:
+        user_prompt += f"\n上一次输出没有过校验，请修正这些问题后重新生成：{request.retry_feedback}"
     tools = [
         RuntimeTool(
             name="read_session_summary",

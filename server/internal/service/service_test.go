@@ -1,9 +1,12 @@
 package service
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -752,9 +755,12 @@ func TestCreateSessionWritesEvaluationLog(t *testing.T) {
 		w.Header().Set("X-PracticeHelper-Prompt-Hash", "hash-generate-question")
 		w.Header().Set("X-PracticeHelper-Model-Name", "gpt-test")
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(domain.GenerateQuestionResponse{
-			Question:       "Redis 为什么快？",
-			ExpectedPoints: []string{"内存访问", "事件循环"},
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"result": domain.GenerateQuestionResponse{
+				Question:       "Redis 为什么快？",
+				ExpectedPoints: []string{"内存访问", "事件循环"},
+			},
+			"raw_output": `{"question":"Redis 为什么快？","expected_points":["内存访问","事件循环"]}`,
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}
@@ -778,14 +784,15 @@ func TestCreateSessionWritesEvaluationLog(t *testing.T) {
 		modelName   string
 		promptSetID string
 		promptHash  string
+		rawOutput   string
 		latencyMs   float64
 	)
 	if err := db.QueryRow(`
-		SELECT session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash, latency_ms
+		SELECT session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash, raw_output, latency_ms
 		FROM evaluation_logs
 		ORDER BY id DESC
 		LIMIT 1
-	`).Scan(&sessionID, &turnID, &flowName, &modelName, &promptSetID, &promptHash, &latencyMs); err != nil {
+	`).Scan(&sessionID, &turnID, &flowName, &modelName, &promptSetID, &promptHash, &rawOutput, &latencyMs); err != nil {
 		t.Fatalf("query evaluation log: %v", err)
 	}
 
@@ -806,6 +813,9 @@ func TestCreateSessionWritesEvaluationLog(t *testing.T) {
 	}
 	if promptHash != "hash-generate-question" {
 		t.Fatalf("expected prompt hash hash-generate-question, got %q", promptHash)
+	}
+	if !strings.Contains(rawOutput, `"question":"Redis 为什么快？"`) {
+		t.Fatalf("expected raw output to be persisted, got %q", rawOutput)
 	}
 	if latencyMs < 0 {
 		t.Fatalf("expected non-negative latency, got %.2f", latencyMs)
@@ -839,13 +849,26 @@ func TestCompleteDueReviewAdvancesScheduleUsingSessionScore(t *testing.T) {
 	if err := store.CreateSession(context.Background(), session, turn); err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
+	if err := store.UpsertWeaknesses(context.Background(), session.ID, []domain.WeaknessHit{
+		{Kind: "topic", Label: "缓存一致性", Severity: 1.0},
+	}); err != nil {
+		t.Fatalf("UpsertWeaknesses() error = %v", err)
+	}
+	tag, err := store.GetWeaknessTag(context.Background(), "topic", "缓存一致性")
+	if err != nil {
+		t.Fatalf("GetWeaknessTag() error = %v", err)
+	}
+	if tag == nil {
+		t.Fatal("expected weakness tag to exist")
+	}
 	if err := store.CreateReviewSchedule(context.Background(), &domain.ReviewScheduleItem{
-		SessionID:    session.ID,
-		ReviewCardID: "review_due_review",
-		Topic:        session.Topic,
-		NextReviewAt: time.Now().UTC().Add(-time.Hour),
-		IntervalDays: 1,
-		EaseFactor:   2.5,
+		SessionID:     session.ID,
+		ReviewCardID:  "review_due_review",
+		WeaknessTagID: tag.ID,
+		Topic:         session.Topic,
+		NextReviewAt:  time.Now().UTC().Add(-time.Hour),
+		IntervalDays:  1,
+		EaseFactor:    2.5,
 	}); err != nil {
 		t.Fatalf("CreateReviewSchedule() error = %v", err)
 	}
@@ -856,6 +879,9 @@ func TestCompleteDueReviewAdvancesScheduleUsingSessionScore(t *testing.T) {
 	}
 	if len(items) != 1 {
 		t.Fatalf("expected 1 due review item, got %d", len(items))
+	}
+	if items[0].WeaknessLabel != "缓存一致性" {
+		t.Fatalf("expected weakness label 缓存一致性, got %q", items[0].WeaknessLabel)
 	}
 
 	svc := New(store, nil)
@@ -886,6 +912,65 @@ func TestCompleteDueReviewAdvancesScheduleUsingSessionScore(t *testing.T) {
 	}
 	if len(remaining) != 0 {
 		t.Fatalf("expected no due reviews after completion, got %d", len(remaining))
+	}
+}
+
+func TestBuildReviewScheduleItemsUsesWeaknessLevelTopics(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	if err := store.UpsertWeaknesses(ctx, "sess_schedule_seed", []domain.WeaknessHit{
+		{Kind: "detail", Label: "Redis 缓存一致性", Severity: 1.1},
+		{Kind: "followup_breakdown", Label: "进程线程调度容易乱", Severity: 0.9},
+	}); err != nil {
+		t.Fatalf("UpsertWeaknesses() error = %v", err)
+	}
+
+	svc := New(store, nil)
+	nextReview := time.Date(2026, 3, 25, 9, 0, 0, 0, time.UTC)
+	items := svc.buildReviewScheduleItems(ctx, &domain.TrainingSession{
+		ID:    "sess_schedule_seed",
+		Mode:  domain.ModeBasics,
+		Topic: domain.BasicsTopicMixed,
+		Turns: []domain.TrainingTurn{
+			{
+				ID:           "turn_1",
+				SessionID:    "sess_schedule_seed",
+				TurnIndex:    1,
+				WeaknessHits: []domain.WeaknessHit{{Kind: "detail", Label: "Redis 缓存一致性", Severity: 1.1}},
+			},
+			{
+				ID:           "turn_2",
+				SessionID:    "sess_schedule_seed",
+				TurnIndex:    2,
+				WeaknessHits: []domain.WeaknessHit{{Kind: "followup_breakdown", Label: "进程线程调度容易乱", Severity: 0.9}},
+			},
+		},
+	}, &domain.ReviewCard{
+		ID:              "review_schedule_seed",
+		SuggestedTopics: []string{domain.BasicsTopicKafka},
+	}, nextReview)
+
+	if len(items) != 2 {
+		t.Fatalf("expected 2 weakness-level review schedule items, got %d", len(items))
+	}
+	if items[0].WeaknessTagID == "" || items[1].WeaknessTagID == "" {
+		t.Fatalf("expected weakness tag ids to be resolved, got %+v", items)
+	}
+	if items[0].WeaknessLabel == "" || items[1].WeaknessLabel == "" {
+		t.Fatalf("expected weakness labels to be carried to schedule items, got %+v", items)
+	}
+
+	topics := []string{items[0].Topic, items[1].Topic}
+	if !slices.Contains(topics, domain.BasicsTopicRedis) {
+		t.Fatalf("expected redis review topic, got %v", topics)
+	}
+	if !slices.Contains(topics, domain.BasicsTopicOS) {
+		t.Fatalf("expected os review topic, got %v", topics)
 	}
 }
 
@@ -1416,6 +1501,181 @@ func TestExportSessionMarkdownWithoutReviewShowsPendingNotice(t *testing.T) {
 	}
 	if !strings.Contains(body, "### 第 2 轮") {
 		t.Fatalf("expected export body to include follow-up turn, got:\n%s", body)
+	}
+}
+
+func TestExportSessionJSONIncludesSessionAndReview(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := seedSessionForExport(t, store, "sess_export_json", true)
+	svc := New(store, nil)
+
+	filename, content, err := svc.ExportSession(context.Background(), session.ID, "json")
+	if err != nil {
+		t.Fatalf("ExportSession() error = %v", err)
+	}
+	if filename != "practicehelper-session-sess_export_json.json" {
+		t.Fatalf("unexpected filename: %s", filename)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(content, &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if payload["format"] != "json" {
+		t.Fatalf("unexpected format: %#v", payload["format"])
+	}
+	sessionPayload, ok := payload["session"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected session payload, got %#v", payload["session"])
+	}
+	if sessionPayload["id"] != "sess_export_json" {
+		t.Fatalf("unexpected session id: %#v", sessionPayload["id"])
+	}
+	if payload["review"] == nil {
+		t.Fatalf("expected review payload, got %#v", payload["review"])
+	}
+}
+
+func TestExportSessionPDFReturnsPDFBytes(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := seedSessionForExport(t, store, "sess_export_pdf", true)
+	svc := New(store, nil)
+
+	filename, content, err := svc.ExportSession(context.Background(), session.ID, "pdf")
+	if err != nil {
+		t.Fatalf("ExportSession() error = %v", err)
+	}
+	if filename != "practicehelper-session-sess_export_pdf.pdf" {
+		t.Fatalf("unexpected filename: %s", filename)
+	}
+	if !bytes.HasPrefix(content, []byte("%PDF-1.4")) {
+		t.Fatalf("expected pdf header, got %q", content[:8])
+	}
+	if !bytes.Contains(content, []byte("STSong-Light")) {
+		t.Fatalf("expected pdf font definition, got %q", content[:120])
+	}
+}
+
+func TestExportSessionsZipIncludesSelectedMarkdownFiles(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	first := seedSessionForExport(t, store, "sess_export_batch_a", true)
+	second := seedSessionForExport(t, store, "sess_export_batch_b", false)
+	svc := New(store, nil)
+
+	filename, content, err := svc.ExportSessions(
+		context.Background(),
+		[]string{first.ID, second.ID, first.ID},
+		"markdown",
+	)
+	if err != nil {
+		t.Fatalf("ExportSessions() error = %v", err)
+	}
+
+	if filename != "practicehelper-sessions-2-markdown.zip" {
+		t.Fatalf("unexpected filename: %s", filename)
+	}
+
+	reader, err := zip.NewReader(bytes.NewReader(content), int64(len(content)))
+	if err != nil {
+		t.Fatalf("zip.NewReader() error = %v", err)
+	}
+	if len(reader.File) != 2 {
+		t.Fatalf("expected 2 files in zip, got %d", len(reader.File))
+	}
+
+	entries := make(map[string]string, len(reader.File))
+	for _, file := range reader.File {
+		stream, err := file.Open()
+		if err != nil {
+			t.Fatalf("open zip entry %s: %v", file.Name, err)
+		}
+		body, err := io.ReadAll(stream)
+		_ = stream.Close()
+		if err != nil {
+			t.Fatalf("read zip entry %s: %v", file.Name, err)
+		}
+		entries[file.Name] = string(body)
+	}
+
+	firstBody := entries["practicehelper-session-sess_export_batch_a.md"]
+	if firstBody == "" {
+		t.Fatalf("missing first export entry: %v", reader.File)
+	}
+	if !strings.Contains(firstBody, "sess_export_batch_a") {
+		t.Fatalf("unexpected first export content:\n%s", firstBody)
+	}
+
+	secondBody := entries["practicehelper-session-sess_export_batch_b.md"]
+	if secondBody == "" {
+		t.Fatalf("missing second export entry: %v", reader.File)
+	}
+	if !strings.Contains(secondBody, "> 复盘未生成。") {
+		t.Fatalf("expected pending review notice in second export:\n%s", secondBody)
+	}
+}
+
+func TestExportSessionsZipSupportsJSONEntries(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	first := seedSessionForExport(t, store, "sess_export_json_batch_a", true)
+	second := seedSessionForExport(t, store, "sess_export_json_batch_b", false)
+	svc := New(store, nil)
+
+	filename, content, err := svc.ExportSessions(
+		context.Background(),
+		[]string{first.ID, second.ID},
+		"json",
+	)
+	if err != nil {
+		t.Fatalf("ExportSessions() error = %v", err)
+	}
+	if filename != "practicehelper-sessions-2-json.zip" {
+		t.Fatalf("unexpected filename: %s", filename)
+	}
+
+	reader, err := zip.NewReader(bytes.NewReader(content), int64(len(content)))
+	if err != nil {
+		t.Fatalf("zip.NewReader() error = %v", err)
+	}
+	if len(reader.File) != 2 {
+		t.Fatalf("expected 2 files in zip, got %d", len(reader.File))
+	}
+	if !strings.HasSuffix(reader.File[0].Name, ".json") {
+		t.Fatalf("expected json entry, got %s", reader.File[0].Name)
+	}
+}
+
+func TestExportSessionsRejectsEmptySelection(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	svc := New(store, nil)
+
+	_, _, err = svc.ExportSessions(context.Background(), nil, "markdown")
+	if !errors.Is(err, ErrEmptyExportSelection) {
+		t.Fatalf("expected ErrEmptyExportSelection, got %v", err)
 	}
 }
 

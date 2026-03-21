@@ -86,6 +86,43 @@ def collect_repo_analysis_bundle(
         )
 
 
+def rerank_repo_chunks(bundle: RepoAnalysisBundle, *, limit: int = 24) -> list[RepoChunk]:
+    keywords = _repo_keywords(bundle)
+    ranked: list[tuple[float, RepoChunk]] = []
+    top_path_set = {path.lower() for path in bundle.top_paths}
+
+    for index, chunk in enumerate(bundle.chunks):
+        file_path = chunk.file_path.lower()
+        content = chunk.content.lower()
+        score = chunk.importance
+
+        if file_path in top_path_set:
+            score += 0.55
+
+        if file_path.endswith(("main.go", "main.py", "go.mod", "package.json", "pyproject.toml")):
+            score += 0.25
+
+        if any(part in file_path for part in ("/cmd/", "/internal/", "/app/", "/src/")):
+            score += 0.12
+
+        keyword_hits = 0
+        for keyword in keywords:
+            if keyword in file_path:
+                keyword_hits += 2
+                continue
+            if keyword in content:
+                keyword_hits += 1
+
+        score += min(keyword_hits * 0.08, 0.56)
+        # 早期 chunk 默认离文件开头更近，通常更像声明区、入口区或摘要区；
+        # 这里给很小的偏置，避免完全被长文件后段噪声反超。
+        score += max(0.0, 0.08 - index * 0.001)
+        ranked.append((score, chunk))
+
+    ranked.sort(key=lambda item: (-item[0], item[1].file_path, item[1].fts_key))
+    return [chunk for _, chunk in ranked[:limit]]
+
+
 def clone_repo(repo_url: str, temp_root: Path, github_token: str) -> Path:
     repo_dir = temp_root / repo_name_from_url(repo_url)
     auth_url = maybe_apply_github_token(repo_url, github_token)
@@ -220,3 +257,15 @@ def dedupe(items: list[str]) -> list[str]:
         seen.add(normalized)
         result.append(normalized)
     return result
+
+
+def _repo_keywords(bundle: RepoAnalysisBundle) -> list[str]:
+    raw = [bundle.name, bundle.default_branch, *bundle.tech_stack, *bundle.top_paths]
+    tokens: list[str] = []
+    for item in raw:
+        normalized = item.strip().lower()
+        if not normalized:
+            continue
+        tokens.append(normalized)
+        tokens.extend(part for part in re.split(r"[^a-z0-9]+", normalized) if len(part) >= 3)
+    return dedupe(tokens)

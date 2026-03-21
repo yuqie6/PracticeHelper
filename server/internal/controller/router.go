@@ -57,10 +57,12 @@ func NewRouter(svc *service.Service) *gin.Engine {
 		api.GET("/import-jobs/:id", handler.getImportJob)
 		api.POST("/import-jobs/:id/retry", handler.retryImportJob)
 		api.GET("/prompt-sets", handler.listPromptSets)
+		api.GET("/prompt-experiments/prompt-sets", handler.listPromptExperimentPromptSets)
 		api.GET("/prompt-experiments", handler.getPromptExperiment)
 
 		api.GET("/sessions", handler.listSessions)
 		api.POST("/sessions", handler.createSession)
+		api.POST("/sessions/export", handler.exportSessions)
 		api.POST("/sessions/stream", handler.createSessionStream)
 		api.GET("/sessions/:id", handler.getSession)
 		api.GET("/sessions/:id/evaluation-logs", handler.listSessionEvaluationLogs)
@@ -338,6 +340,15 @@ func (h *Handler) listPromptSets(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": data})
 }
 
+func (h *Handler) listPromptExperimentPromptSets(c *gin.Context) {
+	data, err := h.service.ListPromptExperimentPromptSets(c.Request.Context())
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
 func (h *Handler) getPromptExperiment(c *gin.Context) {
 	var req domain.PromptExperimentRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
@@ -441,10 +452,11 @@ func (h *Handler) listSessionEvaluationLogs(c *gin.Context) {
 }
 
 func (h *Handler) exportSession(c *gin.Context) {
+	format := c.Query("format")
 	filename, content, err := h.service.ExportSession(
 		c.Request.Context(),
 		c.Param("id"),
-		c.Query("format"),
+		format,
 	)
 	if err != nil {
 		switch {
@@ -458,9 +470,39 @@ func (h *Handler) exportSession(c *gin.Context) {
 		return
 	}
 
-	c.Header("Content-Type", "text/markdown; charset=utf-8")
+	c.Header("Content-Type", exportContentType(format))
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
-	c.Data(http.StatusOK, "text/markdown; charset=utf-8", content)
+	c.Data(http.StatusOK, exportContentType(format), content)
+}
+
+func (h *Handler) exportSessions(c *gin.Context) {
+	var request domain.ExportSessionsRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	filename, content, err := h.service.ExportSessions(
+		c.Request.Context(),
+		request.SessionIDs,
+		request.Format,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrEmptyExportSelection),
+			errors.Is(err, service.ErrUnsupportedExportFormat):
+			writeError(c, http.StatusBadRequest, err)
+		case errors.Is(err, service.ErrSessionNotFound):
+			writeError(c, http.StatusNotFound, err)
+		default:
+			writeError(c, http.StatusInternalServerError, err)
+		}
+		return
+	}
+
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Data(http.StatusOK, "application/zip", content)
 }
 
 func (h *Handler) submitAnswer(c *gin.Context) {
@@ -688,6 +730,8 @@ func errorCode(err error) string {
 		return "session_not_found"
 	case errors.Is(err, service.ErrPromptSetNotFound):
 		return "prompt_set_not_found"
+	case errors.Is(err, service.ErrEmptyExportSelection):
+		return "empty_export_selection"
 	case errors.Is(err, service.ErrUnsupportedExportFormat):
 		return "invalid_export_format"
 	case errors.Is(err, service.ErrImportJobNotFound):
@@ -708,5 +752,16 @@ func errorCode(err error) string {
 		return "project_already_imported"
 	default:
 		return "unknown_error"
+	}
+}
+
+func exportContentType(format string) string {
+	switch format {
+	case "json":
+		return "application/json; charset=utf-8"
+	case "pdf":
+		return "application/pdf"
+	default:
+		return "text/markdown; charset=utf-8"
 	}
 }

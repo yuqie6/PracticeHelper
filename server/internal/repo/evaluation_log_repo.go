@@ -3,9 +3,7 @@ package repo
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
-	"strings"
 
 	"practicehelper/server/internal/domain"
 )
@@ -18,12 +16,13 @@ func (s *Store) CreateEvaluationLog(
 	modelName string,
 	promptSetID string,
 	promptHash string,
+	rawOutput string,
 	latencyMs float64,
 ) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO evaluation_logs (session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash, latency_ms, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, sessionID, turnID, flowName, modelName, promptSetID, promptHash, latencyMs, nowUTC())
+		INSERT INTO evaluation_logs (session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash, raw_output, latency_ms, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, sessionID, turnID, flowName, modelName, promptSetID, promptHash, rawOutput, latencyMs, nowUTC())
 	if err != nil {
 		return fmt.Errorf("create evaluation log: %w", err)
 	}
@@ -35,7 +34,7 @@ func (s *Store) ListEvaluationLogsBySession(
 	sessionID string,
 ) ([]domain.EvaluationLogEntry, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash, latency_ms, created_at
+		SELECT id, session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash, raw_output, latency_ms, created_at
 		FROM evaluation_logs
 		WHERE session_id = ?
 		ORDER BY created_at ASC, id ASC
@@ -190,9 +189,9 @@ func scanEvaluationLogEntry(
 	scanner interface{ Scan(dest ...any) error },
 ) (*domain.EvaluationLogEntry, error) {
 	var (
-		id                                                   int64
+		id                                                  int64
 		sessionID, turnID, flowName, modelName, promptSetID string
-		promptHash, createdAt                               string
+		promptHash, rawOutput, createdAt                    string
 		latencyMs                                           float64
 	)
 	if err := scanner.Scan(
@@ -203,6 +202,7 @@ func scanEvaluationLogEntry(
 		&modelName,
 		&promptSetID,
 		&promptHash,
+		&rawOutput,
 		&latencyMs,
 		&createdAt,
 	); err != nil {
@@ -217,6 +217,7 @@ func scanEvaluationLogEntry(
 		ModelName:   modelName,
 		PromptSetID: promptSetID,
 		PromptHash:  promptHash,
+		RawOutput:   rawOutput,
 		LatencyMs:   latencyMs,
 		CreatedAt:   parseTime(createdAt),
 	}, nil
@@ -280,28 +281,4 @@ func promptExperimentSamplesWhere(req domain.PromptExperimentRequest) (string, [
 		args = append(args, req.Topic)
 	}
 	return where, args
-}
-
-func hasPromptSet(ctx context.Context, db *sql.DB, promptSetID string) (bool, error) {
-	row := db.QueryRowContext(ctx, `
-		SELECT 1
-		FROM training_sessions
-		WHERE prompt_set_id = ?
-		LIMIT 1
-	`, promptSetID)
-	var marker int
-	if err := row.Scan(&marker); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-func normalizePromptSetStatus(value string) string {
-	if strings.TrimSpace(value) == "" {
-		return "unknown"
-	}
-	return value
 }

@@ -21,6 +21,14 @@ func (s *Service) ListPromptSets(ctx context.Context) ([]domain.PromptSetSummary
 	return s.sidecar.ListPromptSets(ctx)
 }
 
+func (s *Service) ListPromptExperimentPromptSets(ctx context.Context) ([]domain.PromptSetSummary, error) {
+	historicalPromptSets, err := s.repo.ListHistoricalPromptSets(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return enrichPromptSetSummaries(historicalPromptSets, s.livePromptSetLookup(ctx)), nil
+}
+
 func (s *Service) resolvePromptSet(
 	ctx context.Context,
 	requestedID string,
@@ -88,10 +96,11 @@ func (s *Service) GetPromptExperiment(
 		req.Limit = 12
 	}
 
-	promptSets, err := s.ListPromptSets(ctx)
+	promptSets, err := s.repo.ListHistoricalPromptSets(ctx)
 	if err != nil {
 		return nil, err
 	}
+	promptSets = enrichPromptSetSummaries(promptSets, s.livePromptSetLookup(ctx))
 
 	lookup := make(map[string]domain.PromptSetSummary, len(promptSets))
 	for _, item := range promptSets {
@@ -124,15 +133,58 @@ func (s *Service) GetPromptExperiment(
 	}
 
 	return &domain.PromptExperimentReport{
-		Left:          *leftMetrics,
-		Right:         *rightMetrics,
-		RecentSamples: samples,
-		AppliedFilters: domain.PromptExperimentFilters{
-			Left:  req.Left,
-			Right: req.Right,
-			Mode:  req.Mode,
-			Topic: req.Topic,
-			Limit: req.Limit,
-		},
+		Left:           *leftMetrics,
+		Right:          *rightMetrics,
+		RecentSamples:  samples,
+		AppliedFilters: domain.PromptExperimentFilters(req),
 	}, nil
+}
+
+func (s *Service) livePromptSetLookup(ctx context.Context) map[string]domain.PromptSetSummary {
+	if s.sidecar == nil {
+		return nil
+	}
+
+	promptSets, err := s.sidecar.ListPromptSets(ctx)
+	if err != nil {
+		return nil
+	}
+
+	lookup := make(map[string]domain.PromptSetSummary, len(promptSets))
+	for _, item := range promptSets {
+		lookup[item.ID] = item
+	}
+	return lookup
+}
+
+func enrichPromptSetSummaries(
+	historical []domain.PromptSetSummary,
+	liveLookup map[string]domain.PromptSetSummary,
+) []domain.PromptSetSummary {
+	if len(historical) == 0 {
+		return nil
+	}
+
+	items := make([]domain.PromptSetSummary, 0, len(historical))
+	for _, item := range historical {
+		enriched := item
+		if live, ok := liveLookup[item.ID]; ok {
+			if enriched.Label == "" {
+				enriched.Label = live.Label
+			}
+			if enriched.Status == "" {
+				enriched.Status = live.Status
+			}
+			enriched.Description = live.Description
+			enriched.IsDefault = live.IsDefault
+		}
+		if enriched.Label == "" {
+			enriched.Label = enriched.ID
+		}
+		if enriched.Status == "" {
+			enriched.Status = "unknown"
+		}
+		items = append(items, enriched)
+	}
+	return items
 }

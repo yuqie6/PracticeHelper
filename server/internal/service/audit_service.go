@@ -28,6 +28,7 @@ func (s *Service) recordEvaluationLog(
 		metaValue(meta, func(item *domain.PromptExecutionMeta) string { return item.ModelName }),
 		metaValue(meta, func(item *domain.PromptExecutionMeta) string { return item.PromptSetID }),
 		metaValue(meta, func(item *domain.PromptExecutionMeta) string { return item.PromptHash }),
+		metaValue(meta, func(item *domain.PromptExecutionMeta) string { return item.RawOutput }),
 		latencyMs,
 	)
 }

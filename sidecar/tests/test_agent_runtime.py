@@ -5,10 +5,16 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.agent_runtime import AgentRuntime
+from app.agent_runtime import AgentRuntime, TaskExecutionResult
 from app.config import Settings
-from app.langgraph_flows import _build_evaluate_answer_graph, _build_generate_question_graph
-from app.llm_client import ChatCompletionResult, ModelClientError
+from app.langgraph_flows import (
+    _build_analyze_repo_graph,
+    _build_evaluate_answer_graph,
+    _build_generate_question_graph,
+    _build_generate_review_graph,
+)
+from app.llm_client import ChatCompletionResult, ChatCompletionStreamChunk, ModelClientError
+from app.repo_context import RepoAnalysisBundle
 from app.runtime_prompts import (
     evaluate_prompt_bundle,
     question_prompt_bundle,
@@ -16,14 +22,21 @@ from app.runtime_prompts import (
 )
 from app.schemas import (
     AnalyzeJobTargetRequest,
+    AnalyzeRepoEnvelope,
     AnalyzeRepoRequest,
+    AnalyzeRepoResponse,
+    EvaluateAnswerEnvelope,
     EvaluateAnswerRequest,
+    EvaluationResult,
     GenerateQuestionRequest,
     GenerateQuestionResponse,
+    GenerateReviewEnvelope,
     GenerateReviewRequest,
     JobTargetAnalysisSnapshot,
     ProjectProfile,
     QuestionTemplate,
+    RepoChunk,
+    ReviewCard,
     TrainingSession,
     TrainingTurn,
     WeaknessHit,
@@ -43,44 +56,156 @@ class FakeModelClient:
         return self._responses.pop(0)
 
 
+class FakeStreamModelClient(FakeModelClient):
+    def __init__(self, responses: list[ChatCompletionResult]) -> None:
+        super().__init__(responses)
+
+    def create_completion_stream(self, *, messages, temperature=0.2):
+        self.calls.append({"messages": messages, "temperature": temperature, "stream": True})
+        yield ChatCompletionStreamChunk(
+            content='{"question":"请讲讲 Redis 一致性。","expected_points":["主线","取舍"]}'
+        )
+
+
 class FakeQuestionGraphRuntime:
     def __init__(self) -> None:
         self.requests: list[GenerateQuestionRequest] = []
 
-    def generate_question(self, request: GenerateQuestionRequest) -> GenerateQuestionResponse:
+    def generate_question_task(
+        self, request: GenerateQuestionRequest
+    ) -> TaskExecutionResult[GenerateQuestionResponse]:
         self.requests.append(request)
-        return GenerateQuestionResponse(question="问题", expected_points=["点1"])
+        return TaskExecutionResult(
+            result=GenerateQuestionResponse(question="问题", expected_points=["点1"]),
+            raw_output='{"question":"问题","expected_points":["点1"]}',
+        )
+
+
+class FakeAnalyzeRepoGraphRuntime:
+    def __init__(self) -> None:
+        self.summarized_bundle: RepoAnalysisBundle | None = None
+
+    def collect_repo_bundle(self, request: AnalyzeRepoRequest) -> RepoAnalysisBundle:
+        return RepoAnalysisBundle(
+            repo_url=request.repo_url,
+            name="mirror",
+            default_branch="main",
+            import_commit="abc123",
+            tech_stack=["Go", "LangGraph"],
+            top_paths=["internal/agent/runtime.go"],
+            chunks=[
+                RepoChunk(
+                    file_path="docs/notes.md",
+                    file_type=".md",
+                    content="misc misc misc",
+                    importance=1.4,
+                    fts_key="docs/notes.md#0",
+                ),
+                RepoChunk(
+                    file_path="internal/agent/runtime.go",
+                    file_type=".go",
+                    content="agent runtime orchestrates LangGraph nodes",
+                    importance=0.8,
+                    fts_key="internal/agent/runtime.go#0",
+                ),
+            ],
+        )
+
+    def summarize_repo_bundle(
+        self, bundle: RepoAnalysisBundle
+    ) -> TaskExecutionResult[AnalyzeRepoResponse]:
+        self.summarized_bundle = bundle
+        return TaskExecutionResult(
+            result=AnalyzeRepoResponse(
+                repo_url=bundle.repo_url,
+                name=bundle.name,
+                default_branch=bundle.default_branch,
+                import_commit=bundle.import_commit,
+                summary="仓库主线清楚",
+                tech_stack=bundle.tech_stack,
+                highlights=["亮点"],
+                challenges=["挑战"],
+                tradeoffs=["取舍"],
+                ownership_points=["owner"],
+                followup_points=["follow"],
+                chunks=bundle.chunks,
+            ),
+            raw_output='{"summary":"仓库主线清楚"}',
+        )
 
 
 class FlakyEvaluateGraphRuntime:
     def __init__(self) -> None:
         self.calls = 0
+        self.retry_feedback: list[str] = []
 
-    def evaluate_answer(self, request: EvaluateAnswerRequest):
+    def evaluate_answer_task(
+        self, request: EvaluateAnswerRequest
+    ) -> TaskExecutionResult[EvaluationResult]:
         self.calls += 1
+        self.retry_feedback.append(request.retry_feedback)
         if self.calls == 1:
-            return {"score": 80}
-        return {
-            "score": 82,
-            "score_breakdown": {"准确性": 82},
-            "strengths": ["主线清楚"],
-            "gaps": ["例子不够具体"],
-            "followup_question": "如果线上抖动，你会先看什么？",
-            "followup_expected_points": ["先止血", "再定位"],
-            "weakness_hits": [],
-        }
+            return TaskExecutionResult(
+                result=EvaluationResult(score=80, score_breakdown={"准确性": 80}),
+                raw_output='{"score":80}',
+            )
+        return TaskExecutionResult(
+            result=EvaluationResult(
+                score=82,
+                score_breakdown={"准确性": 82},
+                strengths=["主线清楚"],
+                gaps=["例子不够具体"],
+                followup_question="如果线上抖动，你会先看什么？",
+                followup_expected_points=["先止血", "再定位"],
+                weakness_hits=[],
+            ),
+            raw_output='{"score":82,"followup_question":"如果线上抖动，你会先看什么？"}',
+        )
 
 
 class AlwaysInvalidEvaluateGraphRuntime:
     def __init__(self) -> None:
         self.calls = 0
 
-    def evaluate_answer(self, request: EvaluateAnswerRequest):
+    def evaluate_answer_task(
+        self, request: EvaluateAnswerRequest
+    ) -> TaskExecutionResult[EvaluationResult]:
         self.calls += 1
-        return {
-            "score": 80,
-            "score_breakdown": {"准确性": 80},
-        }
+        return TaskExecutionResult(
+            result=EvaluationResult(score=80, score_breakdown={"准确性": 80}),
+            raw_output='{"score":80}',
+        )
+
+
+class FlakyGenerateReviewGraphRuntime:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.retry_feedback: list[str] = []
+
+    def generate_review_task(
+        self, request: GenerateReviewRequest
+    ) -> TaskExecutionResult[ReviewCard]:
+        self.calls += 1
+        self.retry_feedback.append(request.retry_feedback)
+        if self.calls == 1:
+            return TaskExecutionResult(
+                result=ReviewCard(overall="总结", score_breakdown={"准确性": 70}),
+                raw_output='{"overall":"总结"}',
+            )
+        return TaskExecutionResult(
+            result=ReviewCard(
+                overall="总结",
+                top_fix="先补最关键缺口",
+                top_fix_reason="这是当前最影响说服力的部分",
+                highlights=["主线清楚"],
+                gaps=["案例不够具体"],
+                suggested_topics=["redis"],
+                next_training_focus=["补细节"],
+                recommended_next={"mode": "basics", "topic": "redis", "reason": "补短板"},
+                score_breakdown={"准确性": 70},
+            ),
+            raw_output='{"overall":"总结","top_fix":"先补最关键缺口"}',
+        )
 
 
 def test_generate_question_uses_tool_loop_before_returning_json() -> None:
@@ -325,6 +450,17 @@ def test_generate_question_graph_passes_selected_strategy_to_runtime() -> None:
     assert runtime.requests[0].strategy == "project_deep_dive"
 
 
+def test_analyze_repo_graph_reranks_chunks_before_summarizing() -> None:
+    runtime = FakeAnalyzeRepoGraphRuntime()
+    graph = _build_analyze_repo_graph(runtime)
+
+    result = graph.invoke({"request": AnalyzeRepoRequest(repo_url="https://example.com/mirror.git")})
+
+    assert isinstance(result["result"], AnalyzeRepoEnvelope)
+    assert runtime.summarized_bundle is not None
+    assert runtime.summarized_bundle.chunks[0].file_path == "internal/agent/runtime.go"
+
+
 def test_evaluate_prompt_bundle_requires_conservative_followup_when_evidence_is_thin() -> None:
     system_prompt, user_prompt, tools = evaluate_prompt_bundle(
         EvaluateAnswerRequest(
@@ -385,6 +521,24 @@ def test_evaluate_prompt_bundle_marks_followup_requests() -> None:
     assert "最后一轮" in user_prompt
 
 
+def test_evaluate_prompt_bundle_includes_retry_feedback_when_present() -> None:
+    _, user_prompt, _ = evaluate_prompt_bundle(
+        EvaluateAnswerRequest(
+            mode="basics",
+            topic="redis",
+            question="Redis 为什么快？",
+            expected_points=["内存访问", "事件循环"],
+            answer="因为它在内存里。",
+            turn_index=1,
+            max_turns=2,
+            retry_feedback="missing strengths/gaps",
+        )
+    )
+
+    assert "上一次输出没有过校验" in user_prompt
+    assert "missing strengths/gaps" in user_prompt
+
+
 def test_evaluate_answer_graph_retries_after_invalid_output() -> None:
     runtime = FlakyEvaluateGraphRuntime()
     graph = _build_evaluate_answer_graph(runtime)
@@ -404,7 +558,9 @@ def test_evaluate_answer_graph_retries_after_invalid_output() -> None:
     )
 
     assert runtime.calls == 2
-    assert result["result"].followup_question == "如果线上抖动，你会先看什么？"
+    assert isinstance(result["result"], EvaluateAnswerEnvelope)
+    assert result["result"].result.followup_question == "如果线上抖动，你会先看什么？"
+    assert runtime.retry_feedback[1] == "missing strengths/gaps"
 
 
 def test_evaluate_answer_graph_raises_after_retry_budget_is_exhausted() -> None:
@@ -427,6 +583,31 @@ def test_evaluate_answer_graph_raises_after_retry_budget_is_exhausted() -> None:
         )
 
     assert runtime.calls == 2
+
+
+def test_generate_review_graph_retries_after_invalid_output() -> None:
+    runtime = FlakyGenerateReviewGraphRuntime()
+    graph = _build_generate_review_graph(runtime)
+
+    result = graph.invoke(
+        {
+            "request": GenerateReviewRequest(
+                session=TrainingSession(id="sess_1", mode="basics", topic="redis"),
+                turns=[
+                    TrainingTurn(
+                        question="Redis 为什么快？",
+                        expected_points=["内存访问", "事件循环"],
+                        answer="因为它在内存里。",
+                    )
+                ],
+            )
+        }
+    )
+
+    assert runtime.calls == 2
+    assert isinstance(result["result"], GenerateReviewEnvelope)
+    assert result["result"].result.top_fix == "先补最关键缺口"
+    assert runtime.retry_feedback[1] == "missing top_fix"
 
 
 def test_review_prompt_bundle_includes_job_target_analysis_context() -> None:
@@ -457,6 +638,43 @@ def test_review_prompt_bundle_includes_job_target_analysis_context() -> None:
     assert "是否绑定岗位 JD：有" in user_prompt
     payload = tools[0].handler({})
     assert payload["job_target_analysis"]["must_have_skills"] == ["缓存一致性"]
+
+
+def test_review_prompt_bundle_includes_retry_feedback_when_present() -> None:
+    _, user_prompt, _ = review_prompt_bundle(
+        GenerateReviewRequest(
+            session=TrainingSession(id="sess_1", mode="basics", topic="redis"),
+            turns=[],
+            retry_feedback="missing top_fix",
+        )
+    )
+
+    assert "上一次输出没有过校验" in user_prompt
+    assert "missing top_fix" in user_prompt
+
+
+def test_stream_generate_question_result_event_wraps_raw_output() -> None:
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=FakeStreamModelClient([]),
+    )
+
+    events = list(
+        runtime.stream_generate_question(
+            GenerateQuestionRequest(mode="basics", topic="redis", intensity="standard")
+        )
+    )
+
+    result_event = events[-1]
+    assert result_event["type"] == "result"
+    assert result_event["data"]["result"]["question"] == "请讲讲 Redis 一致性。"
+    assert '"question":"请讲讲 Redis 一致性。"' in result_event["data"]["raw_output"]
 
 
 def test_runtime_raises_when_llm_is_disabled() -> None:

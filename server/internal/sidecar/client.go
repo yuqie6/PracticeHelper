@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -21,9 +22,9 @@ type Client struct {
 }
 
 const (
-	promptSetHeader = "X-PracticeHelper-Prompt-Set"
+	promptSetHeader  = "X-PracticeHelper-Prompt-Set"
 	promptHashHeader = "X-PracticeHelper-Prompt-Hash"
-	modelNameHeader = "X-PracticeHelper-Model-Name"
+	modelNameHeader  = "X-PracticeHelper-Model-Name"
 )
 
 type streamEvent struct {
@@ -33,6 +34,11 @@ type streamEvent struct {
 	Text    string          `json:"text,omitempty"`
 	Message string          `json:"message,omitempty"`
 	Data    json.RawMessage `json:"data,omitempty"`
+}
+
+type responseEnvelope struct {
+	Result    json.RawMessage `json:"result"`
+	RawOutput string          `json:"raw_output,omitempty"`
 }
 
 func New(baseURL string, timeout time.Duration) *Client {
@@ -46,7 +52,7 @@ func New(baseURL string, timeout time.Duration) *Client {
 
 func (c *Client) AnalyzeRepo(ctx context.Context, request domain.AnalyzeRepoRequest) (*domain.AnalyzeRepoResponse, error) {
 	var response domain.AnalyzeRepoResponse
-	if _, err := c.postJSON(ctx, "/internal/analyze_repo", request, &response); err != nil {
+	if _, _, err := c.postJSON(ctx, "/internal/analyze_repo", request, &response); err != nil {
 		return nil, err
 	}
 
@@ -58,7 +64,7 @@ func (c *Client) AnalyzeJobTarget(
 	request domain.AnalyzeJobTargetRequest,
 ) (*domain.AnalyzeJobTargetResponse, error) {
 	var response domain.AnalyzeJobTargetResponse
-	if _, err := c.postJSON(ctx, "/internal/analyze_job_target", request, &response); err != nil {
+	if _, _, err := c.postJSON(ctx, "/internal/analyze_job_target", request, &response); err != nil {
 		return nil, err
 	}
 
@@ -70,12 +76,14 @@ func (c *Client) GenerateQuestion(
 	request domain.GenerateQuestionRequest,
 ) (*domain.GenerateQuestionResponse, *domain.PromptExecutionMeta, error) {
 	var response domain.GenerateQuestionResponse
-	headers, err := c.postJSON(ctx, "/internal/generate_question", request, &response)
+	headers, rawOutput, err := c.postJSON(ctx, "/internal/generate_question", request, &response)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return &response, promptMetaFromHeaders(headers), nil
+	meta := promptMetaFromHeaders(headers)
+	meta.RawOutput = rawOutput
+	return &response, meta, nil
 }
 
 func (c *Client) GenerateQuestionStream(
@@ -84,12 +92,14 @@ func (c *Client) GenerateQuestionStream(
 	emit func(domain.StreamEvent) error,
 ) (*domain.GenerateQuestionResponse, *domain.PromptExecutionMeta, error) {
 	var response domain.GenerateQuestionResponse
-	headers, err := c.postJSONStream(ctx, "/internal/generate_question/stream", request, &response, emit)
+	headers, rawOutput, err := c.postJSONStream(ctx, "/internal/generate_question/stream", request, &response, emit)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return &response, promptMetaFromHeaders(headers), nil
+	meta := promptMetaFromHeaders(headers)
+	meta.RawOutput = rawOutput
+	return &response, meta, nil
 }
 
 func (c *Client) EvaluateAnswer(
@@ -97,12 +107,14 @@ func (c *Client) EvaluateAnswer(
 	request domain.EvaluateAnswerRequest,
 ) (*domain.EvaluationResult, *domain.PromptExecutionMeta, error) {
 	var response domain.EvaluationResult
-	headers, err := c.postJSON(ctx, "/internal/evaluate_answer", request, &response)
+	headers, rawOutput, err := c.postJSON(ctx, "/internal/evaluate_answer", request, &response)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return &response, promptMetaFromHeaders(headers), nil
+	meta := promptMetaFromHeaders(headers)
+	meta.RawOutput = rawOutput
+	return &response, meta, nil
 }
 
 func (c *Client) EvaluateAnswerStream(
@@ -111,12 +123,14 @@ func (c *Client) EvaluateAnswerStream(
 	emit func(domain.StreamEvent) error,
 ) (*domain.EvaluationResult, *domain.PromptExecutionMeta, error) {
 	var response domain.EvaluationResult
-	headers, err := c.postJSONStream(ctx, "/internal/evaluate_answer/stream", request, &response, emit)
+	headers, rawOutput, err := c.postJSONStream(ctx, "/internal/evaluate_answer/stream", request, &response, emit)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return &response, promptMetaFromHeaders(headers), nil
+	meta := promptMetaFromHeaders(headers)
+	meta.RawOutput = rawOutput
+	return &response, meta, nil
 }
 
 func (c *Client) GenerateReview(
@@ -124,12 +138,14 @@ func (c *Client) GenerateReview(
 	request domain.GenerateReviewRequest,
 ) (*domain.ReviewCard, *domain.PromptExecutionMeta, error) {
 	var response domain.ReviewCard
-	headers, err := c.postJSON(ctx, "/internal/generate_review", request, &response)
+	headers, rawOutput, err := c.postJSON(ctx, "/internal/generate_review", request, &response)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return &response, promptMetaFromHeaders(headers), nil
+	meta := promptMetaFromHeaders(headers)
+	meta.RawOutput = rawOutput
+	return &response, meta, nil
 }
 
 func (c *Client) GenerateReviewStream(
@@ -138,12 +154,14 @@ func (c *Client) GenerateReviewStream(
 	emit func(domain.StreamEvent) error,
 ) (*domain.ReviewCard, *domain.PromptExecutionMeta, error) {
 	var response domain.ReviewCard
-	headers, err := c.postJSONStream(ctx, "/internal/generate_review/stream", request, &response, emit)
+	headers, rawOutput, err := c.postJSONStream(ctx, "/internal/generate_review/stream", request, &response, emit)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return &response, promptMetaFromHeaders(headers), nil
+	meta := promptMetaFromHeaders(headers)
+	meta.RawOutput = rawOutput
+	return &response, meta, nil
 }
 
 func (c *Client) ListPromptSets(ctx context.Context) ([]domain.PromptSetSummary, error) {
@@ -176,15 +194,20 @@ func (c *Client) ListPromptSets(ctx context.Context) ([]domain.PromptSetSummary,
 	return items, nil
 }
 
-func (c *Client) postJSON(ctx context.Context, path string, requestBody any, target any) (http.Header, error) {
+func (c *Client) postJSON(
+	ctx context.Context,
+	path string,
+	requestBody any,
+	target any,
+) (http.Header, string, error) {
 	body, err := json.Marshal(requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("marshal sidecar request: %w", err)
+		return nil, "", fmt.Errorf("marshal sidecar request: %w", err)
 	}
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("build sidecar request: %w", err)
+		return nil, "", fmt.Errorf("build sidecar request: %w", err)
 	}
 
 	request.Header.Set("Content-Type", "application/json")
@@ -196,22 +219,27 @@ func (c *Client) postJSON(ctx context.Context, path string, requestBody any, tar
 	response, err := c.httpClient.Do(request)
 	if err != nil {
 		slog.ErrorContext(ctx, "sidecar request failed", "path", path, "duration_ms", time.Since(startedAt).Milliseconds(), "error", err)
-		return nil, fmt.Errorf("call sidecar: %w", err)
+		return nil, "", fmt.Errorf("call sidecar: %w", err)
 	}
 	defer func() { _ = response.Body.Close() }()
 
 	if response.StatusCode >= http.StatusBadRequest {
 		slog.ErrorContext(ctx, "sidecar request returned error status", "path", path, "status", response.StatusCode, "duration_ms", time.Since(startedAt).Milliseconds())
-		return nil, fmt.Errorf("sidecar returned status %d", response.StatusCode)
+		return nil, "", fmt.Errorf("sidecar returned status %d", response.StatusCode)
 	}
 
-	if err := json.NewDecoder(response.Body).Decode(target); err != nil {
-		return nil, fmt.Errorf("decode sidecar response: %w", err)
+	payload, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, "", fmt.Errorf("read sidecar response: %w", err)
+	}
+	rawOutput, err := decodeResultPayload(payload, target)
+	if err != nil {
+		return nil, "", fmt.Errorf("decode sidecar response: %w", err)
 	}
 
 	slog.InfoContext(ctx, "sidecar request completed", "path", path, "status", response.StatusCode, "duration_ms", time.Since(startedAt).Milliseconds())
 
-	return response.Header.Clone(), nil
+	return response.Header.Clone(), rawOutput, nil
 }
 
 func (c *Client) postJSONStream(
@@ -220,15 +248,16 @@ func (c *Client) postJSONStream(
 	requestBody any,
 	target any,
 	emit func(domain.StreamEvent) error,
-) (http.Header, error) {
+) (http.Header, string, error) {
+	var rawOutput string
 	body, err := json.Marshal(requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("marshal sidecar request: %w", err)
+		return nil, "", fmt.Errorf("marshal sidecar request: %w", err)
 	}
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("build sidecar request: %w", err)
+		return nil, "", fmt.Errorf("build sidecar request: %w", err)
 	}
 
 	request.Header.Set("Content-Type", "application/json")
@@ -240,13 +269,13 @@ func (c *Client) postJSONStream(
 	response, err := c.httpClient.Do(request)
 	if err != nil {
 		slog.ErrorContext(ctx, "sidecar stream request failed", "path", path, "duration_ms", time.Since(startedAt).Milliseconds(), "error", err)
-		return nil, fmt.Errorf("call sidecar stream: %w", err)
+		return nil, "", fmt.Errorf("call sidecar stream: %w", err)
 	}
 	defer func() { _ = response.Body.Close() }()
 
 	if response.StatusCode >= http.StatusBadRequest {
 		slog.ErrorContext(ctx, "sidecar stream returned error status", "path", path, "status", response.StatusCode, "duration_ms", time.Since(startedAt).Milliseconds())
-		return nil, fmt.Errorf("sidecar returned status %d", response.StatusCode)
+		return nil, "", fmt.Errorf("sidecar returned status %d", response.StatusCode)
 	}
 
 	headers := response.Header.Clone()
@@ -261,16 +290,18 @@ func (c *Client) postJSONStream(
 
 		var event streamEvent
 		if err := json.Unmarshal(line, &event); err != nil {
-			return nil, fmt.Errorf("decode sidecar stream event: %w", err)
+			return nil, "", fmt.Errorf("decode sidecar stream event: %w", err)
 		}
 
 		if event.Type == "error" {
-			return nil, fmt.Errorf("sidecar stream error: %s", event.Message)
+			return nil, "", fmt.Errorf("sidecar stream error: %s", event.Message)
 		}
 
 		if event.Type == "result" {
-			if err := json.Unmarshal(event.Data, target); err != nil {
-				return nil, fmt.Errorf("decode sidecar stream result: %w", err)
+			var err error
+			rawOutput, err = decodeResultPayload(event.Data, target)
+			if err != nil {
+				return nil, "", fmt.Errorf("decode sidecar stream result: %w", err)
 			}
 			continue
 		}
@@ -283,17 +314,32 @@ func (c *Client) postJSONStream(
 				Text:    event.Text,
 				Message: event.Message,
 			}); err != nil {
-				return nil, err
+				return nil, "", err
 			}
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read sidecar stream: %w", err)
+		return nil, "", fmt.Errorf("read sidecar stream: %w", err)
 	}
 
 	slog.InfoContext(ctx, "sidecar stream completed", "path", path, "status", response.StatusCode, "duration_ms", time.Since(startedAt).Milliseconds())
-	return headers, nil
+	return headers, rawOutput, nil
+}
+
+func decodeResultPayload(payload []byte, target any) (string, error) {
+	var envelope responseEnvelope
+	if err := json.Unmarshal(payload, &envelope); err == nil && len(envelope.Result) > 0 {
+		if err := json.Unmarshal(envelope.Result, target); err != nil {
+			return "", err
+		}
+		return envelope.RawOutput, nil
+	}
+
+	if err := json.Unmarshal(payload, target); err != nil {
+		return "", err
+	}
+	return "", nil
 }
 
 func promptMetaFromHeaders(headers http.Header) *domain.PromptExecutionMeta {

@@ -15,8 +15,8 @@ func (s *Store) CreateProjectImportJob(ctx context.Context, repoURL string) (*do
 	now := nowUTC()
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO project_import_jobs (
-			id, repo_url, status, stage, message, error_message, project_id, created_at, updated_at, started_at, finished_at
-		) VALUES (?, ?, ?, ?, ?, '', '', ?, ?, '', '')
+			id, repo_url, status, stage, message, error_message, project_id, claim_token, claim_expires_at, created_at, updated_at, started_at, finished_at
+		) VALUES (?, ?, ?, ?, ?, '', '', '', '', ?, ?, '', '')
 	`,
 		jobID,
 		repoURL,
@@ -30,6 +30,149 @@ func (s *Store) CreateProjectImportJob(ctx context.Context, repoURL string) (*do
 	}
 
 	return s.GetProjectImportJob(ctx, jobID)
+}
+
+func (s *Store) ClaimProjectImportJob(
+	ctx context.Context,
+	jobID string,
+	claimToken string,
+	stage string,
+	message string,
+	startedAt time.Time,
+	claimExpiresAt time.Time,
+) (bool, error) {
+	now := nowUTC()
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE project_import_jobs
+		SET status = ?, stage = ?, message = ?, error_message = '', project_id = '',
+			claim_token = ?, claim_expires_at = ?, started_at = ?, finished_at = '',
+			updated_at = ?
+		WHERE id = ?
+			AND (
+				status = ?
+				OR (status = ? AND (claim_token = '' OR claim_expires_at = '' OR claim_expires_at <= ?))
+			)
+	`,
+		domain.ProjectImportStatusRunning,
+		stage,
+		message,
+		claimToken,
+		claimExpiresAt.UTC().Format(time.RFC3339Nano),
+		startedAt.UTC().Format(time.RFC3339Nano),
+		now,
+		jobID,
+		domain.ProjectImportStatusQueued,
+		domain.ProjectImportStatusRunning,
+		now,
+	)
+	if err != nil {
+		return false, fmt.Errorf("claim import job: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("claim import job rows affected: %w", err)
+	}
+	return rowsAffected > 0, nil
+}
+
+func (s *Store) TouchProjectImportJobClaim(
+	ctx context.Context,
+	jobID string,
+	claimToken string,
+	claimExpiresAt time.Time,
+) (bool, error) {
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE project_import_jobs
+		SET claim_expires_at = ?, updated_at = ?
+		WHERE id = ? AND status = ? AND claim_token = ?
+	`,
+		claimExpiresAt.UTC().Format(time.RFC3339Nano),
+		nowUTC(),
+		jobID,
+		domain.ProjectImportStatusRunning,
+		claimToken,
+	)
+	if err != nil {
+		return false, fmt.Errorf("touch import job claim: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("touch import job claim rows affected: %w", err)
+	}
+	return rowsAffected > 0, nil
+}
+
+func (s *Store) AdvanceClaimedProjectImportJob(
+	ctx context.Context,
+	jobID string,
+	claimToken string,
+	stage string,
+	message string,
+	claimExpiresAt time.Time,
+) (bool, error) {
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE project_import_jobs
+		SET stage = ?, message = ?, claim_expires_at = ?, updated_at = ?
+		WHERE id = ? AND status = ? AND claim_token = ?
+	`,
+		stage,
+		message,
+		claimExpiresAt.UTC().Format(time.RFC3339Nano),
+		nowUTC(),
+		jobID,
+		domain.ProjectImportStatusRunning,
+		claimToken,
+	)
+	if err != nil {
+		return false, fmt.Errorf("advance claimed import job: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("advance claimed import job rows affected: %w", err)
+	}
+	return rowsAffected > 0, nil
+}
+
+func (s *Store) FinishClaimedProjectImportJob(
+	ctx context.Context,
+	jobID string,
+	claimToken string,
+	status string,
+	stage string,
+	message string,
+	errorMessage string,
+	projectID string,
+	finishedAt time.Time,
+) (bool, error) {
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE project_import_jobs
+		SET status = ?, stage = ?, message = ?, error_message = ?, project_id = ?,
+			finished_at = ?, claim_token = '', claim_expires_at = '', updated_at = ?
+		WHERE id = ? AND status = ? AND claim_token = ?
+	`,
+		status,
+		stage,
+		message,
+		errorMessage,
+		projectID,
+		finishedAt.UTC().Format(time.RFC3339Nano),
+		nowUTC(),
+		jobID,
+		domain.ProjectImportStatusRunning,
+		claimToken,
+	)
+	if err != nil {
+		return false, fmt.Errorf("finish claimed import job: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("finish claimed import job rows affected: %w", err)
+	}
+	return rowsAffected > 0, nil
 }
 
 func (s *Store) UpdateProjectImportJobStatus(
@@ -74,6 +217,7 @@ func (s *Store) RetryProjectImportJob(ctx context.Context, jobID string, message
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE project_import_jobs
 		SET status = ?, stage = ?, message = ?, error_message = '', project_id = '',
+			claim_token = '', claim_expires_at = '',
 			started_at = '', finished_at = '', updated_at = ?
 		WHERE id = ?
 	`,

@@ -198,6 +198,28 @@ func (s *Store) ListWeaknesses(ctx context.Context, limit int) ([]domain.Weaknes
 	return items, nil
 }
 
+func (s *Store) GetWeaknessTag(
+	ctx context.Context,
+	kind string,
+	label string,
+) (*domain.WeaknessTag, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, kind, label, severity, frequency, last_seen_at, evidence_session_id
+		FROM weakness_tags
+		WHERE kind = ? AND label = ?
+	`, kind, label)
+
+	item, err := scanWeaknessTag(row)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, nil
+	case err != nil:
+		return nil, fmt.Errorf("get weakness tag: %w", err)
+	default:
+		return item, nil
+	}
+}
+
 func applyWeaknessTimeDecay(item domain.WeaknessTag, now time.Time) domain.WeaknessTag {
 	if item.LastSeenAt.IsZero() {
 		return item

@@ -257,6 +257,170 @@ func TestProjectImportJobLifecycle(t *testing.T) {
 	}
 }
 
+func TestClaimProjectImportJobPreventsConcurrentClaims(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	job, err := store.CreateProjectImportJob(ctx, "https://github.com/octocat/claim-once")
+	if err != nil {
+		t.Fatalf("CreateProjectImportJob() error = %v", err)
+	}
+
+	startedAt := time.Now().UTC()
+	claimed, err := store.ClaimProjectImportJob(
+		ctx,
+		job.ID,
+		"claim_token_a",
+		domain.ProjectImportStageAnalyzing,
+		"running",
+		startedAt,
+		startedAt.Add(time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("ClaimProjectImportJob() first claim error = %v", err)
+	}
+	if !claimed {
+		t.Fatal("expected first claim to succeed")
+	}
+
+	claimed, err = store.ClaimProjectImportJob(
+		ctx,
+		job.ID,
+		"claim_token_b",
+		domain.ProjectImportStageAnalyzing,
+		"running again",
+		startedAt,
+		startedAt.Add(time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("ClaimProjectImportJob() second claim error = %v", err)
+	}
+	if claimed {
+		t.Fatal("expected second claim to be rejected")
+	}
+
+	finished, err := store.FinishClaimedProjectImportJob(
+		ctx,
+		job.ID,
+		"claim_token_b",
+		domain.ProjectImportStatusCompleted,
+		domain.ProjectImportStageCompleted,
+		"done",
+		"",
+		"proj_x",
+		time.Now().UTC(),
+	)
+	if err != nil {
+		t.Fatalf("FinishClaimedProjectImportJob() wrong token error = %v", err)
+	}
+	if finished {
+		t.Fatal("expected finish with wrong token to fail")
+	}
+
+	finished, err = store.FinishClaimedProjectImportJob(
+		ctx,
+		job.ID,
+		"claim_token_a",
+		domain.ProjectImportStatusCompleted,
+		domain.ProjectImportStageCompleted,
+		"done",
+		"",
+		"proj_x",
+		time.Now().UTC(),
+	)
+	if err != nil {
+		t.Fatalf("FinishClaimedProjectImportJob() owner token error = %v", err)
+	}
+	if !finished {
+		t.Fatal("expected finish with owner token to succeed")
+	}
+
+	var (
+		status         string
+		claimToken     string
+		claimExpiresAt string
+	)
+	if err := store.db.QueryRow(`
+		SELECT status, claim_token, claim_expires_at
+		FROM project_import_jobs
+		WHERE id = ?
+	`, job.ID).Scan(&status, &claimToken, &claimExpiresAt); err != nil {
+		t.Fatalf("query claimed job: %v", err)
+	}
+
+	if status != domain.ProjectImportStatusCompleted {
+		t.Fatalf("expected completed status, got %s", status)
+	}
+	if claimToken != "" || claimExpiresAt != "" {
+		t.Fatalf("expected claim fields to be cleared, got token=%q expires=%q", claimToken, claimExpiresAt)
+	}
+}
+
+func TestClaimProjectImportJobReclaimsExpiredRunningJob(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	job, err := store.CreateProjectImportJob(ctx, "https://github.com/octocat/reclaim-expired")
+	if err != nil {
+		t.Fatalf("CreateProjectImportJob() error = %v", err)
+	}
+
+	expiredAt := time.Now().UTC().Add(-time.Minute)
+	if _, err := store.db.ExecContext(ctx, `
+		UPDATE project_import_jobs
+		SET status = ?, stage = ?, message = ?, claim_token = ?, claim_expires_at = ?,
+			started_at = ?, updated_at = ?
+		WHERE id = ?
+	`,
+		domain.ProjectImportStatusRunning,
+		domain.ProjectImportStageAnalyzing,
+		"stale worker",
+		"stale_claim",
+		expiredAt.Format(time.RFC3339Nano),
+		expiredAt.Add(-time.Minute).Format(time.RFC3339Nano),
+		expiredAt.Format(time.RFC3339Nano),
+		job.ID,
+	); err != nil {
+		t.Fatalf("seed stale claimed job: %v", err)
+	}
+
+	claimed, err := store.ClaimProjectImportJob(
+		ctx,
+		job.ID,
+		"fresh_claim",
+		domain.ProjectImportStageAnalyzing,
+		"reclaimed",
+		time.Now().UTC(),
+		time.Now().UTC().Add(time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("ClaimProjectImportJob() reclaim error = %v", err)
+	}
+	if !claimed {
+		t.Fatal("expected expired running job to be reclaimed")
+	}
+
+	var claimToken string
+	if err := store.db.QueryRow(`
+		SELECT claim_token
+		FROM project_import_jobs
+		WHERE id = ?
+	`, job.ID).Scan(&claimToken); err != nil {
+		t.Fatalf("query reclaimed token: %v", err)
+	}
+	if claimToken != "fresh_claim" {
+		t.Fatalf("expected fresh claim token, got %q", claimToken)
+	}
+}
+
 func TestTransitionSessionStatusRequiresCurrentStatusMatch(t *testing.T) {
 	store, err := openTestStore(t)
 	if err != nil {
@@ -1006,24 +1170,32 @@ func TestCreateReviewScheduleUpsertsExistingSessionEntry(t *testing.T) {
 
 	ctx := context.Background()
 	first := &domain.ReviewScheduleItem{
-		SessionID:    "sess_review_schedule",
-		ReviewCardID: "review_1",
-		Topic:        "redis",
-		NextReviewAt: time.Date(2026, 3, 21, 10, 0, 0, 0, time.UTC),
-		IntervalDays: 1,
-		EaseFactor:   2.5,
+		SessionID:     "sess_review_schedule",
+		ReviewCardID:  "review_1",
+		WeaknessTagID: "weak_cache_consistency",
+		Topic:         "redis",
+		NextReviewAt:  time.Date(2026, 3, 21, 10, 0, 0, 0, time.UTC),
+		IntervalDays:  1,
+		EaseFactor:    2.5,
+	}
+	if _, err := store.db.Exec(`
+		INSERT INTO weakness_tags (id, kind, label, severity, frequency, last_seen_at, evidence_session_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, first.WeaknessTagID, "topic", "缓存一致性", 1.10, 3, nowUTC(), first.SessionID); err != nil {
+		t.Fatalf("seed weakness tag: %v", err)
 	}
 	if err := store.CreateReviewSchedule(ctx, first); err != nil {
 		t.Fatalf("CreateReviewSchedule() first error = %v", err)
 	}
 
 	second := &domain.ReviewScheduleItem{
-		SessionID:    first.SessionID,
-		ReviewCardID: "review_2",
-		Topic:        "kafka",
-		NextReviewAt: time.Date(2026, 3, 24, 10, 0, 0, 0, time.UTC),
-		IntervalDays: 3,
-		EaseFactor:   2.6,
+		SessionID:     first.SessionID,
+		ReviewCardID:  "review_2",
+		WeaknessTagID: first.WeaknessTagID,
+		Topic:         "kafka",
+		NextReviewAt:  time.Date(2026, 3, 24, 10, 0, 0, 0, time.UTC),
+		IntervalDays:  3,
+		EaseFactor:    2.6,
 	}
 	if err := store.CreateReviewSchedule(ctx, second); err != nil {
 		t.Fatalf("CreateReviewSchedule() second error = %v", err)
@@ -1033,8 +1205,8 @@ func TestCreateReviewScheduleUpsertsExistingSessionEntry(t *testing.T) {
 	if err := store.db.QueryRow(`
 		SELECT COUNT(*)
 		FROM review_schedule
-		WHERE session_id = ?
-	`, first.SessionID).Scan(&count); err != nil {
+		WHERE weakness_tag_id = ?
+	`, first.WeaknessTagID).Scan(&count); err != nil {
 		t.Fatalf("query review schedule count: %v", err)
 	}
 	if count != 1 {
@@ -1053,6 +1225,9 @@ func TestCreateReviewScheduleUpsertsExistingSessionEntry(t *testing.T) {
 	}
 	if items[0].Topic != second.Topic {
 		t.Fatalf("expected updated topic %q, got %q", second.Topic, items[0].Topic)
+	}
+	if items[0].WeaknessLabel != "缓存一致性" {
+		t.Fatalf("expected weakness label 缓存一致性, got %q", items[0].WeaknessLabel)
 	}
 	if items[0].IntervalDays != second.IntervalDays {
 		t.Fatalf("expected updated interval %d, got %d", second.IntervalDays, items[0].IntervalDays)
@@ -1074,6 +1249,7 @@ func TestCreateEvaluationLogPersistsEntry(t *testing.T) {
 		"gpt-test",
 		"stable-v1",
 		"hash-evaluate-answer",
+		"{\"score\":82}",
 		12.5,
 	); err != nil {
 		t.Fatalf("CreateEvaluationLog() error = %v", err)
@@ -1086,14 +1262,24 @@ func TestCreateEvaluationLogPersistsEntry(t *testing.T) {
 		modelName   string
 		promptSetID string
 		promptHash  string
+		rawOutput   string
 		latencyMs   float64
 	)
 	if err := store.db.QueryRow(`
-		SELECT session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash, latency_ms
+		SELECT session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash, raw_output, latency_ms
 		FROM evaluation_logs
 		ORDER BY id DESC
 		LIMIT 1
-	`).Scan(&sessionID, &turnID, &flowName, &modelName, &promptSetID, &promptHash, &latencyMs); err != nil {
+	`).Scan(
+		&sessionID,
+		&turnID,
+		&flowName,
+		&modelName,
+		&promptSetID,
+		&promptHash,
+		&rawOutput,
+		&latencyMs,
+	); err != nil {
 		t.Fatalf("query evaluation log: %v", err)
 	}
 
@@ -1111,6 +1297,9 @@ func TestCreateEvaluationLogPersistsEntry(t *testing.T) {
 	}
 	if promptHash != "hash-evaluate-answer" {
 		t.Fatalf("expected prompt hash hash-evaluate-answer, got %q", promptHash)
+	}
+	if rawOutput != "{\"score\":82}" {
+		t.Fatalf("expected raw output to persist, got %q", rawOutput)
 	}
 	if latencyMs != 12.5 {
 		t.Fatalf("expected latency 12.5, got %.2f", latencyMs)

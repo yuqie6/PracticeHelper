@@ -63,6 +63,8 @@ func migrate(db *sql.DB) error {
 			message TEXT NOT NULL,
 			error_message TEXT NOT NULL DEFAULT '',
 			project_id TEXT NOT NULL DEFAULT '',
+			claim_token TEXT NOT NULL DEFAULT '',
+			claim_expires_at TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
 			started_at TEXT NOT NULL DEFAULT '',
@@ -201,6 +203,7 @@ func migrate(db *sql.DB) error {
 			model_name TEXT NOT NULL DEFAULT '',
 			prompt_set_id TEXT NOT NULL DEFAULT '',
 			prompt_hash TEXT NOT NULL DEFAULT '',
+			raw_output TEXT NOT NULL DEFAULT '',
 			latency_ms REAL NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL
 		);`,
@@ -246,6 +249,15 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 	if err := ensureColumn(db, "evaluation_logs", "prompt_hash", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "evaluation_logs", "raw_output", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "project_import_jobs", "claim_token", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "project_import_jobs", "claim_expires_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 

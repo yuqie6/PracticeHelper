@@ -7,19 +7,6 @@ import (
 	"practicehelper/server/internal/domain"
 )
 
-var basicsTopics = []string{
-	domain.BasicsTopicGo,
-	domain.BasicsTopicRedis,
-	domain.BasicsTopicKafka,
-	domain.BasicsTopicMySQL,
-	domain.BasicsTopicSystemDesign,
-	domain.BasicsTopicDistributed,
-	domain.BasicsTopicNetwork,
-	domain.BasicsTopicMicroservice,
-	domain.BasicsTopicOS,
-	domain.BasicsTopicDockerK8s,
-}
-
 var basicsTopicKeywordMap = map[string][]string{
 	domain.BasicsTopicGo: {
 		"go", "goroutine", "channel", "context", "gmp", "pprof", "gc", "interface",

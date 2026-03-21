@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"practicehelper/server/internal/domain"
@@ -104,14 +105,14 @@ func (s *Service) persistReview(
 
 func (s *Service) scheduleReview(ctx context.Context, session *domain.TrainingSession, review *domain.ReviewCard) error {
 	nextReview := time.Now().UTC().AddDate(0, 0, 1)
-	return s.repo.CreateReviewSchedule(ctx, &domain.ReviewScheduleItem{
-		SessionID:    session.ID,
-		ReviewCardID: review.ID,
-		Topic:        session.Topic,
-		NextReviewAt: nextReview,
-		IntervalDays: 1,
-		EaseFactor:   2.5,
-	})
+	items := s.buildReviewScheduleItems(ctx, session, review, nextReview)
+	for _, item := range items {
+		schedule := item
+		if err := s.repo.CreateReviewSchedule(ctx, &schedule); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Service) ListDueReviews(ctx context.Context) ([]domain.ReviewScheduleItem, error) {
@@ -210,4 +211,137 @@ func (s *Service) RetrySessionReview(ctx context.Context, sessionID string) (*do
 
 func wrapReviewGenerationRetry(err error) error {
 	return fmt.Errorf("%w: %v", ErrReviewGenerationRetry, err)
+}
+
+func (s *Service) buildReviewScheduleItems(
+	ctx context.Context,
+	session *domain.TrainingSession,
+	review *domain.ReviewCard,
+	nextReview time.Time,
+) []domain.ReviewScheduleItem {
+	hits := collectReviewWeaknessHits(session)
+	items := make([]domain.ReviewScheduleItem, 0, len(hits))
+	for _, hit := range hits {
+		tag, err := s.repo.GetWeaknessTag(ctx, hit.Kind, hit.Label)
+		if err != nil || tag == nil {
+			continue
+		}
+		items = append(items, domain.ReviewScheduleItem{
+			SessionID:     session.ID,
+			ReviewCardID:  review.ID,
+			WeaknessTagID: tag.ID,
+			WeaknessKind:  tag.Kind,
+			WeaknessLabel: tag.Label,
+			Topic:         resolveReviewScheduleTopic(session, review, hit),
+			NextReviewAt:  nextReview,
+			IntervalDays:  1,
+			EaseFactor:    2.5,
+		})
+	}
+
+	if len(items) > 0 {
+		return items
+	}
+
+	return []domain.ReviewScheduleItem{{
+		SessionID:    session.ID,
+		ReviewCardID: review.ID,
+		Topic:        fallbackReviewScheduleTopic(session, review),
+		NextReviewAt: nextReview,
+		IntervalDays: 1,
+		EaseFactor:   2.5,
+	}}
+}
+
+func collectReviewWeaknessHits(session *domain.TrainingSession) []domain.WeaknessHit {
+	if session == nil {
+		return nil
+	}
+
+	keyed := make(map[string]domain.WeaknessHit)
+	for _, turn := range session.Turns {
+		for _, hit := range turn.WeaknessHits {
+			if hit.Kind == "" || hit.Label == "" {
+				continue
+			}
+			key := hit.Kind + "\x00" + hit.Label
+			current, exists := keyed[key]
+			if !exists || hit.Severity > current.Severity {
+				keyed[key] = hit
+			}
+		}
+	}
+
+	items := make([]domain.WeaknessHit, 0, len(keyed))
+	for _, item := range keyed {
+		items = append(items, item)
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Severity != items[j].Severity {
+			return items[i].Severity > items[j].Severity
+		}
+		if items[i].Kind != items[j].Kind {
+			return items[i].Kind < items[j].Kind
+		}
+		return items[i].Label < items[j].Label
+	})
+	return items
+}
+
+func resolveReviewScheduleTopic(
+	session *domain.TrainingSession,
+	review *domain.ReviewCard,
+	hit domain.WeaknessHit,
+) string {
+	candidates := make([]string, 0, 6)
+	if hit.Kind == "topic" {
+		candidates = append(candidates, hit.Label)
+	}
+	candidates = append(candidates, matchBasicsTopics(hit.Label)...)
+	if review != nil {
+		if review.RecommendedNext != nil &&
+			review.RecommendedNext.Mode == domain.ModeBasics &&
+			review.RecommendedNext.Topic != "" {
+			candidates = append(candidates, review.RecommendedNext.Topic)
+		}
+		candidates = append(candidates, review.SuggestedTopics...)
+	}
+	if session != nil && session.Topic != "" {
+		candidates = append(candidates, session.Topic)
+	}
+
+	for _, candidate := range candidates {
+		normalized := normalizeBasicsTopic(candidate)
+		if normalized != "" && normalized != domain.BasicsTopicMixed {
+			return normalized
+		}
+	}
+
+	return domain.BasicsTopicGo
+}
+
+func fallbackReviewScheduleTopic(
+	session *domain.TrainingSession,
+	review *domain.ReviewCard,
+) string {
+	if review != nil {
+		if review.RecommendedNext != nil &&
+			review.RecommendedNext.Mode == domain.ModeBasics &&
+			review.RecommendedNext.Topic != "" {
+			if normalized := normalizeBasicsTopic(review.RecommendedNext.Topic); normalized != "" && normalized != domain.BasicsTopicMixed {
+				return normalized
+			}
+		}
+		for _, topic := range review.SuggestedTopics {
+			if normalized := normalizeBasicsTopic(topic); normalized != "" && normalized != domain.BasicsTopicMixed {
+				return normalized
+			}
+		}
+	}
+	if session != nil {
+		if normalized := normalizeBasicsTopic(session.Topic); normalized != "" && normalized != domain.BasicsTopicMixed {
+			return normalized
+		}
+	}
+	return domain.BasicsTopicGo
 }

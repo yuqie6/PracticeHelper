@@ -300,7 +300,7 @@ func scanTrainingTurn(scanner interface{ Scan(dest ...any) error }) (*domain.Tra
 func scanReviewCard(scanner interface{ Scan(dest ...any) error }) (*domain.ReviewCard, error) {
 	var (
 		id, sessionID, jobTargetID, jobTargetAnalysisID, overall, topFix, topFixReason string
-		promptSetID, promptSetLabel, promptSetStatus                                    string
+		promptSetID, promptSetLabel, promptSetStatus                                   string
 		highlightsJSON, gapsJSON, suggestedTopicsJSON, nextTrainingFocusJSON           string
 		recommendedNextJSON, scoreBreakdownJSON, createdAt                             string
 	)

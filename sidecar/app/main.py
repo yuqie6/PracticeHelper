@@ -19,17 +19,17 @@ from app.runtime_prompts import (
     review_prompt_meta,
 )
 from app.schemas import (
+    AnalyzeJobTargetEnvelope,
     AnalyzeJobTargetRequest,
-    AnalyzeJobTargetResponse,
+    AnalyzeRepoEnvelope,
     AnalyzeRepoRequest,
-    AnalyzeRepoResponse,
+    EvaluateAnswerEnvelope,
     EvaluateAnswerRequest,
-    EvaluationResult,
+    GenerateQuestionEnvelope,
     GenerateQuestionRequest,
-    GenerateQuestionResponse,
+    GenerateReviewEnvelope,
     GenerateReviewRequest,
     PromptSetSummary,
-    ReviewCard,
 )
 
 settings = load_settings()
@@ -118,20 +118,20 @@ def list_prompt_sets_endpoint() -> list[PromptSetSummary]:
     ]
 
 
-@app.post("/internal/analyze_repo", response_model=AnalyzeRepoResponse)
-def analyze_repo_endpoint(request: AnalyzeRepoRequest) -> AnalyzeRepoResponse:
+@app.post("/internal/analyze_repo", response_model=AnalyzeRepoEnvelope)
+def analyze_repo_endpoint(request: AnalyzeRepoRequest) -> AnalyzeRepoEnvelope:
     return flows["analyze_repo"].invoke({"request": request})["result"]
 
 
-@app.post("/internal/analyze_job_target", response_model=AnalyzeJobTargetResponse)
-def analyze_job_target_endpoint(request: AnalyzeJobTargetRequest) -> AnalyzeJobTargetResponse:
+@app.post("/internal/analyze_job_target", response_model=AnalyzeJobTargetEnvelope)
+def analyze_job_target_endpoint(request: AnalyzeJobTargetRequest) -> AnalyzeJobTargetEnvelope:
     return flows["analyze_job_target"].invoke({"request": request})["result"]
 
 
-@app.post("/internal/generate_question", response_model=GenerateQuestionResponse)
+@app.post("/internal/generate_question", response_model=GenerateQuestionEnvelope)
 def generate_question_endpoint(
     request: GenerateQuestionRequest, response: Response
-) -> GenerateQuestionResponse:
+) -> GenerateQuestionEnvelope:
     apply_prompt_headers(response, question_prompt_meta(request))
     return flows["generate_question"].invoke({"request": request})["result"]
 
@@ -146,10 +146,10 @@ def generate_question_stream_endpoint(request: GenerateQuestionRequest) -> Strea
     return response
 
 
-@app.post("/internal/evaluate_answer", response_model=EvaluationResult)
+@app.post("/internal/evaluate_answer", response_model=EvaluateAnswerEnvelope)
 def evaluate_answer_endpoint(
     request: EvaluateAnswerRequest, response: Response
-) -> EvaluationResult:
+) -> EvaluateAnswerEnvelope:
     apply_prompt_headers(response, evaluate_prompt_meta(request))
     return flows["evaluate_answer"].invoke({"request": request})["result"]
 
@@ -164,10 +164,10 @@ def evaluate_answer_stream_endpoint(request: EvaluateAnswerRequest) -> Streaming
     return response
 
 
-@app.post("/internal/generate_review", response_model=ReviewCard)
+@app.post("/internal/generate_review", response_model=GenerateReviewEnvelope)
 def generate_review_endpoint(
     request: GenerateReviewRequest, response: Response
-) -> ReviewCard:
+) -> GenerateReviewEnvelope:
     apply_prompt_headers(response, review_prompt_meta(request))
     return flows["generate_review"].invoke({"request": request})["result"]
 

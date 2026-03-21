@@ -134,6 +134,16 @@ class AnalyzeJobTargetResponse(JobTargetAnalysisSnapshot):
     pass
 
 
+class AnalyzeRepoEnvelope(BaseModel):
+    result: AnalyzeRepoResponse
+    raw_output: str = ""
+
+
+class AnalyzeJobTargetEnvelope(BaseModel):
+    result: AnalyzeJobTargetResponse
+    raw_output: str = ""
+
+
 class GenerateQuestionRequest(BaseModel):
     mode: Literal["basics", "project"]
     topic: str = ""
@@ -153,6 +163,11 @@ class GenerateQuestionResponse(BaseModel):
     expected_points: list[str] = Field(default_factory=list)
 
 
+class GenerateQuestionEnvelope(BaseModel):
+    result: GenerateQuestionResponse
+    raw_output: str = ""
+
+
 class EvaluateAnswerRequest(BaseModel):
     mode: Literal["basics", "project"]
     topic: str = ""
@@ -166,6 +181,7 @@ class EvaluateAnswerRequest(BaseModel):
     max_turns: int = 2
     score_weights: dict[str, float] = Field(default_factory=dict)
     job_target_analysis: JobTargetAnalysisSnapshot | None = None
+    retry_feedback: str = ""
 
 
 class EvaluationResult(BaseModel):
@@ -179,6 +195,11 @@ class EvaluationResult(BaseModel):
     followup_question: str = ""
     followup_expected_points: list[str] = Field(default_factory=list)
     weakness_hits: list[WeaknessHit] = Field(default_factory=list)
+
+
+class EvaluateAnswerEnvelope(BaseModel):
+    result: EvaluationResult
+    raw_output: str = ""
 
 
 class TrainingTurn(BaseModel):
@@ -208,6 +229,7 @@ class GenerateReviewRequest(BaseModel):
     turns: list[TrainingTurn] = Field(default_factory=list)
     prompt_set_id: str = ""
     job_target_analysis: JobTargetAnalysisSnapshot | None = None
+    retry_feedback: str = ""
 
 
 class NextSession(BaseModel):
@@ -229,3 +251,8 @@ class ReviewCard(BaseModel):
     next_training_focus: list[str] = Field(default_factory=list)
     recommended_next: NextSession | None = None
     score_breakdown: dict[str, float] = Field(default_factory=dict)
+
+
+class GenerateReviewEnvelope(BaseModel):
+    result: ReviewCard
+    raw_output: str = ""
