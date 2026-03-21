@@ -1,10 +1,34 @@
 <template>
-  <section class="neo-page space-y-6">
-    <header class="neo-panel bg-[var(--neo-blue)]">
-      <p class="neo-kicker bg-white">{{ t('review.hero.kicker') }}</p>
-      <p class="text-base font-semibold">
-        {{ review?.overall ?? reviewHeaderText }}
-      </p>
+  <section class="neo-page review-page space-y-6 xl:space-y-8">
+    <header class="neo-panel-hero review-stage bg-[var(--neo-blue)]">
+      <div class="review-stage-copy">
+        <p class="neo-kicker bg-white">{{ t('review.hero.kicker') }}</p>
+        <h1 class="review-stage-title">
+          {{ review?.overall ?? reviewHeaderText }}
+        </h1>
+        <p class="review-stage-note">
+          {{ review?.top_fix_reason || reviewHeaderText }}
+        </p>
+      </div>
+
+      <div class="review-stage-side">
+        <article class="review-stage-stat">
+          <span>{{ scoreAverageDisplay }}</span>
+          <small>{{ t('review.scoreBreakdown') }}</small>
+        </article>
+        <article class="review-stage-stat">
+          <span>{{ review?.highlights.length ?? 0 }}</span>
+          <small>{{ t('review.highlights') }}</small>
+        </article>
+        <article class="review-stage-stat">
+          <span>{{ review?.gaps.length ?? 0 }}</span>
+          <small>{{ t('review.gaps') }}</small>
+        </article>
+        <article class="review-stage-stat">
+          <span>{{ review?.next_training_focus.length ?? 0 }}</span>
+          <small>{{ t('review.nextFocus') }}</small>
+        </article>
+      </div>
     </header>
 
     <NoticePanel
@@ -50,124 +74,28 @@
       :message="exportError"
     />
 
-    <div v-if="review" class="flex justify-end">
-      <div
-        class="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-end"
-      >
-        <label class="w-full space-y-2 sm:w-44">
-          <span class="text-xs font-black uppercase tracking-[0.08em]">
-            {{ t('common.exportFormatLabel') }}
-          </span>
-          <select v-model="exportFormat" class="neo-select">
-            <option
-              v-for="item in exportFormatOptions"
-              :key="item.value"
-              :value="item.value"
-            >
-              {{ item.label }}
-            </option>
-          </select>
-        </label>
-        <RouterLink
-          v-if="review.prompt_set?.id"
-          :to="buildPromptExperimentLink(review.prompt_set.id)"
-          class="neo-button-dark w-full sm:w-auto"
-        >
-          {{ t('review.promptExperimentAction') }}
-        </RouterLink>
-        <button
-          type="button"
-          class="neo-button-dark w-full sm:w-auto"
-          @click="toggleAuditDetails"
-        >
-          {{
-            showAuditDetails
-              ? t('review.auditHideAction')
-              : t('review.auditShowAction')
-          }}
-        </button>
-        <button
-          type="button"
-          class="neo-button-dark w-full sm:w-auto"
-          :disabled="isExporting"
-          :aria-busy="isExporting"
-          @click="exportReport"
-        >
-          {{
-            isExporting
-              ? t('review.exportingAction')
-              : t('review.exportAction', { format: exportFormatLabel })
-          }}
-        </button>
-      </div>
-    </div>
-
-    <div v-if="review" class="neo-grid lg:grid-cols-[0.9fr_1.1fr]">
-      <div class="neo-panel space-y-4">
-        <div class="space-y-4">
-          <p class="neo-kicker bg-[var(--neo-yellow)]">
-            {{ t('review.jobTargetTitle') }}
-          </p>
-          <div
-            class="space-y-3 border-2 border-black bg-white px-4 py-4 md:border-4"
-          >
-            <p class="text-base font-black">
-              {{
-                review.job_target?.title ?? t('train.genericJobTargetOption')
-              }}
-            </p>
-            <p v-if="review.job_target" class="neo-note">
-              {{ t('review.jobTargetDescription') }}
-            </p>
+    <div v-if="review" class="review-shell">
+      <main class="review-main">
+        <section class="neo-panel review-focus-panel">
+          <div class="review-section-head">
+            <div class="space-y-2">
+              <p class="neo-kicker bg-[var(--neo-red)]">
+                {{ t('review.topFixTitle') }}
+              </p>
+              <h2 class="review-section-title">
+                {{ review.top_fix || review.overall }}
+              </h2>
+            </div>
+            <span class="neo-badge bg-white">{{ scoreAverageDisplay }}</span>
           </div>
-        </div>
-
-        <div v-if="review.prompt_set" class="space-y-4">
-          <p class="neo-kicker bg-[var(--neo-blue)]">
-            {{ t('review.promptSetTitle') }}
+          <p class="neo-note">
+            {{ review.top_fix_reason || t('review.topFixFallbackReason') }}
           </p>
           <div
-            class="space-y-3 border-2 border-black bg-white px-4 py-4 md:border-4"
+            v-if="recommendedNextLabel || review.recommended_next?.reason"
+            class="review-next-box"
           >
-            <p class="text-base font-black">
-              {{ review.prompt_set.label }}
-            </p>
-            <p class="neo-note">
-              {{
-                t('review.promptSetDescription', {
-                  status: review.prompt_set.status,
-                })
-              }}
-            </p>
-          </div>
-        </div>
-
-        <div class="space-y-4">
-          <p class="neo-kicker bg-[var(--neo-red)]">
-            {{ t('review.topFixTitle') }}
-          </p>
-          <div
-            class="space-y-3 border-2 border-black bg-white px-4 py-4 md:border-4"
-          >
-            <p class="text-lg font-black leading-7">
-              {{ review.top_fix || review.overall }}
-            </p>
-            <p class="neo-note">
-              {{ review.top_fix_reason || t('review.topFixFallbackReason') }}
-            </p>
-          </div>
-        </div>
-
-        <div
-          v-if="recommendedNextLabel || review.recommended_next?.reason"
-          class="space-y-4"
-        >
-          <p class="neo-kicker bg-[var(--neo-green)]">
-            {{ t('review.recommendedNextTitle') }}
-          </p>
-          <div
-            class="space-y-3 border-2 border-black bg-white px-4 py-4 md:border-4"
-          >
+            <p class="neo-subheading">{{ t('review.recommendedNextTitle') }}</p>
             <p class="text-base font-black">
               {{ recommendedNextLabel || t('review.continueAction') }}
             </p>
@@ -181,134 +109,202 @@
               {{ t('review.startRecommendedAction') }}
             </RouterLink>
           </div>
+        </section>
+
+        <div class="review-grid">
+          <section class="neo-panel review-list-panel">
+            <p class="neo-kicker bg-[var(--neo-yellow)]">
+              {{ t('review.highlights') }}
+            </p>
+            <ul class="review-list">
+              <li v-for="item in review.highlights" :key="item" class="neo-note">
+                {{ item }}
+              </li>
+            </ul>
+          </section>
+
+          <section class="neo-panel review-list-panel">
+            <p class="neo-kicker bg-[var(--neo-red)]">{{ t('review.gaps') }}</p>
+            <ul class="review-list">
+              <li v-for="item in review.gaps" :key="item" class="neo-note">
+                {{ item }}
+              </li>
+            </ul>
+          </section>
+
+          <section class="neo-panel review-list-panel">
+            <p class="neo-kicker bg-[var(--neo-green)]">
+              {{ t('review.nextFocus') }}
+            </p>
+            <ul class="review-list">
+              <li
+                v-for="item in review.next_training_focus"
+                :key="item"
+                class="neo-note"
+              >
+                {{ item }}
+              </li>
+            </ul>
+            <RouterLink
+              :to="continueTarget"
+              class="neo-button-red mt-4 w-full sm:w-auto"
+            >
+              {{ t('review.continueAction') }}
+            </RouterLink>
+          </section>
         </div>
 
-        <div class="space-y-4">
+        <section v-if="showAuditDetails" class="neo-panel review-audit-panel">
+          <div class="review-section-head">
+            <div>
+              <p class="neo-kicker bg-[var(--neo-yellow)]">
+                {{ t('review.auditTitle') }}
+              </p>
+              <p class="neo-note">
+                {{ t('review.auditDescription') }}
+              </p>
+            </div>
+          </div>
+
+          <div v-if="isLoadingEvaluationLogs" class="neo-note">
+            {{ t('common.loading') }}
+          </div>
+
+          <NoticePanel
+            v-else-if="evaluationLogsError"
+            tone="error"
+            :title="t('review.auditErrorTitle')"
+            :message="evaluationLogsError"
+          />
+
+          <div v-else-if="evaluationLogs.length" class="review-audit-list">
+            <article
+              v-for="item in evaluationLogs"
+              :key="item.id"
+              class="review-audit-row"
+            >
+              <div
+                class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
+              >
+                <div class="space-y-1">
+                  <p class="text-base font-black">{{ item.flow_name }}</p>
+                  <p class="neo-note">
+                    {{ t('review.auditMeta') }}: {{ item.model_name || '—' }} /
+                    {{ item.prompt_hash || '—' }} /
+                    {{ item.latency_ms.toFixed(1) }} ms
+                  </p>
+                </div>
+                <p class="neo-note text-xs">
+                  {{ new Date(item.created_at).toLocaleString() }}
+                </p>
+              </div>
+
+              <div
+                v-if="hasEvaluationRawOutput(item.raw_output)"
+                class="space-y-2"
+              >
+                <p class="text-xs font-black uppercase tracking-[0.08em]">
+                  {{ t('review.auditRawOutput') }}
+                </p>
+                <pre
+                  class="max-h-72 overflow-auto border-2 border-black bg-[var(--neo-paper)] px-3 py-3 text-xs leading-6 md:border-4"
+                ><code>{{
+                  formatEvaluationRawOutput(item.raw_output)
+                }}</code></pre>
+              </div>
+            </article>
+          </div>
+
+          <p v-else class="neo-note">
+            {{ t('review.auditEmpty') }}
+          </p>
+        </section>
+      </main>
+
+      <aside class="review-side">
+        <section class="neo-panel review-side-panel">
+          <label class="space-y-2">
+            <span class="text-xs font-black uppercase tracking-[0.08em]">
+              {{ t('common.exportFormatLabel') }}
+            </span>
+            <select v-model="exportFormat" class="neo-select">
+              <option
+                v-for="item in exportFormatOptions"
+                :key="item.value"
+                :value="item.value"
+              >
+                {{ item.label }}
+              </option>
+            </select>
+          </label>
+          <div class="review-side-actions">
+            <RouterLink
+              v-if="review.prompt_set?.id"
+              :to="buildPromptExperimentLink(review.prompt_set.id)"
+              class="neo-button-dark w-full"
+            >
+              {{ t('review.promptExperimentAction') }}
+            </RouterLink>
+            <button
+              type="button"
+              class="neo-button-dark w-full"
+              @click="toggleAuditDetails"
+            >
+              {{
+                showAuditDetails
+                  ? t('review.auditHideAction')
+                  : t('review.auditShowAction')
+              }}
+            </button>
+            <button
+              type="button"
+              class="neo-button-dark w-full"
+              :disabled="isExporting"
+              :aria-busy="isExporting"
+              @click="exportReport"
+            >
+              {{
+                isExporting
+                  ? t('review.exportingAction')
+                  : t('review.exportAction', { format: exportFormatLabel })
+              }}
+            </button>
+          </div>
+        </section>
+
+        <section class="neo-panel review-side-panel">
+          <p class="neo-kicker bg-[var(--neo-yellow)]">
+            {{ t('review.jobTargetTitle') }}
+          </p>
+          <h2 class="review-section-title">
+            {{ review.job_target?.title ?? t('train.genericJobTargetOption') }}
+          </h2>
+          <p v-if="review.job_target" class="neo-note">
+            {{ t('review.jobTargetDescription') }}
+          </p>
+          <p v-if="review.prompt_set" class="neo-note">
+            {{ review.prompt_set.label }} · {{ review.prompt_set.status }}
+          </p>
+        </section>
+
+        <section class="neo-panel review-side-panel">
           <p class="neo-kicker bg-[var(--neo-green)]">
             {{ t('review.scoreBreakdown') }}
           </p>
-          <div class="space-y-3">
+          <div class="review-score-list">
             <div
               v-for="(value, key) in review.score_breakdown"
               :key="key"
-              class="border-2 border-black bg-white px-4 py-3 md:border-4"
+              class="review-score-row"
             >
               <div class="flex items-center justify-between gap-3">
                 <span class="font-black">{{ key }}</span>
-                <span class="neo-badge bg-[var(--neo-yellow)]">{{
-                  value
-                }}</span>
+                <span class="neo-badge bg-[var(--neo-yellow)]">{{ value }}</span>
               </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div class="neo-grid">
-        <div class="neo-panel">
-          <p class="neo-kicker bg-[var(--neo-yellow)]">
-            {{ t('review.highlights') }}
-          </p>
-          <ul class="space-y-2">
-            <li v-for="item in review.highlights" :key="item" class="neo-note">
-              {{ item }}
-            </li>
-          </ul>
-        </div>
-
-        <div class="neo-panel">
-          <p class="neo-kicker bg-[var(--neo-red)]">{{ t('review.gaps') }}</p>
-          <ul class="space-y-2">
-            <li v-for="item in review.gaps" :key="item" class="neo-note">
-              {{ item }}
-            </li>
-          </ul>
-        </div>
-
-        <div class="neo-panel">
-          <p class="neo-kicker bg-[var(--neo-green)]">
-            {{ t('review.nextFocus') }}
-          </p>
-          <ul class="space-y-2">
-            <li
-              v-for="item in review.next_training_focus"
-              :key="item"
-              class="neo-note"
-            >
-              {{ item }}
-            </li>
-          </ul>
-          <RouterLink
-            :to="continueTarget"
-            class="neo-button-red mt-4 w-full sm:w-auto"
-          >
-            {{ t('review.continueAction') }}
-          </RouterLink>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="review && showAuditDetails" class="neo-panel space-y-4">
-      <div class="flex items-center justify-between gap-3">
-        <div>
-          <p class="neo-kicker bg-[var(--neo-yellow)]">
-            {{ t('review.auditTitle') }}
-          </p>
-          <p class="neo-note">
-            {{ t('review.auditDescription') }}
-          </p>
-        </div>
-      </div>
-
-      <div v-if="isLoadingEvaluationLogs" class="neo-note">
-        {{ t('common.loading') }}
-      </div>
-
-      <NoticePanel
-        v-else-if="evaluationLogsError"
-        tone="error"
-        :title="t('review.auditErrorTitle')"
-        :message="evaluationLogsError"
-      />
-
-      <div v-else-if="evaluationLogs.length" class="neo-stagger-list space-y-3">
-        <article
-          v-for="item in evaluationLogs"
-          :key="item.id"
-          class="space-y-3 border-2 border-black bg-white px-4 py-4 md:border-4"
-        >
-          <div
-            class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
-          >
-            <div class="space-y-1">
-              <p class="text-base font-black">{{ item.flow_name }}</p>
-              <p class="neo-note">
-                {{ t('review.auditMeta') }}: {{ item.model_name || '—' }} /
-                {{ item.prompt_hash || '—' }} /
-                {{ item.latency_ms.toFixed(1) }} ms
-              </p>
-            </div>
-            <p class="neo-note text-xs">
-              {{ new Date(item.created_at).toLocaleString() }}
-            </p>
-          </div>
-
-          <div v-if="hasEvaluationRawOutput(item.raw_output)" class="space-y-2">
-            <p class="text-xs font-black uppercase tracking-[0.08em]">
-              {{ t('review.auditRawOutput') }}
-            </p>
-            <pre
-              class="max-h-72 overflow-auto border-2 border-black bg-[var(--neo-paper)] px-3 py-3 text-xs leading-6 md:border-4"
-            ><code>{{
-              formatEvaluationRawOutput(item.raw_output)
-            }}</code></pre>
-          </div>
-        </article>
-      </div>
-
-      <p v-else class="neo-note">
-        {{ t('review.auditEmpty') }}
-      </p>
+        </section>
+      </aside>
     </div>
   </section>
 </template>
@@ -407,6 +403,14 @@ const recommendedNextLabel = computed(() => {
     mode: formatModeLabel(t, recommended.mode),
   });
 });
+const scoreAverageDisplay = computed(() => {
+  const entries = Object.values(review.value?.score_breakdown ?? {});
+  if (!entries.length) {
+    return '--';
+  }
+  const total = entries.reduce((sum, value) => sum + Number(value || 0), 0);
+  return (total / entries.length).toFixed(1);
+});
 
 const exportFormatOptions = computed(() =>
   SESSION_EXPORT_FORMATS.map((item) => ({
@@ -466,3 +470,182 @@ function toggleAuditDetails() {
   showAuditDetails.value = !showAuditDetails.value;
 }
 </script>
+
+<style scoped>
+.review-page {
+  position: relative;
+}
+
+.review-stage {
+  display: grid;
+  gap: 1.5rem;
+  overflow: hidden;
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--neo-blue) 84%, white) 0%,
+    color-mix(in srgb, var(--neo-blue) 58%, var(--neo-green)) 100%
+  );
+}
+
+.review-stage::before {
+  content: '';
+  position: absolute;
+  inset: 1rem;
+  border: 1px solid color-mix(in srgb, var(--neo-border) 20%, transparent);
+  pointer-events: none;
+}
+
+.review-stage-copy,
+.review-stage-side {
+  position: relative;
+  z-index: 1;
+}
+
+.review-stage-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.review-stage-title {
+  font-size: clamp(2rem, 5vw, 4.2rem);
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  line-height: 1;
+  margin: 0;
+  max-width: 14ch;
+}
+
+.review-stage-note {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.7;
+  margin: 0;
+  max-width: 40rem;
+}
+
+.review-stage-side {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.review-stage-stat {
+  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
+  border: 2px solid var(--neo-border);
+  box-shadow: 6px 6px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.review-stage-stat span {
+  font-size: clamp(2.2rem, 7vw, 3.8rem);
+  font-weight: 900;
+  letter-spacing: -0.08em;
+  line-height: 0.9;
+}
+
+.review-stage-stat small {
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.review-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.review-main,
+.review-side {
+  display: grid;
+  gap: 1rem;
+}
+
+.review-focus-panel,
+.review-list-panel,
+.review-side-panel,
+.review-audit-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.review-section-head {
+  align-items: end;
+  border-bottom: 2px solid color-mix(in srgb, var(--neo-border) 18%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-bottom: 1rem;
+}
+
+.review-section-title {
+  font-size: 1.3rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.review-next-box,
+.review-score-row,
+.review-audit-row {
+  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
+  border: 2px solid var(--neo-border);
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.review-grid,
+.review-side-actions,
+.review-score-list,
+.review-audit-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.review-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding-left: 1rem;
+}
+
+@media (min-width: 768px) {
+  .review-stage-side {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .review-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .review-grid > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1280px) {
+  .review-stage {
+    align-items: start;
+    grid-template-columns: minmax(0, 1.1fr) minmax(18rem, 0.9fr);
+  }
+
+  .review-shell {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
+  }
+
+  .review-side {
+    position: sticky;
+    top: 1.5rem;
+  }
+}
+</style>
