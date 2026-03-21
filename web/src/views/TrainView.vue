@@ -72,6 +72,9 @@
         <label class="space-y-2">
           <span class="neo-subheading">{{ t('train.fields.intensity') }}</span>
           <select v-model="form.intensity" class="neo-select">
+            <option value="auto">
+              {{ formatIntensityLabel(t, 'auto') }}
+            </option>
             <option value="light">
               {{ formatIntensityLabel(t, 'light') }}
             </option>
@@ -208,7 +211,7 @@ const form = reactive({
   topic: 'go',
   project_id: '',
   job_target_id: '',
-  intensity: 'standard',
+  intensity: 'auto',
   max_turns: 2,
 });
 const jobTargetSelectionTouched = ref(false);

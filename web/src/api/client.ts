@@ -562,3 +562,16 @@ export interface WeaknessTrend {
 export function getWeaknessTrends(): Promise<WeaknessTrend[]> {
   return request('/api/weaknesses/trends');
 }
+
+export interface ReviewScheduleItem {
+  id: number;
+  session_id: string;
+  review_card_id?: string;
+  topic?: string;
+  next_review_at: string;
+  interval_days: number;
+}
+
+export function listDueReviews(): Promise<ReviewScheduleItem[]> {
+  return request('/api/reviews/due');
+}

@@ -480,6 +480,123 @@ func TestRelieveWeaknessesMatchingTextUsesNormalizedQuestionText(t *testing.T) {
 	if kafkaSeverity != 1.00 {
 		t.Fatalf("expected unmatched weakness to stay unchanged, got %.2f", kafkaSeverity)
 	}
+
+	var snapshotCount int
+	if err := store.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM weakness_snapshots
+		WHERE weakness_id = 'weak_match_target'
+	`).Scan(&snapshotCount); err != nil {
+		t.Fatalf("count relieved snapshots: %v", err)
+	}
+	if snapshotCount != 1 {
+		t.Fatalf("expected 1 relieved snapshot for matched weakness, got %d", snapshotCount)
+	}
+}
+
+func TestRelieveWeaknessRecordsSnapshot(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := store.db.Exec(`
+		INSERT INTO weakness_tags (id, kind, label, severity, frequency, last_seen_at, evidence_session_id)
+		VALUES ('weak_relieve_target', 'topic', 'Redis缓存击穿', 1.20, 2, ?, 'sess_old')
+	`, now); err != nil {
+		t.Fatalf("insert weakness tag: %v", err)
+	}
+
+	if err := store.RelieveWeakness(context.Background(), "topic", "Redis缓存击穿", 0.30); err != nil {
+		t.Fatalf("RelieveWeakness() error = %v", err)
+	}
+
+	var severity float64
+	if err := store.db.QueryRow(`
+		SELECT severity
+		FROM weakness_tags
+		WHERE id = 'weak_relieve_target'
+	`).Scan(&severity); err != nil {
+		t.Fatalf("query relieved severity: %v", err)
+	}
+	if severity >= 1.20 {
+		t.Fatalf("expected relieved severity to decrease, got %.2f", severity)
+	}
+
+	var snapshotSeverity float64
+	var sessionID string
+	if err := store.db.QueryRow(`
+		SELECT severity, session_id
+		FROM weakness_snapshots
+		WHERE weakness_id = 'weak_relieve_target'
+		ORDER BY id DESC
+		LIMIT 1
+	`).Scan(&snapshotSeverity, &sessionID); err != nil {
+		t.Fatalf("query relieved snapshot: %v", err)
+	}
+	if snapshotSeverity != severity {
+		t.Fatalf("expected snapshot severity %.2f, got %.2f", severity, snapshotSeverity)
+	}
+	if sessionID != "" {
+		t.Fatalf("expected relieved snapshot session id to be empty, got %q", sessionID)
+	}
+}
+
+func TestGetWeaknessTrendsReturnsLatestFiftyPoints(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	base := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := store.db.Exec(`
+		INSERT INTO weakness_tags (id, kind, label, severity, frequency, last_seen_at, evidence_session_id)
+		VALUES ('weak_trend_latest', 'topic', '缓存一致性', 1.40, 60, ?, 'sess_latest')
+	`, base.Add(59*time.Minute).Format(time.RFC3339Nano)); err != nil {
+		t.Fatalf("insert weakness tag: %v", err)
+	}
+
+	for i := 0; i < 60; i++ {
+		if _, err := store.db.Exec(`
+			INSERT INTO weakness_snapshots (weakness_id, session_id, severity, created_at)
+			VALUES (?, ?, ?, ?)
+		`,
+			"weak_trend_latest",
+			"",
+			float64(i+1),
+			base.Add(time.Duration(i)*time.Minute).Format(time.RFC3339Nano),
+		); err != nil {
+			t.Fatalf("insert weakness snapshot %d: %v", i, err)
+		}
+	}
+
+	trends, err := store.GetWeaknessTrends(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("GetWeaknessTrends() error = %v", err)
+	}
+	if len(trends) != 1 {
+		t.Fatalf("expected 1 trend, got %d", len(trends))
+	}
+	if len(trends[0].Points) != 50 {
+		t.Fatalf("expected 50 points, got %d", len(trends[0].Points))
+	}
+	first := trends[0].Points[0]
+	last := trends[0].Points[len(trends[0].Points)-1]
+	if first.Severity != 11 {
+		t.Fatalf("expected first recent point severity 11, got %.2f", first.Severity)
+	}
+	if last.Severity != 60 {
+		t.Fatalf("expected last recent point severity 60, got %.2f", last.Severity)
+	}
+	if first.CreatedAt != base.Add(10*time.Minute).Format(time.RFC3339Nano) {
+		t.Fatalf("expected first recent point timestamp %q, got %q", base.Add(10*time.Minute).Format(time.RFC3339Nano), first.CreatedAt)
+	}
+	if last.CreatedAt != base.Add(59*time.Minute).Format(time.RFC3339Nano) {
+		t.Fatalf("expected last recent point timestamp %q, got %q", base.Add(59*time.Minute).Format(time.RFC3339Nano), last.CreatedAt)
+	}
 }
 
 func TestJobTargetAnalysisLifecycleAndStaleStatus(t *testing.T) {

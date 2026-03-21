@@ -245,6 +245,18 @@ type WeaknessTrend struct {
 	Points []WeaknessTrendPoint `json:"points"`
 }
 
+type ReviewScheduleItem struct {
+	ID            int64     `json:"id"`
+	SessionID     string    `json:"session_id"`
+	ReviewCardID  string    `json:"review_card_id,omitempty"`
+	WeaknessTagID string    `json:"weakness_tag_id,omitempty"`
+	Topic         string    `json:"topic,omitempty"`
+	NextReviewAt  time.Time `json:"next_review_at"`
+	IntervalDays  int       `json:"interval_days"`
+	EaseFactor    float64   `json:"ease_factor"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
 type ReviewCard struct {
 	ID                  string             `json:"id"`
 	SessionID           string             `json:"session_id"`

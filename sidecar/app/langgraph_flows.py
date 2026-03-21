@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -19,6 +20,8 @@ from app.schemas import (
     ReviewCard,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class AnalyzeRepoState(TypedDict):
     request: AnalyzeRepoRequest
@@ -32,12 +35,14 @@ class AnalyzeJobTargetState(TypedDict):
 
 class GenerateQuestionState(TypedDict):
     request: GenerateQuestionRequest
+    strategy: str
     result: GenerateQuestionResponse
 
 
 class EvaluateAnswerState(TypedDict):
     request: EvaluateAnswerRequest
     result: EvaluationResult
+    attempts: int
 
 
 class GenerateReviewState(TypedDict):
@@ -45,80 +50,94 @@ class GenerateReviewState(TypedDict):
     result: ReviewCard
 
 
+_MAX_EVALUATE_ATTEMPTS = 2
+
+
 def build_flows(settings: Settings) -> dict[str, object]:
     runtime = AgentRuntime(settings)
-    # 当前每条 flow 只有一个 run 节点，但这里仍统一包成 LangGraph，
-    # 是为了先把 FastAPI 入口固定成 graph.invoke 边界，后续再按需插入检索、审查或缓存节点。
     return {
-        "analyze_repo": build_analyze_repo_graph(runtime),
-        "analyze_job_target": build_analyze_job_target_graph(runtime),
-        "generate_question": build_generate_question_graph(runtime),
-        "evaluate_answer": build_evaluate_answer_graph(runtime),
-        "generate_review": build_generate_review_graph(runtime),
+        "analyze_repo": _build_simple_graph(
+            AnalyzeRepoState, runtime.analyze_repo, AnalyzeRepoResponse
+        ),
+        "analyze_job_target": _build_simple_graph(
+            AnalyzeJobTargetState, runtime.analyze_job_target, AnalyzeJobTargetResponse
+        ),
+        "generate_question": _build_generate_question_graph(runtime),
+        "evaluate_answer": _build_evaluate_answer_graph(runtime),
+        "generate_review": _build_simple_graph(
+            GenerateReviewState, runtime.generate_review, ReviewCard
+        ),
     }
 
 
-def build_analyze_repo_graph(runtime: AgentRuntime):
-    def run(state: AnalyzeRepoState) -> AnalyzeRepoState:
-        result = runtime.analyze_repo(state["request"])
-        return {"request": state["request"], "result": AnalyzeRepoResponse.model_validate(result)}
+def _build_simple_graph(state_type, run_fn, result_model):
+    def run(state):
+        result = run_fn(state["request"])
+        return {"result": result_model.model_validate(result)}
 
-    graph = StateGraph(AnalyzeRepoState)
+    graph = StateGraph(state_type)
     graph.add_node("run", run)
     graph.add_edge(START, "run")
     graph.add_edge("run", END)
     return graph.compile()
 
 
-def build_analyze_job_target_graph(runtime: AgentRuntime):
-    def run(state: AnalyzeJobTargetState) -> AnalyzeJobTargetState:
-        result = runtime.analyze_job_target(state["request"])
-        return {
-            "request": state["request"],
-            "result": AnalyzeJobTargetResponse.model_validate(result),
-        }
+def _build_generate_question_graph(runtime: AgentRuntime):
+    def select_strategy(state: GenerateQuestionState) -> dict:
+        req = state["request"]
+        if req.weaknesses and any(w.severity >= 0.8 for w in req.weaknesses):
+            strategy = "weakness_first"
+        elif req.mode == "project" and req.project:
+            strategy = "project_deep_dive"
+        else:
+            strategy = "template_based"
+        logger.info("generate_question strategy=%s mode=%s topic=%s", strategy, req.mode, req.topic)
+        return {"strategy": strategy}
 
-    graph = StateGraph(AnalyzeJobTargetState)
-    graph.add_node("run", run)
-    graph.add_edge(START, "run")
-    graph.add_edge("run", END)
-    return graph.compile()
-
-
-def build_generate_question_graph(runtime: AgentRuntime):
-    def run(state: GenerateQuestionState) -> GenerateQuestionState:
+    def generate(state: GenerateQuestionState) -> dict:
         result = runtime.generate_question(state["request"])
-        return {
-            "request": state["request"],
-            "result": GenerateQuestionResponse.model_validate(result),
-        }
+        return {"result": GenerateQuestionResponse.model_validate(result)}
 
     graph = StateGraph(GenerateQuestionState)
-    graph.add_node("run", run)
-    graph.add_edge(START, "run")
-    graph.add_edge("run", END)
+    graph.add_node("select_strategy", select_strategy)
+    graph.add_node("generate", generate)
+    graph.add_edge(START, "select_strategy")
+    graph.add_edge("select_strategy", "generate")
+    graph.add_edge("generate", END)
     return graph.compile()
 
 
-def build_evaluate_answer_graph(runtime: AgentRuntime):
-    def run(state: EvaluateAnswerState) -> EvaluateAnswerState:
+def _build_evaluate_answer_graph(runtime: AgentRuntime):
+    def evaluate(state: EvaluateAnswerState) -> dict:
         result = runtime.evaluate_answer(state["request"])
-        return {"request": state["request"], "result": EvaluationResult.model_validate(result)}
+        validated = EvaluationResult.model_validate(result)
+        return {"result": validated, "attempts": state.get("attempts", 0) + 1}
+
+    def should_retry(state: EvaluateAnswerState) -> str:
+        result = state.get("result")
+        attempts = state.get("attempts", 0)
+        if attempts >= _MAX_EVALUATE_ATTEMPTS:
+            return "accept"
+
+        if result is None:
+            return "retry"
+
+        if not isinstance(result, EvaluationResult):
+            return "retry"
+
+        if not result.strengths and not result.gaps:
+            logger.warning("evaluate_answer output missing strengths/gaps, retrying")
+            return "retry"
+
+        is_last_turn = state["request"].turn_index >= state["request"].max_turns
+        if not is_last_turn and not result.followup_question:
+            logger.warning("evaluate_answer missing followup_question on non-last turn, retrying")
+            return "retry"
+
+        return "accept"
 
     graph = StateGraph(EvaluateAnswerState)
-    graph.add_node("run", run)
-    graph.add_edge(START, "run")
-    graph.add_edge("run", END)
-    return graph.compile()
-
-
-def build_generate_review_graph(runtime: AgentRuntime):
-    def run(state: GenerateReviewState) -> GenerateReviewState:
-        result = runtime.generate_review(state["request"])
-        return {"request": state["request"], "result": ReviewCard.model_validate(result)}
-
-    graph = StateGraph(GenerateReviewState)
-    graph.add_node("run", run)
-    graph.add_edge(START, "run")
-    graph.add_edge("run", END)
+    graph.add_node("evaluate", evaluate)
+    graph.add_edge(START, "evaluate")
+    graph.add_conditional_edges("evaluate", should_retry, {"accept": END, "retry": "evaluate"})
     return graph.compile()

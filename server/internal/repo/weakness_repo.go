@@ -68,7 +68,7 @@ func (s *Store) UpsertWeaknesses(ctx context.Context, sessionID string, hits []d
 }
 
 func (s *Store) RelieveWeakness(ctx context.Context, kind, label string, amount float64) error {
-	_, err := s.db.ExecContext(ctx, `
+	result, err := s.db.ExecContext(ctx, `
 		UPDATE weakness_tags
 		SET severity = CASE
 			WHEN severity - ? < 0 THEN 0
@@ -78,6 +78,16 @@ func (s *Store) RelieveWeakness(ctx context.Context, kind, label string, amount 
 	`, amount, amount, kind, label)
 	if err != nil {
 		return fmt.Errorf("relieve weakness: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("relieve weakness rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return nil
+	}
+	if err := s.recordCurrentWeaknessSnapshot(ctx, kind, label, ""); err != nil {
+		return err
 	}
 
 	return nil
@@ -224,6 +234,31 @@ func (s *Store) recordWeaknessSnapshot(ctx context.Context, weaknessID, sessionI
 	return err
 }
 
+func (s *Store) recordCurrentWeaknessSnapshot(
+	ctx context.Context,
+	kind string,
+	label string,
+	sessionID string,
+) error {
+	var weaknessID string
+	var severity float64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, severity
+		FROM weakness_tags
+		WHERE kind = ? AND label = ?
+	`, kind, label).Scan(&weaknessID, &severity)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil
+	case err != nil:
+		return fmt.Errorf("query relieved weakness for snapshot: %w", err)
+	}
+	if err := s.recordWeaknessSnapshot(ctx, weaknessID, sessionID, severity); err != nil {
+		return fmt.Errorf("record relieved weakness snapshot: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) GetWeaknessTrends(ctx context.Context, limit int) ([]domain.WeaknessTrend, error) {
 	if limit <= 0 {
 		limit = 5
@@ -238,10 +273,14 @@ func (s *Store) GetWeaknessTrends(ctx context.Context, limit int) ([]domain.Weak
 	for _, w := range topWeaknesses {
 		rows, err := s.db.QueryContext(ctx, `
 			SELECT session_id, severity, created_at
-			FROM weakness_snapshots
-			WHERE weakness_id = ?
+			FROM (
+				SELECT session_id, severity, created_at
+				FROM weakness_snapshots
+				WHERE weakness_id = ?
+				ORDER BY created_at DESC
+				LIMIT 50
+			)
 			ORDER BY created_at ASC
-			LIMIT 50
 		`, w.ID)
 		if err != nil {
 			return nil, fmt.Errorf("get weakness snapshots: %w", err)

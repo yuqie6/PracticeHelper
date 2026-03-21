@@ -89,7 +89,25 @@ func (s *Service) persistReview(
 		return nil, err
 	}
 
+	_ = s.scheduleReview(ctx, session, review)
+
 	return session, nil
+}
+
+func (s *Service) scheduleReview(ctx context.Context, session *domain.TrainingSession, review *domain.ReviewCard) error {
+	nextReview := time.Now().UTC().AddDate(0, 0, 1)
+	return s.repo.CreateReviewSchedule(ctx, &domain.ReviewScheduleItem{
+		SessionID:    session.ID,
+		ReviewCardID: review.ID,
+		Topic:        session.Topic,
+		NextReviewAt: nextReview,
+		IntervalDays: 1,
+		EaseFactor:   2.5,
+	})
+}
+
+func (s *Service) ListDueReviews(ctx context.Context) ([]domain.ReviewScheduleItem, error) {
+	return s.repo.ListDueReviews(ctx, time.Now().UTC())
 }
 
 func (s *Service) ListSessions(ctx context.Context, req domain.ListSessionsRequest) (*domain.PaginatedList[domain.TrainingSessionSummary], error) {

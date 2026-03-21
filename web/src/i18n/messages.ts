@@ -49,6 +49,7 @@ export const messages = {
         project: '项目训练',
       },
       intensity: {
+        auto: '自动',
         light: '轻量',
         standard: '标准',
         pressure: '强化',
@@ -168,6 +169,14 @@ export const messages = {
       },
     },
     home: {
+      onboarding: {
+        kicker: '快速开始',
+        title: '三步完成初始化',
+        description: '填写基本信息 → 导入项目（可跳过）→ 开始第一轮训练',
+        step1: '1. 填写画像',
+        step2: '2. 导入项目',
+        step3: '3. 开始训练',
+      },
       hero: {
         kicker: '今日建议',
         title: '先练最影响当前面试表现的部分。',
@@ -177,6 +186,11 @@ export const messages = {
       deadline: {
         kicker: '投递节奏',
         title: '时间安排',
+      },
+      dueReviews: {
+        kicker: '今日待复习',
+        description: '你有 {count} 条待复习内容，点击进入回顾。',
+        review: '复习',
       },
       currentSession: {
         kicker: '继续训练',
@@ -602,6 +616,7 @@ export const messages = {
         project: 'Project',
       },
       intensity: {
+        auto: 'Auto',
         light: 'Light',
         standard: 'Standard',
         pressure: 'Intensive',
@@ -732,6 +747,14 @@ export const messages = {
       },
     },
     home: {
+      onboarding: {
+        kicker: 'Quick Start',
+        title: 'Set up in 3 steps',
+        description: 'Fill in your profile → Import a project (optional) → Start your first session',
+        step1: '1. Profile',
+        step2: '2. Projects',
+        step3: '3. Train',
+      },
       hero: {
         kicker: 'Today',
         title: 'Work on the area that affects your interviews the most.',
@@ -741,6 +764,11 @@ export const messages = {
       deadline: {
         kicker: 'Schedule',
         title: 'Timeline',
+      },
+      dueReviews: {
+        kicker: 'Due for Review',
+        description: 'You have {count} items due for review. Click to revisit.',
+        review: 'Review',
       },
       currentSession: {
         kicker: 'Resume',

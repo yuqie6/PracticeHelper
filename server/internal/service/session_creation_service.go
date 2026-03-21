@@ -13,9 +13,6 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 		return nil, ErrInvalidMode
 	}
 
-	// 训练会话在创建时就要把首题持久化下来，而不是等用户答题后再补写，
-	// 这样页面刷新后仍能恢复到同一轮训练上下文。topic 也在这里统一 trim/lower，
-	// 避免 basics 模式因为大小写和空白差异导致模板命中不稳定。
 	maxTurns := request.MaxTurns
 	if maxTurns < 2 {
 		maxTurns = 2
@@ -24,13 +21,18 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 		maxTurns = 5
 	}
 
+	intensity := request.Intensity
+	if intensity == "auto" {
+		intensity = s.resolveAutoIntensity(ctx)
+	}
+
 	startedAt := time.Now().UTC()
 	session := &domain.TrainingSession{
 		ID:         newID("sess"),
 		Mode:       request.Mode,
 		Topic:      strings.TrimSpace(strings.ToLower(request.Topic)),
 		ProjectID:  request.ProjectID,
-		Intensity:  request.Intensity,
+		Intensity:  intensity,
 		Status:     domain.StatusWaitingAnswer,
 		MaxTurns:   maxTurns,
 		TotalScore: 0,
@@ -59,7 +61,7 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 	generateRequest := domain.GenerateQuestionRequest{
 		Mode:              request.Mode,
 		Topic:             session.Topic,
-		Intensity:         request.Intensity,
+		Intensity:         intensity,
 		Weaknesses:        weaknesses,
 		JobTargetAnalysis: buildJobTargetAnalysisSnapshot(jobTargetAnalysis),
 	}
@@ -82,8 +84,6 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 		}
 		session.Project = project
 		generateRequest.Project = project
-		// project 模式优先用 followup_points + summary 组装检索词，
-		// 目的是把 sidecar 的首题约束在“最值得追问的项目点”上，而不是退化成全仓库泛扫。
 		query := strings.Join(append(project.FollowupPoints, project.Summary), " ")
 		chunks, err := s.repo.SearchProjectChunks(ctx, project.ID, query, 6)
 		if err != nil {
@@ -132,13 +132,18 @@ func (s *Service) CreateSessionStream(
 		maxTurns = 5
 	}
 
+	intensity := request.Intensity
+	if intensity == "auto" {
+		intensity = s.resolveAutoIntensity(ctx)
+	}
+
 	startedAt := time.Now().UTC()
 	session := &domain.TrainingSession{
 		ID:         newID("sess"),
 		Mode:       request.Mode,
 		Topic:      strings.TrimSpace(strings.ToLower(request.Topic)),
 		ProjectID:  request.ProjectID,
-		Intensity:  request.Intensity,
+		Intensity:  intensity,
 		Status:     domain.StatusWaitingAnswer,
 		MaxTurns:   maxTurns,
 		TotalScore: 0,
@@ -167,7 +172,7 @@ func (s *Service) CreateSessionStream(
 	generateRequest := domain.GenerateQuestionRequest{
 		Mode:              request.Mode,
 		Topic:             session.Topic,
-		Intensity:         request.Intensity,
+		Intensity:         intensity,
 		Weaknesses:        weaknesses,
 		JobTargetAnalysis: buildJobTargetAnalysisSnapshot(jobTargetAnalysis),
 	}
@@ -218,4 +223,33 @@ func (s *Service) CreateSessionStream(
 	}
 
 	return s.repo.GetSession(ctx, session.ID)
+}
+
+func (s *Service) resolveAutoIntensity(ctx context.Context) string {
+	recent, err := s.repo.ListRecentSessions(ctx, 5)
+	if err != nil || len(recent) == 0 {
+		return "standard"
+	}
+
+	var total float64
+	var count int
+	for _, sess := range recent {
+		if sess.Status == domain.StatusCompleted && sess.TotalScore > 0 {
+			total += sess.TotalScore
+			count++
+		}
+	}
+	if count == 0 {
+		return "standard"
+	}
+
+	avg := total / float64(count)
+	switch {
+	case avg >= 80:
+		return "pressure"
+	case avg < 60:
+		return "light"
+	default:
+		return "standard"
+	}
 }

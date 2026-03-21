@@ -178,6 +178,27 @@ func migrate(db *sql.DB) error {
 			severity REAL NOT NULL,
 			created_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS review_schedule (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_id TEXT NOT NULL,
+			review_card_id TEXT NOT NULL DEFAULT '',
+			weakness_tag_id TEXT NOT NULL DEFAULT '',
+			topic TEXT NOT NULL DEFAULT '',
+			next_review_at TEXT NOT NULL,
+			interval_days INTEGER NOT NULL DEFAULT 1,
+			ease_factor REAL NOT NULL DEFAULT 2.5,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS evaluation_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_id TEXT NOT NULL DEFAULT '',
+			turn_id TEXT NOT NULL DEFAULT '',
+			flow_name TEXT NOT NULL,
+			model_name TEXT NOT NULL DEFAULT '',
+			latency_ms REAL NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL
+		);`,
 	}
 
 	for _, statement := range statements {

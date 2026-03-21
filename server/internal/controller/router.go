@@ -66,6 +66,7 @@ func NewRouter(svc *service.Service) *gin.Engine {
 		api.GET("/reviews/:id", handler.getReview)
 		api.GET("/weaknesses", handler.listWeaknesses)
 		api.GET("/weaknesses/trends", handler.getWeaknessTrends)
+		api.GET("/reviews/due", handler.listDueReviews)
 	}
 
 	return router
@@ -472,6 +473,15 @@ func (h *Handler) listWeaknesses(c *gin.Context) {
 
 func (h *Handler) getWeaknessTrends(c *gin.Context) {
 	data, err := h.service.GetWeaknessTrends(c.Request.Context())
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) listDueReviews(c *gin.Context) {
+	data, err := h.service.ListDueReviews(c.Request.Context())
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, err)
 		return

@@ -1,5 +1,25 @@
 <template>
   <section class="neo-page space-y-6">
+    <div
+      v-if="!dashboard?.profile"
+      class="neo-panel space-y-4 bg-[var(--neo-yellow)]"
+    >
+      <p class="neo-kicker bg-white">{{ t('home.onboarding.kicker') }}</p>
+      <h2 class="text-xl font-black">{{ t('home.onboarding.title') }}</h2>
+      <p class="text-sm font-semibold">{{ t('home.onboarding.description') }}</p>
+      <div class="flex flex-wrap gap-3">
+        <RouterLink to="/profile" class="neo-button-dark">
+          {{ t('home.onboarding.step1') }}
+        </RouterLink>
+        <RouterLink to="/projects" class="neo-button bg-white">
+          {{ t('home.onboarding.step2') }}
+        </RouterLink>
+        <RouterLink to="/train" class="neo-button bg-white">
+          {{ t('home.onboarding.step3') }}
+        </RouterLink>
+      </div>
+    </div>
+
     <div class="neo-grid xl:grid-cols-[1.3fr_0.7fr]">
       <div class="neo-panel bg-[var(--neo-yellow)]">
         <p class="neo-kicker bg-white">{{ t('home.hero.kicker') }}</p>
@@ -85,6 +105,23 @@
             </p>
           </template>
         </div>
+      </div>
+    </div>
+
+    <div v-if="dueReviews.length" class="neo-panel bg-[var(--neo-yellow)]">
+      <p class="neo-kicker bg-white">{{ t('home.dueReviews.kicker') }}</p>
+      <p class="text-sm font-semibold">
+        {{ t('home.dueReviews.description', { count: dueReviews.length }) }}
+      </p>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <RouterLink
+          v-for="item in dueReviews.slice(0, 5)"
+          :key="item.id"
+          :to="item.review_card_id ? `/reviews/${item.review_card_id}` : `/sessions/${item.session_id}`"
+          class="neo-button-dark"
+        >
+          {{ item.topic || t('home.dueReviews.review') }}
+        </RouterLink>
       </div>
     </div>
 
@@ -224,7 +261,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
 
-import { getDashboard, getWeaknessTrends, type TrainingSessionSummary, type WeaknessTrend } from '../api/client';
+import { getDashboard, getWeaknessTrends, listDueReviews, type TrainingSessionSummary, type WeaknessTrend } from '../api/client';
 import StatCard from '../components/StatCard.vue';
 import {
   describeProfile,
@@ -249,10 +286,16 @@ const { data: trendsData } = useQuery({
   queryFn: getWeaknessTrends,
 });
 
+const { data: dueReviewsData } = useQuery({
+  queryKey: ['due-reviews'],
+  queryFn: listDueReviews,
+});
+
 const { t, locale } = useI18n();
 
 const dashboard = computed(() => data.value ?? null);
 const trends = computed(() => trendsData.value ?? []);
+const dueReviews = computed(() => dueReviewsData.value ?? []);
 const currentSession = computed(() => dashboard.value?.current_session ?? null);
 const weaknessSummary = computed(() => {
   locale.value;
