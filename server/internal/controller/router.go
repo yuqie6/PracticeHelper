@@ -61,6 +61,7 @@ func NewRouter(svc *service.Service) *gin.Engine {
 		api.POST("/sessions", handler.createSession)
 		api.POST("/sessions/stream", handler.createSessionStream)
 		api.GET("/sessions/:id", handler.getSession)
+		api.GET("/sessions/:id/export", handler.exportSession)
 		api.POST("/sessions/:id/answer", handler.submitAnswer)
 		api.POST("/sessions/:id/answer/stream", handler.submitAnswerStream)
 		api.POST("/sessions/:id/retry-review", handler.retrySessionReview)
@@ -392,6 +393,29 @@ func (h *Handler) getSession(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": data})
 }
 
+func (h *Handler) exportSession(c *gin.Context) {
+	filename, content, err := h.service.ExportSession(
+		c.Request.Context(),
+		c.Param("id"),
+		c.Query("format"),
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrUnsupportedExportFormat):
+			writeError(c, http.StatusBadRequest, err)
+		case errors.Is(err, service.ErrSessionNotFound):
+			writeError(c, http.StatusNotFound, err)
+		default:
+			writeError(c, http.StatusInternalServerError, err)
+		}
+		return
+	}
+
+	c.Header("Content-Type", "text/markdown; charset=utf-8")
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Data(http.StatusOK, "text/markdown; charset=utf-8", content)
+}
+
 func (h *Handler) submitAnswer(c *gin.Context) {
 	var request domain.SubmitAnswerRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -615,6 +639,8 @@ func errorCode(err error) string {
 		return "job_target_analysis_not_found"
 	case errors.Is(err, service.ErrSessionNotFound):
 		return "session_not_found"
+	case errors.Is(err, service.ErrUnsupportedExportFormat):
+		return "invalid_export_format"
 	case errors.Is(err, service.ErrImportJobNotFound):
 		return "import_job_not_found"
 	case errors.Is(err, service.ErrSessionNotRecoverable):

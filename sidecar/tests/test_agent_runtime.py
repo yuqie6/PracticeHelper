@@ -267,6 +267,26 @@ def test_question_prompt_bundle_includes_job_target_analysis_when_present() -> N
     assert payload["job_target_analysis"]["must_have_skills"] == ["Redis", "缓存一致性"]
 
 
+def test_question_prompt_bundle_marks_mixed_mode_candidate_topics() -> None:
+    _, user_prompt, tools = question_prompt_bundle(
+        GenerateQuestionRequest(
+            mode="basics",
+            topic="mixed",
+            candidate_topics=["redis", "mysql", "os"],
+            intensity="standard",
+            templates=[
+                QuestionTemplate(mode="basics", topic="redis", prompt="问题1"),
+                QuestionTemplate(mode="basics", topic="mysql", prompt="问题2"),
+            ],
+        )
+    )
+
+    assert "这是基础混合模式" in user_prompt
+    assert "redis, mysql, os" in user_prompt
+    payload = tools[0].handler({})
+    assert payload["candidate_topics"] == ["redis", "mysql", "os"]
+
+
 def test_question_prompt_bundle_resolves_strategy_from_weaknesses() -> None:
     _, user_prompt, _ = question_prompt_bundle(
         GenerateQuestionRequest(

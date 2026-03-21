@@ -16,6 +16,7 @@ var (
 	ErrJobTargetAnalysisNotFound = errors.New("job target analysis not found")
 	ErrReviewScheduleNotFound    = errors.New("review schedule not found")
 	ErrSessionNotFound           = errors.New("session not found")
+	ErrUnsupportedExportFormat   = errors.New("unsupported export format")
 	ErrImportJobNotFound         = errors.New("import job not found")
 	ErrSessionNotRecoverable     = errors.New("session is not in a recoverable state")
 	ErrSessionBusy               = errors.New("session is already processing a previous submission")

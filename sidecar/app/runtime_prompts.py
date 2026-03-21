@@ -86,6 +86,7 @@ def question_prompt_bundle(
     system_prompt = load_prompt("generate_question_system.md")
     jd_label = "有" if request.job_target_analysis else "无"
     strategy = resolve_question_strategy(request)
+    candidate_topics = request.candidate_topics or ([request.topic] if request.topic else [])
     strategy_hint = {
         "weakness_first": "出题策略：优先围绕用户历史弱项出题，确保题目直击薄弱环节。",
         "project_deep_dive": "出题策略：优先围绕项目的取舍、挑战和追问点深挖，而非泛问基础概念。",
@@ -95,6 +96,11 @@ def question_prompt_bundle(
         f"请生成本轮训练的主问题。\n"
         f"当前模式：{request.mode}，主题：{request.topic}，是否绑定岗位 JD：{jd_label}\n"
     )
+    if request.mode == "basics" and request.topic == "mixed" and candidate_topics:
+        user_prompt += (
+            "这是基础混合模式。请优先在这些候选知识域里选题，"
+            f"并尽量贴近用户最近的弱项：{', '.join(candidate_topics)}\n"
+        )
     if strategy_hint:
         user_prompt += f"{strategy_hint}\n"
     user_prompt += '\n最终答案必须匹配：{{"question": "string", "expected_points": ["string"]}}'
@@ -103,6 +109,7 @@ def question_prompt_bundle(
             name="read_question_templates",
             description="Read curated question templates for basics training.",
             handler=lambda _: {
+                "candidate_topics": candidate_topics,
                 "templates": [item.model_dump(mode="json") for item in request.templates],
             },
         ),

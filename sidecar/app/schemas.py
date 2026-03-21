@@ -129,6 +129,7 @@ class AnalyzeJobTargetResponse(JobTargetAnalysisSnapshot):
 class GenerateQuestionRequest(BaseModel):
     mode: Literal["basics", "project"]
     topic: str = ""
+    candidate_topics: list[str] = Field(default_factory=list)
     intensity: str = "standard"
     strategy: str = ""
     project: ProjectProfile | None = None

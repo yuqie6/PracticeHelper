@@ -6,6 +6,18 @@ const (
 	ModeBasics  = "basics"
 	ModeProject = "project"
 
+	BasicsTopicMixed        = "mixed"
+	BasicsTopicGo           = "go"
+	BasicsTopicRedis        = "redis"
+	BasicsTopicKafka        = "kafka"
+	BasicsTopicMySQL        = "mysql"
+	BasicsTopicSystemDesign = "system_design"
+	BasicsTopicDistributed  = "distributed"
+	BasicsTopicNetwork      = "network"
+	BasicsTopicMicroservice = "microservice"
+	BasicsTopicOS           = "os"
+	BasicsTopicDockerK8s    = "docker_k8s"
+
 	StatusDraft         = "draft"
 	StatusActive        = "active"
 	StatusWaitingAnswer = "waiting_answer"
@@ -382,6 +394,7 @@ type AnalyzeRepoResponse struct {
 type GenerateQuestionRequest struct {
 	Mode              string                    `json:"mode"`
 	Topic             string                    `json:"topic,omitempty"`
+	CandidateTopics   []string                  `json:"candidate_topics,omitempty"`
 	Intensity         string                    `json:"intensity"`
 	Project           *ProjectProfile           `json:"project,omitempty"`
 	Templates         []QuestionTemplate        `json:"templates,omitempty"`

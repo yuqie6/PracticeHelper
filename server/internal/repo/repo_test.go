@@ -55,10 +55,48 @@ func TestSeedQuestionTemplatesProvideAtLeastFiveBasicsPromptsPerTopic(t *testing
 		counts[topic] = count
 	}
 
-	for _, topic := range []string{"go", "redis", "kafka"} {
+	for _, topic := range []string{
+		domain.BasicsTopicGo,
+		domain.BasicsTopicRedis,
+		domain.BasicsTopicKafka,
+		domain.BasicsTopicMySQL,
+		domain.BasicsTopicSystemDesign,
+		domain.BasicsTopicDistributed,
+		domain.BasicsTopicNetwork,
+		domain.BasicsTopicMicroservice,
+		domain.BasicsTopicOS,
+		domain.BasicsTopicDockerK8s,
+	} {
 		if counts[topic] < 5 {
 			t.Fatalf("expected at least 5 basics templates for %s, got %d", topic, counts[topic])
 		}
+	}
+}
+
+func TestListQuestionTemplatesByTopicsReturnsTemplatesAcrossSelectedTopics(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	templates, err := store.ListQuestionTemplatesByTopics(context.Background(), []string{
+		domain.BasicsTopicRedis,
+		domain.BasicsTopicOS,
+	})
+	if err != nil {
+		t.Fatalf("ListQuestionTemplatesByTopics() error = %v", err)
+	}
+	if len(templates) == 0 {
+		t.Fatal("expected templates for selected topics")
+	}
+
+	seen := map[string]bool{}
+	for _, item := range templates {
+		seen[item.Topic] = true
+	}
+	if !seen[domain.BasicsTopicRedis] || !seen[domain.BasicsTopicOS] {
+		t.Fatalf("expected redis and os templates, got topics=%v", seen)
 	}
 }
 

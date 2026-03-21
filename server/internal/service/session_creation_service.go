@@ -26,11 +26,16 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 		intensity = s.resolveAutoIntensity(ctx)
 	}
 
+	normalizedTopic := normalizeBasicsTopic(request.Topic)
+	if request.Mode == domain.ModeBasics && normalizedTopic == "" {
+		normalizedTopic = domain.BasicsTopicGo
+	}
+
 	startedAt := time.Now().UTC()
 	session := &domain.TrainingSession{
 		ID:         newID("sess"),
 		Mode:       request.Mode,
-		Topic:      strings.TrimSpace(strings.ToLower(request.Topic)),
+		Topic:      normalizedTopic,
 		ProjectID:  request.ProjectID,
 		Intensity:  intensity,
 		Status:     domain.StatusWaitingAnswer,
@@ -69,10 +74,12 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 	var project *domain.ProjectProfile
 	switch request.Mode {
 	case domain.ModeBasics:
-		templates, err := s.repo.ListQuestionTemplatesByTopic(ctx, session.Topic)
+		candidateTopics := selectBasicsTopicsForSession(weaknesses, session.Topic)
+		templates, err := s.repo.ListQuestionTemplatesByTopics(ctx, candidateTopics)
 		if err != nil {
 			return nil, err
 		}
+		generateRequest.CandidateTopics = candidateTopics
 		generateRequest.Templates = templates
 	case domain.ModeProject:
 		project, err = s.repo.GetProject(ctx, request.ProjectID)
@@ -139,11 +146,16 @@ func (s *Service) CreateSessionStream(
 		intensity = s.resolveAutoIntensity(ctx)
 	}
 
+	normalizedTopic := normalizeBasicsTopic(request.Topic)
+	if request.Mode == domain.ModeBasics && normalizedTopic == "" {
+		normalizedTopic = domain.BasicsTopicGo
+	}
+
 	startedAt := time.Now().UTC()
 	session := &domain.TrainingSession{
 		ID:         newID("sess"),
 		Mode:       request.Mode,
-		Topic:      strings.TrimSpace(strings.ToLower(request.Topic)),
+		Topic:      normalizedTopic,
 		ProjectID:  request.ProjectID,
 		Intensity:  intensity,
 		Status:     domain.StatusWaitingAnswer,
@@ -181,10 +193,12 @@ func (s *Service) CreateSessionStream(
 
 	switch request.Mode {
 	case domain.ModeBasics:
-		templates, err := s.repo.ListQuestionTemplatesByTopic(ctx, session.Topic)
+		candidateTopics := selectBasicsTopicsForSession(weaknesses, session.Topic)
+		templates, err := s.repo.ListQuestionTemplatesByTopics(ctx, candidateTopics)
 		if err != nil {
 			return nil, err
 		}
+		generateRequest.CandidateTopics = candidateTopics
 		generateRequest.Templates = templates
 	case domain.ModeProject:
 		project, err := s.repo.GetProject(ctx, request.ProjectID)

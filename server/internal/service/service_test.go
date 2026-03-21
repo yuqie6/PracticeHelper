@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -345,6 +347,132 @@ func TestCreateSessionCanExplicitlyIgnoreActiveJobTarget(t *testing.T) {
 	}
 	if captured.JobTargetAnalysis != nil {
 		t.Fatal("expected no job target analysis when active job target is explicitly ignored")
+	}
+}
+
+func TestCreateSessionUsesOSTemplates(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	var captured domain.GenerateQuestionRequest
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/generate_question" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(domain.GenerateQuestionResponse{
+			Question:       "说说一次上下文切换为什么会拖慢服务。",
+			ExpectedPoints: []string{"触发条件", "成本来源", "止血思路"},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	_, err = svc.CreateSession(context.Background(), domain.CreateSessionRequest{
+		Mode:      domain.ModeBasics,
+		Topic:     domain.BasicsTopicOS,
+		Intensity: "standard",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	if captured.Topic != domain.BasicsTopicOS {
+		t.Fatalf("expected topic %q, got %q", domain.BasicsTopicOS, captured.Topic)
+	}
+	if len(captured.CandidateTopics) != 1 || captured.CandidateTopics[0] != domain.BasicsTopicOS {
+		t.Fatalf("expected candidate topics [%s], got %v", domain.BasicsTopicOS, captured.CandidateTopics)
+	}
+	if len(captured.Templates) == 0 {
+		t.Fatal("expected os templates to be forwarded")
+	}
+	for _, item := range captured.Templates {
+		if item.Topic != domain.BasicsTopicOS {
+			t.Fatalf("expected only os templates, got topic %q", item.Topic)
+		}
+	}
+}
+
+func TestCreateSessionMixedSelectsTopicsFromWeaknesses(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	if err := store.UpsertWeaknesses(context.Background(), "sess_seed", []domain.WeaknessHit{
+		{Kind: "topic", Label: "Redis 缓存一致性", Severity: 1.1},
+		{Kind: "detail", Label: "MySQL 索引设计说不清", Severity: 0.9},
+		{Kind: "followup_breakdown", Label: "进程线程调度容易乱", Severity: 0.8},
+	}); err != nil {
+		t.Fatalf("UpsertWeaknesses() error = %v", err)
+	}
+
+	var captured domain.GenerateQuestionRequest
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/generate_question" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(domain.GenerateQuestionResponse{
+			Question:       "讲讲缓存一致性和索引设计的取舍。",
+			ExpectedPoints: []string{"Redis", "MySQL", "代价"},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	session, err := svc.CreateSession(context.Background(), domain.CreateSessionRequest{
+		Mode:      domain.ModeBasics,
+		Topic:     domain.BasicsTopicMixed,
+		Intensity: "standard",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	if session.Topic != domain.BasicsTopicMixed {
+		t.Fatalf("expected session topic %q, got %q", domain.BasicsTopicMixed, session.Topic)
+	}
+	if captured.Topic != domain.BasicsTopicMixed {
+		t.Fatalf("expected request topic %q, got %q", domain.BasicsTopicMixed, captured.Topic)
+	}
+	if len(captured.CandidateTopics) < 2 {
+		t.Fatalf("expected mixed mode to carry multiple candidate topics, got %v", captured.CandidateTopics)
+	}
+	if !slices.Contains(captured.CandidateTopics, domain.BasicsTopicRedis) {
+		t.Fatalf("expected candidate topics to include redis, got %v", captured.CandidateTopics)
+	}
+	if !slices.Contains(captured.CandidateTopics, domain.BasicsTopicMySQL) {
+		t.Fatalf("expected candidate topics to include mysql, got %v", captured.CandidateTopics)
+	}
+	if !slices.Contains(captured.CandidateTopics, domain.BasicsTopicOS) {
+		t.Fatalf("expected candidate topics to include os, got %v", captured.CandidateTopics)
+	}
+
+	seenTopics := map[string]bool{}
+	for _, item := range captured.Templates {
+		seenTopics[item.Topic] = true
+	}
+	for _, topic := range captured.CandidateTopics {
+		if !seenTopics[topic] {
+			t.Fatalf("expected templates for candidate topic %q, seen=%v", topic, seenTopics)
+		}
 	}
 }
 
@@ -1154,6 +1282,184 @@ func assertStatusEventNames(t *testing.T, events []domain.StreamEvent, want []st
 			t.Fatalf("unexpected status event sequence: got %v want %v", got, want)
 		}
 	}
+}
+
+func TestExportSessionMarkdownIncludesTurnsAndReview(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := seedSessionForExport(t, store, "sess_export_with_review", true)
+	svc := New(store, nil)
+
+	filename, content, err := svc.ExportSession(context.Background(), session.ID, "markdown")
+	if err != nil {
+		t.Fatalf("ExportSession() error = %v", err)
+	}
+
+	if filename != "practicehelper-session-sess_export_with_review.md" {
+		t.Fatalf("unexpected filename: %s", filename)
+	}
+
+	body := string(content)
+	for _, snippet := range []string{
+		"# PracticeHelper Session 报告",
+		"- Session ID: sess_export_with_review",
+		"- 绑定岗位: 后端工程师 - Example (Example)",
+		"### 第 1 轮",
+		"Redis 为什么快？",
+		"缓存淘汰策略",
+		"### 回答亮点",
+		"举了缓存雪崩的真实场景",
+	} {
+		if !strings.Contains(body, snippet) {
+			t.Fatalf("expected export body to contain %q, got:\n%s", snippet, body)
+		}
+	}
+}
+
+func TestExportSessionMarkdownWithoutReviewShowsPendingNotice(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := seedSessionForExport(t, store, "sess_export_without_review", false)
+	svc := New(store, nil)
+
+	filename, content, err := svc.ExportSession(context.Background(), session.ID, "markdown")
+	if err != nil {
+		t.Fatalf("ExportSession() error = %v", err)
+	}
+
+	if filename != "practicehelper-session-sess_export_without_review.md" {
+		t.Fatalf("unexpected filename: %s", filename)
+	}
+
+	body := string(content)
+	if !strings.Contains(body, "> 复盘未生成。") {
+		t.Fatalf("expected export body to mention missing review, got:\n%s", body)
+	}
+	if !strings.Contains(body, "### 第 2 轮") {
+		t.Fatalf("expected export body to include follow-up turn, got:\n%s", body)
+	}
+}
+
+func seedSessionForExport(
+	t *testing.T,
+	store *repo.Store,
+	sessionID string,
+	withReview bool,
+) *domain.TrainingSession {
+	t.Helper()
+
+	ctx := context.Background()
+	target := seedReadyJobTarget(t, store)
+	startedAt := time.Date(2026, 3, 21, 9, 30, 0, 0, time.UTC)
+	endedAt := startedAt.Add(18 * time.Minute)
+
+	status := domain.StatusReviewPending
+	reviewID := ""
+	if withReview {
+		status = domain.StatusCompleted
+		reviewID = "review_" + sessionID
+	}
+
+	session := &domain.TrainingSession{
+		ID:                  sessionID,
+		Mode:                domain.ModeBasics,
+		Topic:               "redis",
+		JobTargetID:         target.ID,
+		JobTargetAnalysisID: target.LatestSuccessfulAnalysis.ID,
+		Intensity:           "pressure",
+		Status:              status,
+		MaxTurns:            2,
+		TotalScore:          82,
+		StartedAt:           &startedAt,
+		EndedAt:             &endedAt,
+		ReviewID:            reviewID,
+	}
+	turn1 := &domain.TrainingTurn{
+		ID:             "turn_1_" + sessionID,
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Redis 为什么快？",
+		ExpectedPoints: []string{"内存访问", "单线程事件循环", "合理的数据结构"},
+		Answer:         "核心是内存访问快，再加上单线程减少了线程切换成本。",
+		Evaluation: &domain.EvaluationResult{
+			Score:            78,
+			ScoreBreakdown:   map[string]float64{"准确性": 30, "完整性": 24},
+			Headline:         "主结论没问题，但对代价讲得还不够。",
+			Strengths:        []string{"先说了核心结论"},
+			Gaps:             []string{"没有补多路复用和数据结构"},
+			Suggestion:       "补上 IO 模型和常见数据结构，回答会更完整。",
+			FollowupIntent:   "确认你是否真的理解性能来自哪里。",
+			FollowupQuestion: "如果 QPS 上来后出现 CPU 飙高，你会怎么定位？",
+			WeaknessHits: []domain.WeaknessHit{
+				{Kind: "topic", Label: "缓存淘汰策略", Severity: 0.72},
+			},
+		},
+	}
+	if err := store.CreateSession(ctx, session, turn1); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	turn2 := &domain.TrainingTurn{
+		ID:             "turn_2_" + sessionID,
+		SessionID:      session.ID,
+		TurnIndex:      2,
+		Stage:          "followup",
+		Question:       "如果 QPS 上来后出现 CPU 飙高，你会怎么定位？",
+		ExpectedPoints: []string{"先看慢命令", "区分热点 key", "确认是否存在大 key"},
+		Answer:         "我会先看 Redis 慢日志，再排查热点 key 和大 key。",
+		Evaluation: &domain.EvaluationResult{
+			Score:          86,
+			ScoreBreakdown: map[string]float64{"准确性": 32, "完整性": 28},
+			Headline:       "排查顺序是对的，但还可以补监控闭环。",
+			Strengths:      []string{"排查动作顺序合理"},
+			Gaps:           []string{"没有提监控和压测回放"},
+			Suggestion:     "补监控指标和压测回放，答案会更像真实线上排障。",
+		},
+	}
+	if err := store.InsertTurn(ctx, turn2); err != nil {
+		t.Fatalf("InsertTurn() error = %v", err)
+	}
+
+	if withReview {
+		review := &domain.ReviewCard{
+			ID:                reviewID,
+			SessionID:         session.ID,
+			Overall:           "整体回答有框架，但还要把线上取舍说实。",
+			TopFix:            "把缓存淘汰策略和排障闭环讲完整",
+			TopFixReason:      "这是这轮最影响说服力的短板。",
+			Highlights:        []string{"举了缓存雪崩的真实场景"},
+			Gaps:              []string{"缓存淘汰策略讲得太虚"},
+			SuggestedTopics:   []string{"redis", "system_design"},
+			NextTrainingFocus: []string{"围绕 Redis 性能与故障排查做一轮专项训练"},
+			RecommendedNext: &domain.NextSession{
+				Mode:   domain.ModeBasics,
+				Topic:  "redis",
+				Reason: "先把 Redis 相关薄弱点补齐。",
+			},
+			ScoreBreakdown: map[string]float64{"表达清晰度": 78, "完整性": 76},
+		}
+		if err := store.CreateReview(ctx, review); err != nil {
+			t.Fatalf("CreateReview() error = %v", err)
+		}
+	}
+
+	saved, err := store.GetSession(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("GetSession() error = %v", err)
+	}
+	if saved == nil {
+		t.Fatal("expected saved session")
+	}
+	return saved
 }
 
 func seedReadyJobTarget(t *testing.T, store *repo.Store) *domain.JobTarget {
