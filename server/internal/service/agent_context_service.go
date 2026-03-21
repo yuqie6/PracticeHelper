@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"strings"
+	"time"
 
 	"practicehelper/server/internal/domain"
 )
@@ -22,17 +23,25 @@ func (s *Service) getAgentContext(
 	ctx context.Context,
 	params agentContextParams,
 ) (*domain.AgentContext, error) {
+	agentContext, _, err := s.getAgentContextDetailed(ctx, params)
+	return agentContext, err
+}
+
+func (s *Service) getAgentContextDetailed(
+	ctx context.Context,
+	params agentContextParams,
+) (*domain.AgentContext, *domain.RetrievalTrace, error) {
 	if err := s.repo.EnsureKnowledgeSeeds(ctx); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	profile, err := s.repo.GetUserProfile(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	weaknesses, err := s.repo.ListWeaknesses(ctx, defaultLimit(params.WeaknessLimit, 5))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	subgraph, err := s.repo.GetKnowledgeSubgraph(
 		ctx,
@@ -41,24 +50,31 @@ func (s *Service) getAgentContext(
 		defaultLimit(params.KnowledgeNodeLimit, 8),
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	observations, err := s.loadObservationMemory(ctx, params)
+	observations, observationTrace, err := s.loadObservationMemoryWithTrace(ctx, params)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	summaries, err := s.loadSessionSummaryMemory(ctx, params)
+	summaries, summaryTrace, err := s.loadSessionSummaryMemoryWithTrace(ctx, params)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	return &domain.AgentContext{
-		Profile:           buildProfileSnapshot(profile),
-		KnowledgeSubgraph: subgraph,
-		Observations:      observations,
-		WeaknessProfile:   weaknesses,
-		SessionSummaries:  summaries,
-	}, nil
+			Profile:           buildProfileSnapshot(profile),
+			KnowledgeSubgraph: subgraph,
+			Observations:      observations,
+			WeaknessProfile:   weaknesses,
+			SessionSummaries:  summaries,
+		}, &domain.RetrievalTrace{
+			GeneratedAt:      time.Now().UTC(),
+			Topic:            strings.TrimSpace(params.Topic),
+			ProjectID:        strings.TrimSpace(params.ProjectID),
+			JobTargetID:      strings.TrimSpace(params.JobTargetID),
+			ObservationTrace: observationTrace,
+			SummaryTrace:     summaryTrace,
+		}, nil
 }
 
 func buildProfileSnapshot(profile *domain.UserProfile) *domain.ProfileSnapshot {

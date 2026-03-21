@@ -24,6 +24,7 @@ type memoryScoredEntry struct {
 	entry       domain.MemoryIndexEntry
 	ruleScore   float64
 	vectorScore float64
+	rerankScore float64
 	combined    float64
 }
 
@@ -237,25 +238,36 @@ func (s *Service) rerankMemoryIndexEntriesByVector(
 	entries []domain.MemoryIndexEntry,
 	limit int,
 ) []domain.MemoryIndexEntry {
+	ranked, _, _, _ := s.rankMemoryIndexEntriesByVector(ctx, memoryType, params, entries, limit)
+	return ranked
+}
+
+func (s *Service) rankMemoryIndexEntriesByVector(
+	ctx context.Context,
+	memoryType string,
+	params agentContextParams,
+	entries []domain.MemoryIndexEntry,
+	limit int,
+) ([]domain.MemoryIndexEntry, map[string]memoryScoredEntry, string, string) {
 	if !s.vectorReadAvailable() || len(entries) < 2 {
-		return entries
+		return entries, buildRuleOnlyScores(params, entries), "memory_index_rule", ""
 	}
 
 	queryText := buildMemoryRetrievalQuery(memoryType, params)
 	if queryText == "" {
-		return entries
+		return entries, buildRuleOnlyScores(params, entries), "memory_index_rule", ""
 	}
 
 	embedResponse, err := s.sidecar.EmbedMemory(ctx, domain.EmbedMemoryRequest{
 		Items: []domain.EmbedMemoryItem{{ID: "query", Text: queryText}},
 	})
 	if err != nil || embedResponse == nil || len(embedResponse.Items) == 0 || len(embedResponse.Items[0].Vector) == 0 {
-		return entries
+		return entries, buildRuleOnlyScores(params, entries), "memory_index_rule", queryText
 	}
 
 	points, err := s.vectorStore.Get(ctx, collectMemoryIndexEntryIDs(entries))
 	if err != nil || len(points) == 0 {
-		return entries
+		return entries, buildRuleOnlyScores(params, entries), "memory_index_rule", queryText
 	}
 
 	scored := make([]memoryScoredEntry, 0, len(entries))
@@ -300,6 +312,7 @@ func (s *Service) rerankMemoryIndexEntriesByVector(
 			}
 			for index := range scored {
 				if score, ok := rerankScores[scored[index].entry.ID]; ok {
+					scored[index].rerankScore = score
 					scored[index].combined += score * 3.0
 				}
 			}
@@ -308,10 +321,16 @@ func (s *Service) rerankMemoryIndexEntriesByVector(
 
 	sortScoredEntries(scored)
 	ranked := make([]domain.MemoryIndexEntry, 0, len(scored))
+	scoreMap := make(map[string]memoryScoredEntry, len(scored))
 	for _, item := range scored {
 		ranked = append(ranked, item.entry)
+		scoreMap[item.entry.ID] = item
 	}
-	return ranked
+	strategy := "memory_index_vector"
+	if s.vectorRerankEnabled {
+		strategy = "memory_index_vector_rerank"
+	}
+	return ranked, scoreMap, strategy, queryText
 }
 
 func buildEmbedMemoryItems(documents []memoryDocument) []domain.EmbedMemoryItem {
@@ -426,6 +445,22 @@ func sortScoredEntries(items []memoryScoredEntry) {
 		}
 		return items[i].entry.UpdatedAt.After(items[j].entry.UpdatedAt)
 	})
+}
+
+func buildRuleOnlyScores(
+	params agentContextParams,
+	entries []domain.MemoryIndexEntry,
+) map[string]memoryScoredEntry {
+	items := make(map[string]memoryScoredEntry, len(entries))
+	for _, entry := range entries {
+		score := scoreMemoryIndexEntry(params, entry)
+		items[entry.ID] = memoryScoredEntry{
+			entry:     entry,
+			ruleScore: score,
+			combined:  score,
+		}
+	}
+	return items
 }
 
 func newMemoryEmbeddingClaimToken() string {

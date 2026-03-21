@@ -553,6 +553,24 @@ func TestCreateReviewUpdatesExistingRowIDAndRecommendedNext(t *testing.T) {
 			Topic:  "kafka",
 			Reason: "先补缓存一致性与消息幂等表述",
 		},
+		RetrievalTrace: &domain.RetrievalTrace{
+			GeneratedAt: time.Now().UTC(),
+			Topic:       "redis",
+			ObservationTrace: &domain.MemoryRetrievalTrace{
+				MemoryType:     domain.MemoryTypeObservation,
+				Strategy:       "memory_index_vector_rerank",
+				CandidateCount: 4,
+				SelectedCount:  2,
+				Hits: []domain.MemoryRetrievalHit{{
+					Source:     "memory_index",
+					RefTable:   "agent_observations",
+					RefID:      "obs_1",
+					Summary:    "项目级 Redis 观察",
+					FinalScore: 6.2,
+					Reason:     "项目 scope 命中；semantic 相似度高；final=6.2",
+				}},
+			},
+		},
 		ScoreBreakdown: map[string]float64{"表达": 82},
 	}
 	if err := store.CreateReview(ctx, second); err != nil {
@@ -577,6 +595,12 @@ func TestCreateReviewUpdatesExistingRowIDAndRecommendedNext(t *testing.T) {
 	}
 	if saved.RecommendedNext.Topic != "kafka" {
 		t.Fatalf("expected recommended topic kafka, got %q", saved.RecommendedNext.Topic)
+	}
+	if saved.RetrievalTrace == nil || saved.RetrievalTrace.ObservationTrace == nil {
+		t.Fatalf("expected retrieval trace to be persisted, got %+v", saved.RetrievalTrace)
+	}
+	if len(saved.RetrievalTrace.ObservationTrace.Hits) != 1 || saved.RetrievalTrace.ObservationTrace.Hits[0].RefID != "obs_1" {
+		t.Fatalf("unexpected retrieval trace hits: %+v", saved.RetrievalTrace.ObservationTrace.Hits)
 	}
 }
 

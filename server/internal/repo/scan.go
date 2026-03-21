@@ -302,7 +302,7 @@ func scanReviewCard(scanner interface{ Scan(dest ...any) error }) (*domain.Revie
 		id, sessionID, jobTargetID, jobTargetAnalysisID, overall, topFix, topFixReason string
 		promptSetID, promptSetLabel, promptSetStatus                                   string
 		highlightsJSON, gapsJSON, suggestedTopicsJSON, nextTrainingFocusJSON           string
-		recommendedNextJSON, scoreBreakdownJSON, createdAt                             string
+		recommendedNextJSON, retrievalTraceJSON, scoreBreakdownJSON, createdAt         string
 	)
 	if err := scanner.Scan(
 		&id,
@@ -320,6 +320,7 @@ func scanReviewCard(scanner interface{ Scan(dest ...any) error }) (*domain.Revie
 		&suggestedTopicsJSON,
 		&nextTrainingFocusJSON,
 		&recommendedNextJSON,
+		&retrievalTraceJSON,
 		&scoreBreakdownJSON,
 		&createdAt,
 	); err != nil {
@@ -337,6 +338,14 @@ func scanReviewCard(scanner interface{ Scan(dest ...any) error }) (*domain.Revie
 		}
 	}
 
+	var retrievalTrace *domain.RetrievalTrace
+	if strings.TrimSpace(retrievalTraceJSON) != "" && retrievalTraceJSON != "null" {
+		item := &domain.RetrievalTrace{}
+		if err := json.Unmarshal([]byte(retrievalTraceJSON), item); err == nil {
+			retrievalTrace = item
+		}
+	}
+
 	return &domain.ReviewCard{
 		ID:                  id,
 		SessionID:           sessionID,
@@ -351,6 +360,7 @@ func scanReviewCard(scanner interface{ Scan(dest ...any) error }) (*domain.Revie
 		SuggestedTopics:     parseStringList(suggestedTopicsJSON),
 		NextTrainingFocus:   parseStringList(nextTrainingFocusJSON),
 		RecommendedNext:     recommendedNext,
+		RetrievalTrace:      retrievalTrace,
 		ScoreBreakdown:      breakdown,
 		CreatedAt:           parseTime(createdAt),
 		PromptSet:           parsePromptSetSummary(promptSetID, promptSetLabel, promptSetStatus),

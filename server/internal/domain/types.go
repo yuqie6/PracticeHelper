@@ -335,6 +335,7 @@ type ReviewCard struct {
 	SuggestedTopics     []string           `json:"suggested_topics"`
 	NextTrainingFocus   []string           `json:"next_training_focus"`
 	RecommendedNext     *NextSession       `json:"recommended_next,omitempty"`
+	RetrievalTrace      *RetrievalTrace    `json:"retrieval_trace,omitempty"`
 	ScoreBreakdown      map[string]float64 `json:"score_breakdown"`
 	CreatedAt           time.Time          `json:"created_at"`
 	JobTarget           *JobTargetRef      `json:"job_target,omitempty"`
@@ -540,6 +541,42 @@ type AgentContext struct {
 	Observations      []AgentObservation     `json:"observations,omitempty"`
 	WeaknessProfile   []WeaknessTag          `json:"weakness_profile,omitempty"`
 	SessionSummaries  []SessionMemorySummary `json:"session_summaries,omitempty"`
+}
+
+type RetrievalTrace struct {
+	GeneratedAt      time.Time             `json:"generated_at"`
+	Topic            string                `json:"topic,omitempty"`
+	ProjectID        string                `json:"project_id,omitempty"`
+	JobTargetID      string                `json:"job_target_id,omitempty"`
+	ObservationTrace *MemoryRetrievalTrace `json:"observations,omitempty"`
+	SummaryTrace     *MemoryRetrievalTrace `json:"session_summaries,omitempty"`
+}
+
+type MemoryRetrievalTrace struct {
+	MemoryType     string               `json:"memory_type"`
+	Query          string               `json:"query,omitempty"`
+	Strategy       string               `json:"strategy"`
+	CandidateCount int                  `json:"candidate_count"`
+	SelectedCount  int                  `json:"selected_count"`
+	FallbackUsed   bool                 `json:"fallback_used,omitempty"`
+	FallbackReason string               `json:"fallback_reason,omitempty"`
+	Hits           []MemoryRetrievalHit `json:"hits,omitempty"`
+}
+
+type MemoryRetrievalHit struct {
+	Source        string  `json:"source"`
+	MemoryIndexID string  `json:"memory_index_id,omitempty"`
+	RefTable      string  `json:"ref_table,omitempty"`
+	RefID         string  `json:"ref_id,omitempty"`
+	ScopeType     string  `json:"scope_type,omitempty"`
+	ScopeID       string  `json:"scope_id,omitempty"`
+	Topic         string  `json:"topic,omitempty"`
+	Summary       string  `json:"summary,omitempty"`
+	RuleScore     float64 `json:"rule_score,omitempty"`
+	VectorScore   float64 `json:"vector_score,omitempty"`
+	RerankScore   float64 `json:"rerank_score,omitempty"`
+	FinalScore    float64 `json:"final_score,omitempty"`
+	Reason        string  `json:"reason,omitempty"`
 }
 
 type EvaluateAnswerSideEffects struct {

@@ -2042,6 +2042,9 @@ func TestExportSessionMarkdownIncludesTurnsAndReview(t *testing.T) {
 		"缓存淘汰策略",
 		"### 回答亮点",
 		"举了缓存雪崩的真实场景",
+		"### 检索轨迹",
+		"memory_index_vector_rerank",
+		"项目里的 Redis 观察",
 	} {
 		if !strings.Contains(body, snippet) {
 			t.Fatalf("expected export body to contain %q, got:\n%s", snippet, body)
@@ -2085,6 +2088,13 @@ func TestExportSessionJSONIncludesSessionAndReview(t *testing.T) {
 	defer func() { _ = store.Close() }()
 
 	session := seedSessionForExport(t, store, "sess_export_json", true)
+	loadedReview, err := store.GetReview(context.Background(), session.ReviewID)
+	if err != nil {
+		t.Fatalf("GetReview() error = %v", err)
+	}
+	if loadedReview == nil || loadedReview.RetrievalTrace == nil {
+		t.Fatalf("expected retrieval trace on stored review, got %#v", loadedReview)
+	}
 	svc := New(store, nil)
 
 	filename, content, err := svc.ExportSession(context.Background(), session.ID, "json")
@@ -2111,6 +2121,13 @@ func TestExportSessionJSONIncludesSessionAndReview(t *testing.T) {
 	}
 	if payload["review"] == nil {
 		t.Fatalf("expected review payload, got %#v", payload["review"])
+	}
+	reviewPayload, ok := payload["review"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected review payload map, got %#v", payload["review"])
+	}
+	if reviewPayload["retrieval_trace"] == nil {
+		t.Fatalf("expected retrieval trace in review payload, got %#v", reviewPayload)
 	}
 }
 
@@ -2367,6 +2384,32 @@ func seedSessionForExport(
 				Mode:   domain.ModeBasics,
 				Topic:  "redis",
 				Reason: "先把 Redis 相关薄弱点补齐。",
+			},
+			RetrievalTrace: &domain.RetrievalTrace{
+				GeneratedAt: time.Now().UTC(),
+				Topic:       "redis",
+				ObservationTrace: &domain.MemoryRetrievalTrace{
+					MemoryType:     domain.MemoryTypeObservation,
+					Query:          "memory_type=observation\ntopic=redis",
+					Strategy:       "memory_index_vector_rerank",
+					CandidateCount: 4,
+					SelectedCount:  1,
+					Hits: []domain.MemoryRetrievalHit{{
+						Source:        "memory_index",
+						MemoryIndexID: "memidx_export_obs",
+						RefTable:      "agent_observations",
+						RefID:         "obs_export_1",
+						ScopeType:     domain.MemoryScopeProject,
+						ScopeID:       "proj_export",
+						Topic:         "redis",
+						Summary:       "项目里的 Redis 观察",
+						RuleScore:     5.2,
+						VectorScore:   0.92,
+						RerankScore:   0.88,
+						FinalScore:    8.12,
+						Reason:        "项目 scope 命中；semantic 相似度高；rerank 提升排序；final=8.12",
+					}},
+				},
 			},
 			ScoreBreakdown: map[string]float64{"表达清晰度": 78, "完整性": 76},
 		}

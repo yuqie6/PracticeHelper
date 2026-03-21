@@ -21,7 +21,7 @@ func (s *Service) finalizeReview(ctx context.Context, sessionID string) (*domain
 	if err != nil {
 		return nil, err
 	}
-	agentContext, err := s.getAgentContext(ctx, agentContextParams{
+	agentContext, retrievalTrace, err := s.getAgentContextDetailed(ctx, agentContextParams{
 		Topic:               updatedSession.Topic,
 		ProjectID:           updatedSession.ProjectID,
 		JobTargetID:         updatedSession.JobTargetID,
@@ -47,6 +47,7 @@ func (s *Service) finalizeReview(ctx context.Context, sessionID string) (*domain
 	if err != nil {
 		return nil, err
 	}
+	review.RetrievalTrace = retrievalTrace
 	s.recordEvaluationLog(ctx, updatedSession.ID, "", "generate_review", startedAt, promptMeta)
 
 	return s.persistReview(ctx, updatedSession, review, sideEffects)
@@ -68,7 +69,7 @@ func (s *Service) finalizeReviewStream(
 	if err != nil {
 		return nil, err
 	}
-	agentContext, err := s.getAgentContext(ctx, agentContextParams{
+	agentContext, retrievalTrace, err := s.getAgentContextDetailed(ctx, agentContextParams{
 		Topic:               updatedSession.Topic,
 		ProjectID:           updatedSession.ProjectID,
 		JobTargetID:         updatedSession.JobTargetID,
@@ -94,6 +95,7 @@ func (s *Service) finalizeReviewStream(
 	if err != nil {
 		return nil, err
 	}
+	review.RetrievalTrace = retrievalTrace
 	s.recordEvaluationLog(ctx, updatedSession.ID, "", "generate_review_stream", startedAt, promptMeta)
 
 	savedSession, err := s.persistReview(ctx, updatedSession, review, sideEffects)

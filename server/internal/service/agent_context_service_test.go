@@ -259,6 +259,58 @@ func TestGetAgentContextUsesMemoryIndexPlanner(t *testing.T) {
 	}
 }
 
+func TestGetAgentContextDetailedReturnsRetrievalTrace(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	if err := store.CreateObservations(ctx, "sess_trace_obs", []domain.AgentObservation{
+		{
+			ID:        "obs_trace_1",
+			SessionID: "sess_trace_obs",
+			ScopeType: domain.MemoryScopeProject,
+			ScopeID:   "proj_trace",
+			Topic:     domain.BasicsTopicRedis,
+			Category:  domain.ObservationCategoryPattern,
+			Content:   "项目里的 Redis 一致性经验应该优先召回。",
+			Tags:      []string{"redis", "consistency"},
+			Relevance: 0.9,
+		},
+	}); err != nil {
+		t.Fatalf("CreateObservations() error = %v", err)
+	}
+
+	svc := New(store, nil)
+	agentContext, trace, err := svc.getAgentContextDetailed(ctx, agentContextParams{
+		Topic:            domain.BasicsTopicRedis,
+		ProjectID:        "proj_trace",
+		SessionID:        "sess_current_trace",
+		ObservationLimit: 1,
+	})
+	if err != nil {
+		t.Fatalf("getAgentContextDetailed() error = %v", err)
+	}
+
+	if agentContext == nil || len(agentContext.Observations) != 1 {
+		t.Fatalf("expected one observation in agent context, got %+v", agentContext)
+	}
+	if trace == nil || trace.ObservationTrace == nil {
+		t.Fatalf("expected observation retrieval trace, got %+v", trace)
+	}
+	if trace.ObservationTrace.SelectedCount != 1 {
+		t.Fatalf("expected selected count 1, got %+v", trace.ObservationTrace)
+	}
+	if len(trace.ObservationTrace.Hits) != 1 || trace.ObservationTrace.Hits[0].RefID != "obs_trace_1" {
+		t.Fatalf("unexpected trace hits: %+v", trace.ObservationTrace.Hits)
+	}
+	if !strings.Contains(trace.ObservationTrace.Hits[0].Reason, "scope") {
+		t.Fatalf("expected hit reason to mention scope, got %q", trace.ObservationTrace.Hits[0].Reason)
+	}
+}
+
 func TestGetAgentContextReranksSessionSummariesBeyondRawSalience(t *testing.T) {
 	store, err := openTestStore(t)
 	if err != nil {

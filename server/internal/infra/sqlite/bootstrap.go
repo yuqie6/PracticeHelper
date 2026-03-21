@@ -167,6 +167,7 @@ func migrate(db *sql.DB) error {
 			gaps_json TEXT NOT NULL,
 			suggested_topics_json TEXT NOT NULL,
 			next_training_focus_json TEXT NOT NULL,
+			retrieval_trace_json TEXT NOT NULL DEFAULT 'null',
 			score_breakdown_json TEXT NOT NULL,
 			created_at TEXT NOT NULL
 		);`,
@@ -355,6 +356,9 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 	if err := ensureColumn(db, "review_cards", "recommended_next_json", "TEXT NOT NULL DEFAULT 'null'"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "review_cards", "retrieval_trace_json", "TEXT NOT NULL DEFAULT 'null'"); err != nil {
 		return err
 	}
 	if err := ensureColumn(db, "training_sessions", "job_target_id", "TEXT NOT NULL DEFAULT ''"); err != nil {

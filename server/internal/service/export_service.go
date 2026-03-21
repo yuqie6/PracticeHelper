@@ -499,6 +499,9 @@ func renderSessionMarkdown(
 	builder.WriteString("### 复盘分项得分\n\n")
 	writeScoreBreakdown(&builder, review.ScoreBreakdown, "当前没有复盘分项得分。")
 
+	builder.WriteString("### 检索轨迹\n\n")
+	writeRetrievalTrace(&builder, review.RetrievalTrace)
+
 	return builder.String()
 }
 
@@ -524,6 +527,70 @@ func writeBlock(builder *strings.Builder, content string, empty string) {
 	builder.WriteString("````text\n")
 	builder.WriteString(text)
 	builder.WriteString("\n````\n\n")
+}
+
+func writeRetrievalTrace(builder *strings.Builder, trace *domain.RetrievalTrace) {
+	if trace == nil {
+		builder.WriteString("> 当前没有记录检索轨迹。\n\n")
+		return
+	}
+
+	fmt.Fprintf(builder, "- 生成时间: %s\n", formatTimeValue(&trace.GeneratedAt))
+	fmt.Fprintf(builder, "- topic: %s\n", fallbackText(trace.Topic))
+	fmt.Fprintf(builder, "- project_id: %s\n", fallbackText(trace.ProjectID))
+	fmt.Fprintf(builder, "- job_target_id: %s\n\n", fallbackText(trace.JobTargetID))
+
+	writeMemoryRetrievalTraceGroup(builder, "Observations", trace.ObservationTrace)
+	writeMemoryRetrievalTraceGroup(builder, "Session Summaries", trace.SummaryTrace)
+}
+
+func writeMemoryRetrievalTraceGroup(
+	builder *strings.Builder,
+	title string,
+	trace *domain.MemoryRetrievalTrace,
+) {
+	fmt.Fprintf(builder, "#### %s\n\n", title)
+	if trace == nil {
+		builder.WriteString("> 当前没有记录该类材料的检索轨迹。\n\n")
+		return
+	}
+
+	fmt.Fprintf(builder, "- 策略: %s\n", fallbackText(trace.Strategy))
+	fmt.Fprintf(builder, "- Query: %s\n", fallbackText(trace.Query))
+	fmt.Fprintf(builder, "- 候选数: %d\n", trace.CandidateCount)
+	fmt.Fprintf(builder, "- 选中数: %d\n", trace.SelectedCount)
+	fmt.Fprintf(builder, "- 是否回退补齐: %t\n", trace.FallbackUsed)
+	if trace.FallbackReason != "" {
+		fmt.Fprintf(builder, "- 回退原因: %s\n", trace.FallbackReason)
+	}
+	builder.WriteString("\n")
+
+	if len(trace.Hits) == 0 {
+		builder.WriteString("> 当前没有命中材料。\n\n")
+		return
+	}
+
+	for index, hit := range trace.Hits {
+		fmt.Fprintf(builder, "%d. [%s] %s\n", index+1, fallbackText(hit.Source), fallbackText(hit.Summary))
+		fmt.Fprintf(builder, "   - ref: %s / %s\n", fallbackText(hit.RefTable), fallbackText(hit.RefID))
+		fmt.Fprintf(builder, "   - scope: %s / %s\n", fallbackText(hit.ScopeType), fallbackText(hit.ScopeID))
+		fmt.Fprintf(builder, "   - topic: %s\n", fallbackText(hit.Topic))
+		fmt.Fprintf(builder, "   - 分数: rule=%s vector=%s rerank=%s final=%s\n",
+			fallbackText(formatTraceMetric(hit.RuleScore)),
+			fallbackText(formatTraceMetric(hit.VectorScore)),
+			fallbackText(formatTraceMetric(hit.RerankScore)),
+			fallbackText(formatTraceMetric(hit.FinalScore)),
+		)
+		fmt.Fprintf(builder, "   - 原因: %s\n", fallbackText(hit.Reason))
+	}
+	builder.WriteString("\n")
+}
+
+func formatTraceMetric(value float64) string {
+	if value == 0 {
+		return ""
+	}
+	return strconv.FormatFloat(value, 'f', 3, 64)
 }
 
 func writeScoreBreakdown(

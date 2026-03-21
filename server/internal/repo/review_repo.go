@@ -13,8 +13,8 @@ func (s *Store) CreateReview(ctx context.Context, review *domain.ReviewCard) err
 	// 一个 session 只保留一张 review card。冲突时覆盖内容是为了支持重试/补生成，
 	// 调用方应把这里视为幂等写，而不是为同一轮训练追加多份历史版本。
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO review_cards (id, session_id, overall, top_fix, top_fix_reason, highlights_json, gaps_json, suggested_topics_json, next_training_focus_json, recommended_next_json, score_breakdown_json, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO review_cards (id, session_id, overall, top_fix, top_fix_reason, highlights_json, gaps_json, suggested_topics_json, next_training_focus_json, recommended_next_json, retrieval_trace_json, score_breakdown_json, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(session_id) DO UPDATE SET
 			id = excluded.id,
 			overall = excluded.overall,
@@ -25,6 +25,7 @@ func (s *Store) CreateReview(ctx context.Context, review *domain.ReviewCard) err
 			suggested_topics_json = excluded.suggested_topics_json,
 			next_training_focus_json = excluded.next_training_focus_json,
 			recommended_next_json = excluded.recommended_next_json,
+			retrieval_trace_json = excluded.retrieval_trace_json,
 			score_breakdown_json = excluded.score_breakdown_json,
 			created_at = excluded.created_at
 	`,
@@ -38,6 +39,7 @@ func (s *Store) CreateReview(ctx context.Context, review *domain.ReviewCard) err
 		mustJSON(review.SuggestedTopics),
 		mustJSON(review.NextTrainingFocus),
 		mustJSON(review.RecommendedNext),
+		mustJSON(review.RetrievalTrace),
 		mustJSON(review.ScoreBreakdown),
 		nowUTC(),
 	)
@@ -52,7 +54,7 @@ func (s *Store) GetReview(ctx context.Context, reviewID string) (*domain.ReviewC
 	row := s.db.QueryRowContext(ctx, `
 		SELECT rc.id, rc.session_id, ts.job_target_id, ts.job_target_analysis_id, ts.prompt_set_id, ts.prompt_set_label, ts.prompt_set_status, rc.overall, rc.top_fix, rc.top_fix_reason,
 			rc.highlights_json, rc.gaps_json, rc.suggested_topics_json, rc.next_training_focus_json,
-			rc.recommended_next_json, rc.score_breakdown_json, rc.created_at
+			rc.recommended_next_json, rc.retrieval_trace_json, rc.score_breakdown_json, rc.created_at
 		FROM review_cards rc
 		JOIN training_sessions ts ON ts.id = rc.session_id
 		WHERE rc.id = ?
