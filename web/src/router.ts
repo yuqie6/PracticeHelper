@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import HomeView from './views/HomeView.vue';
 import HistoryView from './views/HistoryView.vue';
 import JobTargetsView from './views/JobTargetsView.vue';
+import PromptExperimentsView from './views/PromptExperimentsView.vue';
 import ProfileView from './views/ProfileView.vue';
 import ProjectsView from './views/ProjectsView.vue';
 import ReviewView from './views/ReviewView.vue';
@@ -16,6 +17,7 @@ const router = createRouter({
     { path: '/profile', component: ProfileView },
     { path: '/job-targets', component: JobTargetsView },
     { path: '/projects', component: ProjectsView },
+    { path: '/prompt-experiments', component: PromptExperimentsView },
     { path: '/train', component: TrainView },
     { path: '/history', component: HistoryView },
     { path: '/sessions/:id', component: SessionView, props: true },

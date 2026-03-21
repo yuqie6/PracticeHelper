@@ -437,6 +437,7 @@ watchEffect(() => {
 const mutation = useMutation({
   mutationFn: saveProfile,
   onSuccess: async (profile) => {
+    // profile 自己可以直接回填缓存，但 dashboard 含有聚合统计和派生字段，仍要回源刷新。
     queryClient.setQueryData(['profile'], profile);
     await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     saveError.value = '';

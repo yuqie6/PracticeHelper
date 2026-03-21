@@ -53,15 +53,23 @@
         <div
           class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
         >
-          <span class="text-base font-black">
-            {{ formatModeLabel(t, item.mode) }}
-            <template v-if="item.topic">
-              · {{ formatTopicLabel(t, item.topic) }}</template
+          <div class="space-y-2">
+            <span class="block text-base font-black">
+              {{ formatModeLabel(t, item.mode) }}
+              <template v-if="item.topic">
+                · {{ formatTopicLabel(t, item.topic) }}</template
+              >
+              <template v-if="item.project_name">
+                · {{ item.project_name }}</template
+              >
+            </span>
+            <span
+              v-if="item.prompt_set"
+              class="neo-badge bg-[var(--neo-blue)]"
             >
-            <template v-if="item.project_name">
-              · {{ item.project_name }}</template
-            >
-          </span>
+              {{ t('history.promptSetBadge', { name: item.prompt_set.label }) }}
+            </span>
+          </div>
           <span class="text-sm font-semibold">
             {{ formatStatusLabel(t, item.status) }}
           </span>

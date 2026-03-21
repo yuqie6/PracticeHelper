@@ -32,6 +32,7 @@ export function describeSession(
     return t('home.cards.sessionEmpty');
   }
 
+  // 首页最近训练卡片优先展示用户最容易识别的名字：项目名 > topic > 模式名。
   const name =
     session.project_name ||
     (session.topic

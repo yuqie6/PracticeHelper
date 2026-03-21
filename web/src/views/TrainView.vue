@@ -170,6 +170,23 @@
         {{ activeJobTargetFallbackNotice }}
       </p>
 
+      <label class="space-y-2">
+        <span class="neo-subheading">{{ t('train.fields.promptSet') }}</span>
+        <select v-model="form.prompt_set_id" class="neo-select">
+          <option
+            v-for="promptSet in promptSets ?? []"
+            :key="promptSet.id"
+            :value="promptSet.id"
+          >
+            {{ formatPromptSetLabel(promptSet) }}
+          </option>
+        </select>
+      </label>
+
+      <p v-if="selectedPromptSet" class="neo-note">
+        {{ selectedPromptSet.description }}
+      </p>
+
       <button
         type="submit"
         class="neo-button-dark"
@@ -192,7 +209,9 @@ import {
   createSessionStream,
   getDashboard,
   listJobTargets,
+  listPromptSets,
   listProjects,
+  type PromptSetSummary,
   type StreamEvent,
   type TrainingSessionSummary,
 } from '../api/client';
@@ -221,6 +240,7 @@ const form = reactive({
   topic: 'go',
   project_id: '',
   job_target_id: '',
+  prompt_set_id: '',
   intensity: 'auto',
   max_turns: 2,
 });
@@ -244,6 +264,11 @@ const { data: dashboard } = useQuery({
   queryFn: getDashboard,
 });
 
+const { data: promptSets } = useQuery({
+  queryKey: ['prompt-sets'],
+  queryFn: listPromptSets,
+});
+
 const currentSession = computed(() => dashboard.value?.current_session ?? null);
 const activeJobTarget = computed(
   () => dashboard.value?.active_job_target ?? null,
@@ -253,6 +278,11 @@ const selectedJobTarget = computed(
     (jobTargets.value ?? []).find(
       (target) => target.id === form.job_target_id,
     ) ?? null,
+);
+const selectedPromptSet = computed(
+  () =>
+    (promptSets.value ?? []).find((item) => item.id === form.prompt_set_id) ??
+    null,
 );
 const jobTargetBlockedReason = computed(() => {
   if (!selectedJobTarget.value) {
@@ -303,6 +333,7 @@ const mutation = useMutation({
     topic?: string;
     project_id?: string;
     job_target_id?: string;
+    prompt_set_id?: string;
     ignore_active_job_target?: boolean;
     intensity: string;
     max_turns?: number;
@@ -352,6 +383,7 @@ watch(
     const topic = route.query.topic;
     const projectId = route.query.project_id;
     const jobTargetId = route.query.job_target_id;
+    const promptSetId = route.query.prompt_set_id;
 
     if (mode === 'basics' || mode === 'project') {
       form.mode = mode;
@@ -370,6 +402,9 @@ watch(
       form.job_target_id = jobTargetId;
     } else {
       form.job_target_id = '';
+    }
+    if (typeof promptSetId === 'string' && promptSetId) {
+      form.prompt_set_id = promptSetId;
     }
   },
   { immediate: true },
@@ -390,12 +425,39 @@ watch(
   { immediate: true },
 );
 
+watch(
+  promptSets,
+  (items) => {
+    const available = items ?? [];
+    if (available.length === 0) {
+      return;
+    }
+
+    const requested = route.query.prompt_set_id;
+    if (typeof requested === 'string' && requested) {
+      if (available.some((item) => item.id === requested)) {
+        form.prompt_set_id = requested;
+        return;
+      }
+    }
+
+    if (available.some((item) => item.id === form.prompt_set_id)) {
+      return;
+    }
+
+    form.prompt_set_id =
+      available.find((item) => item.is_default)?.id ?? available[0].id;
+  },
+  { immediate: true },
+);
+
 function submit() {
   mutation.mutate({
     mode: form.mode,
     topic: form.mode === 'basics' ? form.topic : undefined,
     project_id: form.mode === 'project' ? form.project_id : undefined,
     job_target_id: form.job_target_id || undefined,
+    prompt_set_id: form.prompt_set_id || undefined,
     ignore_active_job_target:
       !form.job_target_id && Boolean(activeJobTarget.value),
     intensity: form.intensity,
@@ -455,5 +517,9 @@ function resolveStartErrorMessage(error: unknown): string {
 
 function markJobTargetSelectionTouched() {
   jobTargetSelectionTouched.value = true;
+}
+
+function formatPromptSetLabel(item: PromptSetSummary): string {
+  return `${item.label} · ${item.status}`;
 }
 </script>

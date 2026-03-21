@@ -14,6 +14,7 @@ function translateOrFallback(
   named?: Record<string, unknown>,
 ): string {
   const translated = t(key, named);
+  // vue-i18n 缺词时会直接返回 key，本仓库把它视为“没翻到”，再退回源码里的可读文案。
   return translated === key ? fallback : translated;
 }
 

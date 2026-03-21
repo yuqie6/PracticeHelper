@@ -116,6 +116,14 @@ export interface ProjectImportJob {
   finished_at?: string;
 }
 
+export interface PromptSetSummary {
+  id: string;
+  label: string;
+  description?: string;
+  status: string;
+  is_default?: boolean;
+}
+
 export interface WeaknessTag {
   id: string;
   kind: string;
@@ -154,6 +162,7 @@ export interface TrainingSession {
   project_id?: string;
   job_target_id?: string;
   job_target_analysis_id?: string;
+  prompt_set_id?: string;
   intensity: string;
   status: string;
   max_turns: number;
@@ -162,6 +171,7 @@ export interface TrainingSession {
   turns: TrainingTurn[];
   project?: ProjectProfile;
   job_target?: JobTargetRef | null;
+  prompt_set?: PromptSetSummary | null;
 }
 
 export interface TrainingSessionSummary {
@@ -174,6 +184,8 @@ export interface TrainingSessionSummary {
   review_id?: string;
   updated_at: string;
   job_target?: JobTargetRef | null;
+  prompt_set_id?: string;
+  prompt_set?: PromptSetSummary | null;
 }
 
 export interface ReviewCard {
@@ -181,6 +193,7 @@ export interface ReviewCard {
   session_id: string;
   job_target_id?: string;
   job_target_analysis_id?: string;
+  prompt_set_id?: string;
   overall: string;
   top_fix?: string;
   top_fix_reason?: string;
@@ -196,6 +209,53 @@ export interface ReviewCard {
   } | null;
   score_breakdown: Record<string, number>;
   job_target?: JobTargetRef | null;
+  prompt_set?: PromptSetSummary | null;
+}
+
+export interface EvaluationLogEntry {
+  id: number;
+  session_id: string;
+  turn_id?: string;
+  flow_name: string;
+  model_name?: string;
+  prompt_set_id?: string;
+  prompt_hash?: string;
+  latency_ms: number;
+  created_at: string;
+}
+
+export interface PromptExperimentMetrics {
+  prompt_set: PromptSetSummary;
+  session_count: number;
+  completed_count: number;
+  avg_total_score: number;
+  avg_generate_question_latency_ms: number;
+  avg_evaluate_answer_latency_ms: number;
+  avg_generate_review_latency_ms: number;
+}
+
+export interface PromptExperimentSample {
+  session_id: string;
+  review_id?: string;
+  mode: string;
+  topic?: string;
+  status: string;
+  total_score: number;
+  updated_at: string;
+  prompt_set: PromptSetSummary;
+}
+
+export interface PromptExperimentReport {
+  left: PromptExperimentMetrics;
+  right: PromptExperimentMetrics;
+  recent_samples: PromptExperimentSample[];
+  applied_filters: {
+    left: string;
+    right: string;
+    mode?: string;
+    topic?: string;
+    limit: number;
+  };
 }
 
 export interface Dashboard {
@@ -376,6 +436,27 @@ export function listJobTargets(): Promise<JobTarget[]> {
   return request('/api/job-targets');
 }
 
+export function listPromptSets(): Promise<PromptSetSummary[]> {
+  return request('/api/prompt-sets');
+}
+
+export function getPromptExperiment(params: {
+  left: string;
+  right: string;
+  mode?: string;
+  topic?: string;
+  limit?: number;
+}): Promise<PromptExperimentReport> {
+  const query = new URLSearchParams({
+    left: params.left,
+    right: params.right,
+  });
+  if (params.mode) query.set('mode', params.mode);
+  if (params.topic) query.set('topic', params.topic);
+  if (params.limit) query.set('limit', String(params.limit));
+  return request(`/api/prompt-experiments?${query.toString()}`);
+}
+
 export function createJobTarget(payload: {
   title: string;
   company_name?: string;
@@ -452,6 +533,7 @@ export function createSession(payload: {
   topic?: string;
   project_id?: string;
   job_target_id?: string;
+  prompt_set_id?: string;
   ignore_active_job_target?: boolean;
   intensity: string;
   max_turns?: number;
@@ -468,6 +550,7 @@ export function createSessionStream(
     topic?: string;
     project_id?: string;
     job_target_id?: string;
+    prompt_set_id?: string;
     ignore_active_job_target?: boolean;
     intensity: string;
     max_turns?: number;
@@ -511,6 +594,12 @@ export function listSessions(params?: {
 
 export function getSession(sessionId: string): Promise<TrainingSession> {
   return request(`/api/sessions/${sessionId}`);
+}
+
+export function listSessionEvaluationLogs(
+  sessionId: string,
+): Promise<EvaluationLogEntry[]> {
+  return request(`/api/sessions/${sessionId}/evaluation-logs`);
 }
 
 export async function downloadSessionExport(

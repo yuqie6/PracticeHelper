@@ -47,16 +47,25 @@
     />
 
     <div v-if="review" class="flex justify-end">
-      <button
-        type="button"
-        class="neo-button-dark w-full sm:w-auto"
-        :disabled="isExporting"
-        @click="exportReport"
-      >
-        {{
-          isExporting ? t('review.exportingAction') : t('review.exportAction')
-        }}
-      </button>
+      <div class="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+        <RouterLink
+          v-if="review.prompt_set?.id"
+          :to="buildPromptExperimentLink(review.prompt_set.id)"
+          class="neo-button-dark w-full sm:w-auto"
+        >
+          {{ t('review.promptExperimentAction') }}
+        </RouterLink>
+        <button
+          type="button"
+          class="neo-button-dark w-full sm:w-auto"
+          :disabled="isExporting"
+          @click="exportReport"
+        >
+          {{
+            isExporting ? t('review.exportingAction') : t('review.exportAction')
+          }}
+        </button>
+      </div>
     </div>
 
     <div v-if="review" class="neo-grid lg:grid-cols-[0.9fr_1.1fr]">
@@ -75,6 +84,26 @@
             </p>
             <p v-if="review.job_target" class="neo-note">
               {{ t('review.jobTargetDescription') }}
+            </p>
+          </div>
+        </div>
+
+        <div v-if="review.prompt_set" class="space-y-4">
+          <p class="neo-kicker bg-[var(--neo-blue)]">
+            {{ t('review.promptSetTitle') }}
+          </p>
+          <div
+            class="space-y-3 border-2 border-black bg-white px-4 py-4 md:border-4"
+          >
+            <p class="text-base font-black">
+              {{ review.prompt_set.label }}
+            </p>
+            <p class="neo-note">
+              {{
+                t('review.promptSetDescription', {
+                  status: review.prompt_set.status,
+                })
+              }}
             </p>
           </div>
         </div>
@@ -197,6 +226,7 @@ import { ApiError, downloadSessionExport, getReview } from '../api/client';
 import NoticePanel from '../components/NoticePanel.vue';
 import { triggerFileDownload } from '../lib/export';
 import { formatModeLabel, formatTopicLabel } from '../lib/labels';
+import { buildPromptExperimentLink } from '../lib/promptExperiments';
 
 const route = useRoute();
 const reviewId = computed(() => route.params.id as string);
