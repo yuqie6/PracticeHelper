@@ -105,6 +105,7 @@ const navItems = computed(() => [
   { label: t('app.nav.jobs'), to: '/job-targets' },
   { label: t('app.nav.projects'), to: '/projects' },
   { label: t('app.nav.train'), to: '/train' },
+  { label: t('app.nav.history'), to: '/history' },
 ]);
 
 const localeOptions = computed(() => [

@@ -232,6 +232,19 @@ type WeaknessTag struct {
 	EvidenceSessionID string    `json:"evidence_session_id"`
 }
 
+type WeaknessTrendPoint struct {
+	SessionID string  `json:"session_id"`
+	Severity  float64 `json:"severity"`
+	CreatedAt string  `json:"created_at"`
+}
+
+type WeaknessTrend struct {
+	ID     string               `json:"id"`
+	Kind   string               `json:"kind"`
+	Label  string               `json:"label"`
+	Points []WeaknessTrendPoint `json:"points"`
+}
+
 type ReviewCard struct {
 	ID                  string             `json:"id"`
 	SessionID           string             `json:"session_id"`
@@ -267,6 +280,22 @@ type TrainingSessionSummary struct {
 	ReviewID    string        `json:"review_id,omitempty"`
 	UpdatedAt   time.Time     `json:"updated_at"`
 	JobTarget   *JobTargetRef `json:"job_target,omitempty"`
+}
+
+type ListSessionsRequest struct {
+	Page    int    `form:"page"`
+	PerPage int    `form:"per_page"`
+	Mode    string `form:"mode"`
+	Topic   string `form:"topic"`
+	Status  string `form:"status"`
+}
+
+type PaginatedList[T any] struct {
+	Items      []T `json:"items"`
+	Total      int `json:"total"`
+	Page       int `json:"page"`
+	PerPage    int `json:"per_page"`
+	TotalPages int `json:"total_pages"`
 }
 
 type Dashboard struct {

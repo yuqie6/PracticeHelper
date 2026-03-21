@@ -92,6 +92,14 @@ func (s *Service) persistReview(
 	return session, nil
 }
 
+func (s *Service) ListSessions(ctx context.Context, req domain.ListSessionsRequest) (*domain.PaginatedList[domain.TrainingSessionSummary], error) {
+	return s.repo.ListSessions(ctx, req)
+}
+
+func (s *Service) GetWeaknessTrends(ctx context.Context) ([]domain.WeaknessTrend, error) {
+	return s.repo.GetWeaknessTrends(ctx, 5)
+}
+
 func (s *Service) GetSession(ctx context.Context, sessionID string) (*domain.TrainingSession, error) {
 	session, err := s.repo.GetSession(ctx, sessionID)
 	if err != nil {

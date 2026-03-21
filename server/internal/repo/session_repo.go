@@ -194,6 +194,103 @@ func (s *Store) TransitionSessionStatus(
 	return rowsAffected > 0, nil
 }
 
+func (s *Store) ListSessions(ctx context.Context, req domain.ListSessionsRequest) (*domain.PaginatedList[domain.TrainingSessionSummary], error) {
+	where := "1=1"
+	args := make([]any, 0)
+	if req.Mode != "" {
+		where += " AND ts.mode = ?"
+		args = append(args, req.Mode)
+	}
+	if req.Topic != "" {
+		where += " AND ts.topic = ?"
+		args = append(args, req.Topic)
+	}
+	if req.Status != "" {
+		where += " AND ts.status = ?"
+		args = append(args, req.Status)
+	}
+
+	var total int
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM training_sessions ts WHERE %s`, where)
+	if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, fmt.Errorf("count sessions: %w", err)
+	}
+
+	page := req.Page
+	if page < 1 {
+		page = 1
+	}
+	perPage := req.PerPage
+	if perPage < 1 || perPage > 100 {
+		perPage = 20
+	}
+	totalPages := (total + perPage - 1) / perPage
+	offset := (page - 1) * perPage
+
+	query := fmt.Sprintf(`
+		SELECT ts.id, ts.mode, ts.topic, COALESCE(pp.name, ''), ts.status, ts.total_score, ts.review_id, ts.updated_at,
+			COALESCE(jt.id, ''), COALESCE(jt.title, ''), COALESCE(jt.company_name, '')
+		FROM training_sessions ts
+		LEFT JOIN project_profiles pp ON ts.project_id = pp.id
+		LEFT JOIN job_targets jt ON ts.job_target_id = jt.id
+		WHERE %s
+		ORDER BY ts.updated_at DESC
+		LIMIT ? OFFSET ?
+	`, where)
+	queryArgs := append(args, perPage, offset)
+
+	rows, err := s.db.QueryContext(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	items := make([]domain.TrainingSessionSummary, 0)
+	for rows.Next() {
+		item, err := scanSessionSummaryRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, *item)
+	}
+
+	return &domain.PaginatedList[domain.TrainingSessionSummary]{
+		Items:      items,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: totalPages,
+	}, nil
+}
+
+func scanSessionSummaryRow(scanner interface{ Scan(dest ...any) error }) (*domain.TrainingSessionSummary, error) {
+	var id, mode, topic, projectName, status, reviewID, updatedAt string
+	var jobTargetID, jobTargetTitle, jobTargetCompanyName string
+	var totalScore float64
+	if err := scanner.Scan(&id, &mode, &topic, &projectName, &status, &totalScore, &reviewID, &updatedAt, &jobTargetID, &jobTargetTitle, &jobTargetCompanyName); err != nil {
+		return nil, fmt.Errorf("scan session summary: %w", err)
+	}
+
+	item := &domain.TrainingSessionSummary{
+		ID:          id,
+		Mode:        mode,
+		Topic:       topic,
+		ProjectName: projectName,
+		Status:      status,
+		TotalScore:  totalScore,
+		ReviewID:    reviewID,
+		UpdatedAt:   parseTime(updatedAt),
+	}
+	if jobTargetID != "" {
+		item.JobTarget = &domain.JobTargetRef{
+			ID:          jobTargetID,
+			Title:       jobTargetTitle,
+			CompanyName: jobTargetCompanyName,
+		}
+	}
+	return item, nil
+}
+
 func (s *Store) ListRecentSessions(ctx context.Context, limit int) ([]domain.TrainingSessionSummary, error) {
 	if limit <= 0 {
 		limit = 5

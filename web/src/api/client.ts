@@ -476,6 +476,31 @@ export function createSessionStream(
   );
 }
 
+export interface PaginatedList<T> {
+  items: T[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export function listSessions(params?: {
+  page?: number;
+  per_page?: number;
+  mode?: string;
+  topic?: string;
+  status?: string;
+}): Promise<PaginatedList<TrainingSessionSummary>> {
+  const query = new URLSearchParams();
+  if (params?.page) query.set('page', String(params.page));
+  if (params?.per_page) query.set('per_page', String(params.per_page));
+  if (params?.mode) query.set('mode', params.mode);
+  if (params?.topic) query.set('topic', params.topic);
+  if (params?.status) query.set('status', params.status);
+  const qs = query.toString();
+  return request(`/api/sessions${qs ? `?${qs}` : ''}`);
+}
+
 export function getSession(sessionId: string): Promise<TrainingSession> {
   return request(`/api/sessions/${sessionId}`);
 }
@@ -519,4 +544,21 @@ export function getReview(reviewId: string): Promise<ReviewCard> {
 
 export function listWeaknesses(): Promise<WeaknessTag[]> {
   return request('/api/weaknesses');
+}
+
+export interface WeaknessTrendPoint {
+  session_id: string;
+  severity: number;
+  created_at: string;
+}
+
+export interface WeaknessTrend {
+  id: string;
+  kind: string;
+  label: string;
+  points: WeaknessTrendPoint[];
+}
+
+export function getWeaknessTrends(): Promise<WeaknessTrend[]> {
+  return request('/api/weaknesses/trends');
 }

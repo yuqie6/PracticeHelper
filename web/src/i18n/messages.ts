@@ -15,6 +15,7 @@ export const messages = {
         jobs: '岗位',
         projects: '项目',
         train: '训练',
+        history: '历史',
       },
     },
     common: {
@@ -215,6 +216,7 @@ export const messages = {
         jobTargetDescription: '本轮绑定岗位：{name}',
         weaknessesEmpty:
           '还没有历史薄弱点，完成第一轮训练后这里会显示重点问题。',
+        weaknessTrends: '弱项趋势',
         sessionsEmpty: '还没有训练记录，开始第一轮后这里会看到最近结果。',
       },
     },
@@ -400,6 +402,21 @@ export const messages = {
       startAction: '开始这一轮训练',
       startErrorTitle: '启动失败',
     },
+    history: {
+      hero: {
+        kicker: '训练记录',
+        title: '查看所有训练历史和成绩变化。',
+      },
+      filters: {
+        allModes: '所有模式',
+        allTopics: '所有主题',
+        allStatuses: '所有状态',
+      },
+      empty: '还没有训练记录。',
+      noJobTarget: '无岗位绑定',
+      prev: '上一页',
+      next: '下一页',
+    },
     session: {
       hero: {
         kicker: '训练过程',
@@ -547,6 +564,7 @@ export const messages = {
         jobs: 'Jobs',
         projects: 'Projects',
         train: 'Train',
+        history: 'History',
       },
     },
     common: {
@@ -768,6 +786,7 @@ export const messages = {
         jobTargetDescription: 'Bound job target: {name}',
         weaknessesEmpty:
           'No historical weaknesses yet. They will appear after the first session.',
+        weaknessTrends: 'Weakness Trends',
         sessionsEmpty:
           'No sessions yet. Start one to see your latest results here.',
       },
@@ -959,6 +978,21 @@ export const messages = {
         'The current default JD "{name}" cannot be used right now. Fix or rerun it from the job target page if you want job-target mode for this round.',
       startAction: 'Start this session',
       startErrorTitle: 'Start failed',
+    },
+    history: {
+      hero: {
+        kicker: 'History',
+        title: 'View all training sessions and score trends.',
+      },
+      filters: {
+        allModes: 'All modes',
+        allTopics: 'All topics',
+        allStatuses: 'All statuses',
+      },
+      empty: 'No training sessions yet.',
+      noJobTarget: 'No job target',
+      prev: 'Previous',
+      next: 'Next',
     },
     session: {
       hero: {

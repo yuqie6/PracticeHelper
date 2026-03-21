@@ -55,6 +55,7 @@ func NewRouter(svc *service.Service) *gin.Engine {
 		api.GET("/import-jobs/:id", handler.getImportJob)
 		api.POST("/import-jobs/:id/retry", handler.retryImportJob)
 
+		api.GET("/sessions", handler.listSessions)
 		api.POST("/sessions", handler.createSession)
 		api.POST("/sessions/stream", handler.createSessionStream)
 		api.GET("/sessions/:id", handler.getSession)
@@ -64,6 +65,7 @@ func NewRouter(svc *service.Service) *gin.Engine {
 
 		api.GET("/reviews/:id", handler.getReview)
 		api.GET("/weaknesses", handler.listWeaknesses)
+		api.GET("/weaknesses/trends", handler.getWeaknessTrends)
 	}
 
 	return router
@@ -358,6 +360,20 @@ func (h *Handler) createSessionStream(c *gin.Context) {
 	})
 }
 
+func (h *Handler) listSessions(c *gin.Context) {
+	var req domain.ListSessionsRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+	data, err := h.service.ListSessions(c.Request.Context(), req)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
 func (h *Handler) getSession(c *gin.Context) {
 	data, err := h.service.GetSession(c.Request.Context(), c.Param("id"))
 	if err != nil {
@@ -447,6 +463,15 @@ func (h *Handler) getReview(c *gin.Context) {
 
 func (h *Handler) listWeaknesses(c *gin.Context) {
 	data, err := h.service.ListWeaknesses(c.Request.Context())
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) getWeaknessTrends(c *gin.Context) {
+	data, err := h.service.GetWeaknessTrends(c.Request.Context())
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, err)
 		return

@@ -35,20 +35,29 @@ func (s *Store) UpsertWeaknesses(ctx context.Context, sessionID string, hits []d
 		`, hit.Kind, hit.Label).Scan(&existingID, &currentSeverity, &frequency, &lastSeenAt)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
+			id := newID("weak")
+			severity := math.Min(1.0, hit.Severity)
 			_, err = s.db.ExecContext(ctx, `
 				INSERT INTO weakness_tags (id, kind, label, severity, frequency, last_seen_at, evidence_session_id)
 				VALUES (?, ?, ?, ?, ?, ?, ?)
-			`, newID("weak"), hit.Kind, hit.Label, math.Min(1.0, hit.Severity), 1, now, sessionID)
+			`, id, hit.Kind, hit.Label, severity, 1, now, sessionID)
+			if err == nil {
+				_ = s.recordWeaknessSnapshot(ctx, id, sessionID, severity)
+			}
 		case err == nil:
 			decayed := applyWeaknessTimeDecay(domain.WeaknessTag{
 				Severity:   currentSeverity,
 				LastSeenAt: parseTime(lastSeenAt),
 			}, time.Now().UTC())
+			newSeverity := math.Min(1.5, decayed.Severity+(hit.Severity*0.35))
 			_, err = s.db.ExecContext(ctx, `
 				UPDATE weakness_tags
 				SET severity = ?, frequency = ?, last_seen_at = ?, evidence_session_id = ?
 				WHERE id = ?
-			`, math.Min(1.5, decayed.Severity+(hit.Severity*0.35)), frequency+1, now, sessionID, existingID)
+			`, newSeverity, frequency+1, now, sessionID, existingID)
+			if err == nil {
+				_ = s.recordWeaknessSnapshot(ctx, existingID, sessionID, newSeverity)
+			}
 		}
 		if err != nil {
 			return fmt.Errorf("upsert weakness: %w", err)
@@ -205,4 +214,62 @@ func normalizeWeaknessMatchText(value string) string {
 		}
 	}
 	return builder.String()
+}
+
+func (s *Store) recordWeaknessSnapshot(ctx context.Context, weaknessID, sessionID string, severity float64) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO weakness_snapshots (weakness_id, session_id, severity, created_at)
+		VALUES (?, ?, ?, ?)
+	`, weaknessID, sessionID, severity, nowUTC())
+	return err
+}
+
+func (s *Store) GetWeaknessTrends(ctx context.Context, limit int) ([]domain.WeaknessTrend, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+
+	topWeaknesses, err := s.ListWeaknesses(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	trends := make([]domain.WeaknessTrend, 0, len(topWeaknesses))
+	for _, w := range topWeaknesses {
+		rows, err := s.db.QueryContext(ctx, `
+			SELECT session_id, severity, created_at
+			FROM weakness_snapshots
+			WHERE weakness_id = ?
+			ORDER BY created_at ASC
+			LIMIT 50
+		`, w.ID)
+		if err != nil {
+			return nil, fmt.Errorf("get weakness snapshots: %w", err)
+		}
+
+		points := make([]domain.WeaknessTrendPoint, 0)
+		for rows.Next() {
+			var sessionID, createdAt string
+			var severity float64
+			if err := rows.Scan(&sessionID, &severity, &createdAt); err != nil {
+				_ = rows.Close()
+				return nil, fmt.Errorf("scan weakness snapshot: %w", err)
+			}
+			points = append(points, domain.WeaknessTrendPoint{
+				SessionID: sessionID,
+				Severity:  severity,
+				CreatedAt: createdAt,
+			})
+		}
+		_ = rows.Close()
+
+		trends = append(trends, domain.WeaknessTrend{
+			ID:     w.ID,
+			Kind:   w.Kind,
+			Label:  w.Label,
+			Points: points,
+		})
+	}
+
+	return trends, nil
 }

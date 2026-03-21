@@ -171,6 +171,13 @@ func migrate(db *sql.DB) error {
 			evidence_session_id TEXT NOT NULL,
 			UNIQUE(kind, label)
 		);`,
+		`CREATE TABLE IF NOT EXISTS weakness_snapshots (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			weakness_id TEXT NOT NULL,
+			session_id TEXT NOT NULL DEFAULT '',
+			severity REAL NOT NULL,
+			created_at TEXT NOT NULL
+		);`,
 	}
 
 	for _, statement := range statements {

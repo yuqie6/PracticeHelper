@@ -142,6 +142,30 @@
             {{ t('home.sections.weaknessesEmpty') }}
           </li>
         </ul>
+        <div v-if="trends.length" class="mt-4 space-y-2">
+          <p class="neo-subheading">{{ t('home.sections.weaknessTrends') }}</p>
+          <div
+            v-for="trend in trends"
+            :key="trend.id"
+            class="flex items-center gap-3 border-2 border-black bg-white px-3 py-2 md:border-4"
+          >
+            <span class="w-24 truncate text-xs font-bold">{{ trend.label }}</span>
+            <svg
+              v-if="trend.points.length >= 2"
+              viewBox="0 0 120 32"
+              class="h-6 w-24 flex-shrink-0"
+              preserveAspectRatio="none"
+            >
+              <path
+                :d="sparklinePath(trend)"
+                fill="none"
+                stroke="var(--neo-red)"
+                stroke-width="2"
+              />
+            </svg>
+            <span v-else class="text-xs text-gray-400">—</span>
+          </div>
+        </div>
       </div>
 
       <div class="neo-panel">
@@ -200,7 +224,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
 
-import { getDashboard, type TrainingSessionSummary } from '../api/client';
+import { getDashboard, getWeaknessTrends, type TrainingSessionSummary, type WeaknessTrend } from '../api/client';
 import StatCard from '../components/StatCard.vue';
 import {
   describeProfile,
@@ -220,9 +244,15 @@ const { data } = useQuery({
   queryFn: getDashboard,
 });
 
+const { data: trendsData } = useQuery({
+  queryKey: ['weakness-trends'],
+  queryFn: getWeaknessTrends,
+});
+
 const { t, locale } = useI18n();
 
 const dashboard = computed(() => data.value ?? null);
+const trends = computed(() => trendsData.value ?? []);
 const currentSession = computed(() => dashboard.value?.current_session ?? null);
 const weaknessSummary = computed(() => {
   locale.value;
@@ -290,5 +320,21 @@ function formatUpdatedAt(raw: string): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(parsed);
+}
+
+function sparklinePath(trend: WeaknessTrend): string {
+  const pts = trend.points;
+  if (pts.length < 2) return '';
+  const w = 120;
+  const h = 32;
+  const maxSev = Math.max(...pts.map((p) => p.severity), 0.1);
+  const step = w / (pts.length - 1);
+  return pts
+    .map((p, i) => {
+      const x = i * step;
+      const y = h - (p.severity / maxSev) * (h - 4) - 2;
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
 }
 </script>
