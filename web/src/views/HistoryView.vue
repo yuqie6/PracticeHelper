@@ -33,8 +33,8 @@
       </select>
     </div>
 
-    <div v-if="isLoading" class="neo-panel bg-white">
-      <p class="neo-note">{{ t('common.loading') }}</p>
+    <div v-if="isLoading" class="space-y-3">
+      <div v-for="n in 5" :key="n" class="neo-skeleton h-24" />
     </div>
 
     <div v-else-if="!sessions.length" class="neo-panel bg-white">
@@ -44,8 +44,10 @@
     <NoticePanel
       v-if="exportError"
       tone="error"
+      dismissible
       :title="t('history.exportErrorTitle')"
       :message="exportError"
+      @dismiss="exportError = ''"
     />
 
     <div v-else class="space-y-3">

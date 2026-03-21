@@ -209,79 +209,11 @@
           <p class="neo-kicker bg-[var(--neo-green)]">
             {{ t('jobs.latestAnalysisTitle') }}
           </p>
-          <template v-if="selectedLatestAnalysis">
-            <div
-              class="space-y-4 border-2 border-black bg-white px-4 py-4 md:border-4"
-            >
-              <p class="neo-note">{{ latestSnapshotDescription }}</p>
-
-              <div class="space-y-2">
-                <p class="neo-subheading">{{ t('jobs.fields.summary') }}</p>
-                <p class="neo-note">{{ selectedLatestAnalysis.summary }}</p>
-              </div>
-
-              <div class="space-y-2">
-                <p class="neo-subheading">
-                  {{ t('jobs.fields.mustHaveSkills') }}
-                </p>
-                <ul class="space-y-2">
-                  <li
-                    v-for="item in selectedLatestAnalysis.must_have_skills"
-                    :key="item"
-                    class="neo-note"
-                  >
-                    {{ item }}
-                  </li>
-                </ul>
-              </div>
-
-              <div
-                v-if="selectedLatestAnalysis.bonus_skills.length"
-                class="space-y-2"
-              >
-                <p class="neo-subheading">{{ t('jobs.fields.bonusSkills') }}</p>
-                <ul class="space-y-2">
-                  <li
-                    v-for="item in selectedLatestAnalysis.bonus_skills"
-                    :key="item"
-                    class="neo-note"
-                  >
-                    {{ item }}
-                  </li>
-                </ul>
-              </div>
-
-              <div class="space-y-2">
-                <p class="neo-subheading">
-                  {{ t('jobs.fields.responsibilities') }}
-                </p>
-                <ul class="space-y-2">
-                  <li
-                    v-for="item in selectedLatestAnalysis.responsibilities"
-                    :key="item"
-                    class="neo-note"
-                  >
-                    {{ item }}
-                  </li>
-                </ul>
-              </div>
-
-              <div class="space-y-2">
-                <p class="neo-subheading">
-                  {{ t('jobs.fields.evaluationFocus') }}
-                </p>
-                <ul class="space-y-2">
-                  <li
-                    v-for="item in selectedLatestAnalysis.evaluation_focus"
-                    :key="item"
-                    class="neo-note"
-                  >
-                    {{ item }}
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </template>
+          <AnalysisResultPanel
+            v-if="selectedLatestAnalysis"
+            :analysis="selectedLatestAnalysis"
+            :description="latestSnapshotDescription"
+          />
           <p v-else class="neo-note">{{ t('jobs.noLatestAnalysis') }}</p>
         </div>
 
@@ -350,6 +282,7 @@ import {
   listJobTargets,
   updateJobTarget,
 } from '../api/client';
+import AnalysisResultPanel from '../components/AnalysisResultPanel.vue';
 import NoticePanel from '../components/NoticePanel.vue';
 import { describeJobTargetStatus } from '../lib/jobTargetStatus';
 import { formatJobTargetAnalysisStatusLabel } from '../lib/labels';

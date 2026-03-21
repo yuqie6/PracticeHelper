@@ -143,7 +143,9 @@
           :key="item.id"
           class="border-2 border-black bg-white px-3 py-3 md:border-4"
         >
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div
+            class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          >
             <div class="space-y-1">
               <p class="text-sm font-black uppercase">
                 {{
@@ -242,8 +244,14 @@
               {{ t('common.severity', { value: item.severity.toFixed(2) }) }}
             </span>
           </li>
-          <li v-if="!dashboard?.weaknesses.length" class="neo-note">
-            {{ t('home.sections.weaknessesEmpty') }}
+          <li
+            v-if="!dashboard?.weaknesses.length"
+            class="space-y-2 border-2 border-black bg-[var(--neo-paper)] px-4 py-4 md:border-4"
+          >
+            <p class="neo-note">{{ t('home.sections.weaknessesEmpty') }}</p>
+            <RouterLink to="/train" class="neo-button-dark text-xs">
+              {{ t('home.hero.actionPrimary') }}
+            </RouterLink>
           </li>
         </ul>
         <div v-if="trends.length" class="mt-4 space-y-2">
@@ -327,8 +335,14 @@
               </p>
             </RouterLink>
           </li>
-          <li v-if="!dashboard?.recent_sessions.length" class="neo-note">
-            {{ t('home.sections.sessionsEmpty') }}
+          <li
+            v-if="!dashboard?.recent_sessions.length"
+            class="space-y-2 border-2 border-black bg-[var(--neo-paper)] px-4 py-4 md:border-4"
+          >
+            <p class="neo-note">{{ t('home.sections.sessionsEmpty') }}</p>
+            <RouterLink to="/train" class="neo-button-dark text-xs">
+              {{ t('home.hero.actionPrimary') }}
+            </RouterLink>
           </li>
         </ul>
       </div>

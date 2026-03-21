@@ -22,11 +22,15 @@
       {{ t('common.retry') }}
     </button>
 
-    <div v-else-if="isLoading" class="neo-panel space-y-2">
-      <p class="neo-kicker bg-[var(--neo-yellow)]">
-        {{ t('review.loadingTitle') }}
-      </p>
-      <p class="text-sm font-semibold">{{ t('review.hero.loading') }}</p>
+    <div v-else-if="isLoading" class="space-y-4">
+      <div class="neo-skeleton h-32" />
+      <div class="neo-grid lg:grid-cols-[0.9fr_1.1fr]">
+        <div class="neo-skeleton h-64" />
+        <div class="space-y-4">
+          <div class="neo-skeleton h-28" />
+          <div class="neo-skeleton h-28" />
+        </div>
+      </div>
     </div>
 
     <div v-else-if="!review" class="neo-panel space-y-2">
@@ -273,12 +277,13 @@
           :key="item.id"
           class="space-y-3 border-2 border-black bg-white px-4 py-4 md:border-4"
         >
-          <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div
+            class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
+          >
             <div class="space-y-1">
               <p class="text-base font-black">{{ item.flow_name }}</p>
               <p class="neo-note">
-                {{ t('review.auditMeta') }}:
-                {{ item.model_name || '—' }} /
+                {{ t('review.auditMeta') }}: {{ item.model_name || '—' }} /
                 {{ item.prompt_hash || '—' }} /
                 {{ item.latency_ms.toFixed(1) }} ms
               </p>
@@ -292,7 +297,9 @@
             <p class="text-xs font-black uppercase tracking-[0.08em]">
               {{ t('review.auditRawOutput') }}
             </p>
-            <pre class="max-h-72 overflow-auto border-2 border-black bg-[var(--neo-paper)] px-3 py-3 text-xs leading-6 md:border-4"><code>{{
+            <pre
+              class="max-h-72 overflow-auto border-2 border-black bg-[var(--neo-paper)] px-3 py-3 text-xs leading-6 md:border-4"
+            ><code>{{
               formatEvaluationRawOutput(item.raw_output)
             }}</code></pre>
           </div>

@@ -18,11 +18,7 @@
         {{ t('session.strengths') }}
       </summary>
       <ul class="mt-3 space-y-2">
-        <li
-          v-for="item in evaluation.strengths"
-          :key="item"
-          class="neo-note"
-        >
+        <li v-for="item in evaluation.strengths" :key="item" class="neo-note">
           {{ item }}
         </li>
       </ul>

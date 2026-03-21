@@ -326,7 +326,7 @@ async function request<T>(
   // 如果后续出现 204、文件下载或非 JSON 接口，应该新增专用请求函数而不是继续复用这里。
   const controller = new AbortController();
   const cleanupAbort = bindAbortSignal(init?.signal, controller);
-  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(path, {
@@ -356,7 +356,7 @@ async function request<T>(
     }
     throw error;
   } finally {
-    window.clearTimeout(timer);
+    clearTimeout(timer);
     cleanupAbort();
   }
 }
@@ -368,13 +368,13 @@ async function requestStream<T>(
 ): Promise<T> {
   const controller = new AbortController();
   const cleanupAbort = bindAbortSignal(init.signal, controller);
-  const totalTimer = window.setTimeout(() => controller.abort(), 300_000);
-  let idleTimer: ReturnType<typeof window.setTimeout> | null = null;
+  const totalTimer = setTimeout(() => controller.abort(), 300_000);
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
   const resetIdle = () => {
     if (idleTimer != null) {
-      window.clearTimeout(idleTimer);
+      clearTimeout(idleTimer);
     }
-    idleTimer = window.setTimeout(() => controller.abort(), 120_000);
+    idleTimer = setTimeout(() => controller.abort(), 120_000);
   };
 
   try {
@@ -462,9 +462,9 @@ async function requestStream<T>(
     throw error;
   } finally {
     if (idleTimer != null) {
-      window.clearTimeout(idleTimer);
+      clearTimeout(idleTimer);
     }
-    window.clearTimeout(totalTimer);
+    clearTimeout(totalTimer);
     cleanupAbort();
   }
 }

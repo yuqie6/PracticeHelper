@@ -33,6 +33,7 @@
     <div
       v-if="showProgressPanel"
       class="sticky top-4 z-10 space-y-4"
+      aria-live="polite"
     >
       <ProgressPanel
         :kicker="t('session.processingKicker')"
@@ -42,10 +43,7 @@
         :active-index="progressStepIndex"
       />
 
-      <div
-        v-if="streamSections.length"
-        class="max-h-[50vh] overflow-y-auto"
-      >
+      <div v-if="streamSections.length" class="max-h-[50vh] overflow-y-auto">
         <StreamTracePanel
           :kicker="t('session.processingKicker')"
           :title="progressTitle"
@@ -60,8 +58,10 @@
     <NoticePanel
       v-if="submitError"
       tone="error"
+      dismissible
       :title="t('session.submitErrorTitle')"
       :message="submitError"
+      @dismiss="submitError = ''"
     />
 
     <div
@@ -140,6 +140,7 @@
                 v-model="draftAnswer"
                 class="neo-textarea"
                 :placeholder="placeholderText"
+                :aria-label="placeholderText"
                 :disabled="isSubmitting || isBackgroundProcessing"
                 @keydown="handleAnswerKeydown"
               />
@@ -149,7 +150,10 @@
               <button
                 type="submit"
                 class="neo-button-dark w-full sm:w-auto"
-                :class="{ 'animate-[neo-working_600ms_ease_infinite]': isSubmitting }"
+                :class="{
+                  'animate-[neo-working_600ms_ease_infinite]': isSubmitting,
+                }"
+                :aria-busy="isSubmitting"
                 :disabled="isSubmitting || isBackgroundProcessing"
               >
                 {{ isSubmitting ? t('common.submitting') : t('common.submit') }}
@@ -166,89 +170,7 @@
         <p class="neo-kicker bg-[var(--neo-green)]">
           {{ t('session.feedback') }}
         </p>
-        <template v-if="latestEvaluation">
-          <div
-            class="flex items-center gap-4 border-l-8 bg-white px-4 py-4"
-            :style="{ borderColor: `var(${scoreColor(latestEvaluation.score)})` }"
-          >
-            <span class="text-5xl font-black">{{ latestEvaluation.score }}</span>
-            <div>
-              <p class="text-sm font-bold uppercase tracking-[0.08em]">/10</p>
-              <p class="text-base font-semibold leading-7">
-                {{
-                  latestEvaluation.headline || t('session.feedbackHeadlineFallback')
-                }}
-              </p>
-            </div>
-          </div>
-
-          <details v-if="latestEvaluation.strengths.length" class="space-y-2">
-            <summary class="neo-subheading cursor-pointer">
-              {{ t('session.strengths') }}
-            </summary>
-            <ul class="mt-3 space-y-2">
-              <li
-                v-for="item in latestEvaluation.strengths"
-                :key="item"
-                class="neo-note"
-              >
-                {{ item }}
-              </li>
-            </ul>
-          </details>
-
-          <details v-if="latestEvaluation.gaps.length" class="space-y-2" open>
-            <summary class="neo-subheading cursor-pointer">
-              {{ t('session.gaps') }}
-            </summary>
-            <ul class="mt-3 space-y-2">
-              <li
-                v-for="item in latestEvaluation.gaps"
-                :key="item"
-                class="neo-note"
-              >
-                {{ item }}
-              </li>
-            </ul>
-          </details>
-
-          <div class="space-y-2">
-            <p class="neo-subheading">{{ t('session.suggestionTitle') }}</p>
-            <p class="neo-note">
-              {{
-                latestEvaluation.suggestion || t('session.suggestionFallback')
-              }}
-            </p>
-          </div>
-
-          <details
-            v-if="Object.keys(latestEvaluation.score_breakdown ?? {}).length"
-            class="space-y-2"
-          >
-            <summary class="neo-subheading cursor-pointer">
-              {{ t('session.scoreBreakdownTitle') }}
-            </summary>
-            <ul class="mt-3 space-y-2">
-              <li
-                v-for="(score, label) in latestEvaluation.score_breakdown"
-                :key="label"
-                class="border-2 border-black bg-white px-3 py-2 md:border-4"
-              >
-                <div class="flex items-center justify-between text-sm font-semibold">
-                  <span>{{ label }}</span>
-                  <span>{{ score }}/10</span>
-                </div>
-                <div
-                  class="neo-score-bar mt-1"
-                  :style="{
-                    width: `${Number(score) * 10}%`,
-                    background: `var(${scoreColor(Number(score))})`,
-                  }"
-                />
-              </li>
-            </ul>
-          </details>
-        </template>
+        <FeedbackPanel v-if="latestEvaluation" :evaluation="latestEvaluation" />
         <p v-else class="neo-note">{{ t('session.feedbackEmpty') }}</p>
       </div>
     </div>
@@ -268,6 +190,7 @@ import {
   submitAnswerStream,
   type StreamEvent,
 } from '../api/client';
+import FeedbackPanel from '../components/FeedbackPanel.vue';
 import NoticePanel from '../components/NoticePanel.vue';
 import ProgressPanel from '../components/ProgressPanel.vue';
 import StreamTracePanel from '../components/StreamTracePanel.vue';
@@ -584,12 +507,6 @@ function clearReviewRedirectTimer() {
     reviewRedirectTimer = null;
   }
   reviewRedirectTarget = '';
-}
-
-function scoreColor(score: number): string {
-  if (score >= 8) return '--neo-green';
-  if (score >= 5) return '--neo-yellow';
-  return '--neo-red';
 }
 
 function buildProgressStepDefinitions(
