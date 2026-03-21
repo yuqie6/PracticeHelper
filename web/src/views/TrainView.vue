@@ -100,15 +100,25 @@
       <label v-if="form.mode === 'basics'" class="space-y-2">
         <span class="neo-subheading">{{ t('train.fields.topic') }}</span>
         <select v-model="form.topic" class="neo-select">
+          <option value="mixed">{{ formatTopicLabel(t, 'mixed') }}</option>
           <option value="go">{{ formatTopicLabel(t, 'go') }}</option>
           <option value="redis">{{ formatTopicLabel(t, 'redis') }}</option>
           <option value="kafka">{{ formatTopicLabel(t, 'kafka') }}</option>
           <option value="mysql">{{ formatTopicLabel(t, 'mysql') }}</option>
-          <option value="system_design">{{ formatTopicLabel(t, 'system_design') }}</option>
-          <option value="distributed">{{ formatTopicLabel(t, 'distributed') }}</option>
+          <option value="system_design">
+            {{ formatTopicLabel(t, 'system_design') }}
+          </option>
+          <option value="distributed">
+            {{ formatTopicLabel(t, 'distributed') }}
+          </option>
           <option value="network">{{ formatTopicLabel(t, 'network') }}</option>
-          <option value="microservice">{{ formatTopicLabel(t, 'microservice') }}</option>
-          <option value="docker_k8s">{{ formatTopicLabel(t, 'docker_k8s') }}</option>
+          <option value="microservice">
+            {{ formatTopicLabel(t, 'microservice') }}
+          </option>
+          <option value="os">{{ formatTopicLabel(t, 'os') }}</option>
+          <option value="docker_k8s">
+            {{ formatTopicLabel(t, 'docker_k8s') }}
+          </option>
         </select>
       </label>
 

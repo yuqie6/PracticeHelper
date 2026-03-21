@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-[var(--neo-bg)] text-[var(--neo-black)]">
+  <div class="min-h-screen bg-[var(--neo-bg)] text-[var(--neo-text)]">
     <header class="border-b-2 border-black bg-[var(--neo-red)] md:border-b-4">
       <div
         class="neo-page flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
@@ -21,7 +21,7 @@
         </div>
 
         <div class="flex flex-col gap-3 md:items-end">
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <span class="text-sm font-black uppercase tracking-[0.08em]">
               {{ t('app.language') }}
             </span>
@@ -41,12 +41,34 @@
             </button>
           </div>
 
-          <nav class="flex flex-wrap gap-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-sm font-black uppercase tracking-[0.08em]">
+              {{ t('app.theme') }}
+            </span>
+            <button
+              v-for="item in themeOptions"
+              :key="item.value"
+              type="button"
+              class="border-2 border-black px-3 py-1 text-xs font-black uppercase md:border-4"
+              :class="
+                currentTheme === item.value
+                  ? 'bg-[var(--neo-yellow)]'
+                  : 'bg-white'
+              "
+              @click="switchTheme(item.value)"
+            >
+              {{ item.label }}
+            </button>
+          </div>
+
+          <nav
+            class="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:justify-end"
+          >
             <RouterLink
               v-for="item in navItems"
               :key="item.to"
               :to="item.to"
-              class="neo-button-dark"
+              class="neo-button-dark w-full sm:w-auto"
             >
               {{ item.label }}
             </RouterLink>
@@ -63,17 +85,29 @@
 
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
 
 import { listImportJobs, type ProjectImportJob } from '../api/client';
 import { setLocale, type AppLocale } from '../i18n';
 import { formatImportJobStageLabel } from '../lib/labels';
+import {
+  applyTheme,
+  persistTheme,
+  readStoredTheme,
+  resolveThemePreference,
+  type AppTheme,
+} from '../lib/theme';
 
 const { t, locale } = useI18n();
 
 const currentLocale = computed(() => locale.value as AppLocale);
+const currentTheme = ref<AppTheme>(
+  resolveThemePreference(readStoredTheme(getStorage()), prefersDarkMode()),
+);
+
+applyTheme(currentTheme.value, getThemeRoot());
 
 const { data: importJobsData } = useQuery({
   queryKey: ['import-jobs'],
@@ -113,7 +147,43 @@ const localeOptions = computed(() => [
   { value: 'en' as AppLocale, label: t('app.locales.en') },
 ]);
 
+const themeOptions = computed(() => [
+  { value: 'light' as AppTheme, label: t('app.themes.light') },
+  { value: 'dark' as AppTheme, label: t('app.themes.dark') },
+]);
+
 function switchLocale(nextLocale: AppLocale) {
   setLocale(nextLocale);
+}
+
+function switchTheme(nextTheme: AppTheme) {
+  currentTheme.value = nextTheme;
+  persistTheme(getStorage(), nextTheme);
+  applyTheme(nextTheme, getThemeRoot());
+}
+
+function getStorage(): Storage | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  return window.localStorage;
+}
+
+function getThemeRoot(): HTMLElement | null {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+  return document.documentElement;
+}
+
+function prefersDarkMode(): boolean {
+  if (
+    typeof window === 'undefined' ||
+    typeof window.matchMedia !== 'function'
+  ) {
+    return false;
+  }
+
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 </script>

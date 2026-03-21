@@ -7,23 +7,29 @@
       </h1>
     </header>
 
-    <div class="flex flex-wrap gap-3">
-      <select v-model="filters.mode" class="neo-select w-auto">
+    <div class="grid gap-3 md:flex md:flex-wrap">
+      <select v-model="filters.mode" class="neo-select w-full md:w-auto">
         <option value="">{{ t('history.filters.allModes') }}</option>
         <option value="basics">{{ formatModeLabel(t, 'basics') }}</option>
         <option value="project">{{ formatModeLabel(t, 'project') }}</option>
       </select>
-      <select v-model="filters.topic" class="neo-select w-auto">
+      <select v-model="filters.topic" class="neo-select w-full md:w-auto">
         <option value="">{{ t('history.filters.allTopics') }}</option>
         <option v-for="topic in availableTopics" :key="topic" :value="topic">
           {{ formatTopicLabel(t, topic) }}
         </option>
       </select>
-      <select v-model="filters.status" class="neo-select w-auto">
+      <select v-model="filters.status" class="neo-select w-full md:w-auto">
         <option value="">{{ t('history.filters.allStatuses') }}</option>
-        <option value="completed">{{ formatStatusLabel(t, 'completed') }}</option>
-        <option value="waiting_answer">{{ formatStatusLabel(t, 'waiting_answer') }}</option>
-        <option value="review_pending">{{ formatStatusLabel(t, 'review_pending') }}</option>
+        <option value="completed">
+          {{ formatStatusLabel(t, 'completed') }}
+        </option>
+        <option value="waiting_answer">
+          {{ formatStatusLabel(t, 'waiting_answer') }}
+        </option>
+        <option value="review_pending">
+          {{ formatStatusLabel(t, 'review_pending') }}
+        </option>
       </select>
     </div>
 
@@ -39,20 +45,30 @@
       <router-link
         v-for="item in sessions"
         :key="item.id"
-        :to="item.review_id ? `/reviews/${item.review_id}` : `/sessions/${item.id}`"
-        class="neo-panel block space-y-1 bg-white hover:-translate-y-0.5"
+        :to="
+          item.review_id ? `/reviews/${item.review_id}` : `/sessions/${item.id}`
+        "
+        class="neo-panel block space-y-3 bg-white transition-transform hover:-translate-y-0.5"
       >
-        <div class="flex items-center justify-between">
+        <div
+          class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+        >
           <span class="text-base font-black">
             {{ formatModeLabel(t, item.mode) }}
-            <template v-if="item.topic"> · {{ formatTopicLabel(t, item.topic) }}</template>
-            <template v-if="item.project_name"> · {{ item.project_name }}</template>
+            <template v-if="item.topic">
+              · {{ formatTopicLabel(t, item.topic) }}</template
+            >
+            <template v-if="item.project_name">
+              · {{ item.project_name }}</template
+            >
           </span>
           <span class="text-sm font-semibold">
             {{ formatStatusLabel(t, item.status) }}
           </span>
         </div>
-        <div class="flex items-center justify-between">
+        <div
+          class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+        >
           <span v-if="item.job_target" class="neo-note">
             {{ item.job_target.title }}
           </span>
@@ -67,19 +83,22 @@
       </router-link>
     </div>
 
-    <div v-if="totalPages > 1" class="flex items-center justify-center gap-3">
+    <div
+      v-if="totalPages > 1"
+      class="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center"
+    >
       <button
-        class="neo-button-dark"
+        class="neo-button-dark w-full sm:w-auto"
         :disabled="currentPage <= 1"
         @click="currentPage--"
       >
         {{ t('history.prev') }}
       </button>
-      <span class="text-sm font-semibold">
+      <span class="text-center text-sm font-semibold">
         {{ currentPage }} / {{ totalPages }}
       </span>
       <button
-        class="neo-button-dark"
+        class="neo-button-dark w-full sm:w-auto"
         :disabled="currentPage >= totalPages"
         @click="currentPage++"
       >
@@ -110,8 +129,17 @@ const filters = reactive({
 });
 
 const availableTopics = [
-  'go', 'redis', 'kafka', 'mysql', 'system_design',
-  'distributed', 'network', 'microservice', 'docker_k8s',
+  'mixed',
+  'go',
+  'redis',
+  'kafka',
+  'mysql',
+  'system_design',
+  'distributed',
+  'network',
+  'microservice',
+  'os',
+  'docker_k8s',
 ];
 
 watch(filters, () => {

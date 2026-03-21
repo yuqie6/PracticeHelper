@@ -1,3 +1,9 @@
+import {
+  buildSessionExportPath,
+  resolveDownloadFilename,
+  SESSION_EXPORT_FORMAT,
+} from '../lib/export';
+
 export interface ApiEnvelope<T> {
   data: T;
 }
@@ -505,6 +511,37 @@ export function listSessions(params?: {
 
 export function getSession(sessionId: string): Promise<TrainingSession> {
   return request(`/api/sessions/${sessionId}`);
+}
+
+export async function downloadSessionExport(
+  sessionId: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(
+    buildSessionExportPath(sessionId, SESSION_EXPORT_FORMAT),
+    {
+      headers: {
+        Accept: 'text/markdown',
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const payload = (await response
+      .json()
+      .catch(() => null)) as ApiErrorPayload | null;
+    throw new ApiError(payload?.error?.message ?? '导出失败', {
+      code: payload?.error?.code,
+      status: response.status,
+    });
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: resolveDownloadFilename(
+      sessionId,
+      response.headers.get('Content-Disposition'),
+    ),
+  };
 }
 
 export function submitAnswer(

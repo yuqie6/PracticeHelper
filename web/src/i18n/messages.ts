@@ -4,10 +4,15 @@ export const messages = {
       name: 'PracticeHelper',
       title: '面试训练助手',
       language: '语言',
+      theme: '主题',
       importNotice: '后台正在导入项目：{stage}',
       locales: {
         zhCN: '中文',
         en: 'English',
+      },
+      themes: {
+        light: '浅色',
+        dark: '暗色',
       },
       nav: {
         home: '首页',
@@ -55,6 +60,7 @@ export const messages = {
         pressure: '强化',
       },
       topic: {
+        mixed: '混合专项',
         go: 'Go',
         redis: 'Redis',
         kafka: 'Kafka',
@@ -63,6 +69,7 @@ export const messages = {
         distributed: '分布式',
         network: '网络',
         microservice: '微服务',
+        os: '操作系统',
         docker_k8s: 'Docker & K8s',
       },
       status: {
@@ -112,8 +119,7 @@ export const messages = {
         idle: '当前默认 JD 是 {name}，但还没完成分析；首页推荐和训练会先停留在通用口径。',
         running:
           '当前默认 JD 是 {name}，但还在分析中；分析完成前，首页推荐和训练不会自动使用它。',
-        succeeded:
-          '当前默认 JD 是 {name}，首页推荐和训练默认已切到岗位视角。',
+        succeeded: '当前默认 JD 是 {name}，首页推荐和训练默认已切到岗位视角。',
         failed:
           '当前默认 JD 是 {name}，但最近一次分析失败了；修正文案或重新分析后，岗位视角才会恢复。',
         stale:
@@ -133,8 +139,7 @@ export const messages = {
         unknown: '当前无法确认这份 JD 是否可用于训练，请回岗位页重新检查。',
       },
       trainFallback: {
-        idle:
-          '当前默认 JD「{name}」还没分析，系统不会自动带入它；如果要走岗位视角，请先去岗位页完成分析。',
+        idle: '当前默认 JD「{name}」还没分析，系统不会自动带入它；如果要走岗位视角，请先去岗位页完成分析。',
         running:
           '当前默认 JD「{name}」还在分析中，系统不会自动带入它；如果要走岗位视角，请等分析完成。',
         succeeded:
@@ -149,7 +154,8 @@ export const messages = {
       jobsReadiness: {
         idle: '这份 JD 还没有分析结果，当前不能用于新训练绑定。',
         running: '这份 JD 正在分析中。分析完成前，你还不能把它用于新训练绑定。',
-        succeeded: '这份 JD 的当前原文和最新分析一致，可以直接用于新的训练绑定。',
+        succeeded:
+          '这份 JD 的当前原文和最新分析一致，可以直接用于新的训练绑定。',
         failed:
           '这份 JD 的当前原文分析失败了。修正文案或重新分析后，才会恢复成可用状态。',
         stale:
@@ -459,6 +465,7 @@ export const messages = {
       placeholderInitial:
         '先说结论，再解释原因，最后给一个真实项目或场景例子。',
       placeholderFollowup: '直接回应追问，补充关键信息，不要重复上一次的回答。',
+      submitShortcutHint: '支持 Ctrl + Enter 快速提交。',
       submitErrorTitle: '提交失败',
       conflictBusy: '上一轮提交还在处理中，请等待当前评估或复盘完成。',
       conflictReviewPending:
@@ -546,8 +553,11 @@ export const messages = {
       headerError: '复盘暂时无法加载。',
       loadingTitle: '正在读取复盘',
       loadErrorTitle: '复盘加载失败',
+      exportErrorTitle: '导出失败',
       emptyTitle: '这轮复盘还没准备好',
       emptyDescription: '可能还在生成中，或者这轮训练还没有成功收口。',
+      exportAction: '导出 Markdown',
+      exportingAction: '导出中...',
       topFixTitle: '最该优先修正',
       topFixFallbackReason: '先把这个问题修正掉，后面的训练收益会明显更高。',
       scoreBreakdown: '分项得分',
@@ -568,10 +578,15 @@ export const messages = {
       name: 'PracticeHelper',
       title: 'Interview Practice Assistant',
       language: 'Language',
+      theme: 'Theme',
       importNotice: 'Background import running: {stage}',
       locales: {
         zhCN: 'Chinese',
         en: 'English',
+      },
+      themes: {
+        light: 'Light',
+        dark: 'Dark',
       },
       nav: {
         home: 'Home',
@@ -623,6 +638,7 @@ export const messages = {
         pressure: 'Intensive',
       },
       topic: {
+        mixed: 'Mixed fundamentals',
         go: 'Go',
         redis: 'Redis',
         kafka: 'Kafka',
@@ -631,6 +647,7 @@ export const messages = {
         distributed: 'Distributed Systems',
         network: 'Networking',
         microservice: 'Microservices',
+        os: 'Operating Systems',
         docker_k8s: 'Docker & K8s',
       },
       status: {
@@ -677,8 +694,7 @@ export const messages = {
     },
     jobTargetStatus: {
       homeActive: {
-        idle:
-          'The default JD is {name}, but it has not been analyzed yet, so recommendations and training stay in generic mode.',
+        idle: 'The default JD is {name}, but it has not been analyzed yet, so recommendations and training stay in generic mode.',
         running:
           'The default JD is {name}, but analysis is still running. Training and recommendations will not use it automatically until that finishes.',
         succeeded:
@@ -691,8 +707,7 @@ export const messages = {
           'The default JD is temporarily unavailable, so recommendations and training stay in generic mode.',
       },
       trainSelection: {
-        idle:
-          'This JD has not been analyzed yet, so it cannot be bound to a new session.',
+        idle: 'This JD has not been analyzed yet, so it cannot be bound to a new session.',
         running:
           'This JD is still being analyzed, so it cannot be bound to a new session yet.',
         succeeded:
@@ -705,8 +720,7 @@ export const messages = {
           'The current training readiness for this JD is unknown. Recheck it on the job target page.',
       },
       trainFallback: {
-        idle:
-          'The default JD "{name}" has not been analyzed yet, so it will not be auto-applied. Go back to the job target page if you want job-target mode.',
+        idle: 'The default JD "{name}" has not been analyzed yet, so it will not be auto-applied. Go back to the job target page if you want job-target mode.',
         running:
           'The default JD "{name}" is still analyzing, so it will not be auto-applied yet.',
         succeeded:
@@ -719,8 +733,7 @@ export const messages = {
           'The default JD is temporarily unavailable, so it will not be auto-applied until you verify it again.',
       },
       jobsReadiness: {
-        idle:
-          'This JD has no analysis result yet, so it cannot be used for new training.',
+        idle: 'This JD has no analysis result yet, so it cannot be used for new training.',
         running:
           'This JD is currently being analyzed. It cannot be used for new training until that finishes.',
         succeeded:
@@ -733,8 +746,7 @@ export const messages = {
           'The training readiness for this JD is currently unknown. Please recheck it.',
       },
       jobsSnapshot: {
-        idle:
-          'There is no successful analysis snapshot yet, so there is nothing reviewable here.',
+        idle: 'There is no successful analysis snapshot yet, so there is nothing reviewable here.',
         running:
           'Analysis is still running. If you see a snapshot below, it is only an older successful result and not the current source text.',
         succeeded:
@@ -751,7 +763,8 @@ export const messages = {
       onboarding: {
         kicker: 'Quick Start',
         title: 'Set up in 3 steps',
-        description: 'Fill in your profile → Import a project (optional) → Start your first session',
+        description:
+          'Fill in your profile → Import a project (optional) → Start your first session',
         step1: '1. Profile',
         step2: '2. Projects',
         step3: '3. Train',
@@ -1055,6 +1068,7 @@ export const messages = {
         'State your conclusion first, explain why, then give a real example.',
       placeholderFollowup:
         'Answer the follow-up directly and add the missing detail without repeating yourself.',
+      submitShortcutHint: 'Press Ctrl + Enter to submit quickly.',
       submitErrorTitle: 'Submit failed',
       conflictBusy:
         'A previous submission is still being processed. Wait for the current evaluation or review to finish.',
@@ -1165,9 +1179,12 @@ export const messages = {
       headerError: 'The review is temporarily unavailable.',
       loadingTitle: 'Loading review',
       loadErrorTitle: 'Failed to load review',
+      exportErrorTitle: 'Export failed',
       emptyTitle: 'This review is not ready yet',
       emptyDescription:
         'It may still be generating, or the session did not finish successfully.',
+      exportAction: 'Export Markdown',
+      exportingAction: 'Exporting...',
       topFixTitle: 'Top fix',
       topFixFallbackReason:
         'Fix this first. It will improve the payoff of the next training round the most.',

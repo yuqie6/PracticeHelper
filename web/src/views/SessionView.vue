@@ -6,7 +6,12 @@
         {{ t('session.hero.description', { status: currentStatusLabel }) }}
       </p>
       <p v-if="session" class="mt-1 text-sm font-black">
-        {{ t('session.turnIndicator', { current: currentTurnIndex, total: session.max_turns }) }}
+        {{
+          t('session.turnIndicator', {
+            current: currentTurnIndex,
+            total: session.max_turns,
+          })
+        }}
       </p>
     </header>
 
@@ -71,7 +76,7 @@
       </p>
       <button
         type="button"
-        class="neo-button-dark"
+        class="neo-button-dark w-full sm:w-auto"
         :disabled="isRetryingReview"
         @click="retryReview"
       >
@@ -126,10 +131,14 @@
               class="neo-textarea"
               :placeholder="placeholderText"
               :disabled="isSubmitting || isBackgroundProcessing"
+              @keydown="handleAnswerKeydown"
             />
+            <p class="neo-note">
+              {{ t('session.submitShortcutHint') }}
+            </p>
             <button
               type="submit"
-              class="neo-button-dark"
+              class="neo-button-dark w-full sm:w-auto"
               :disabled="isSubmitting || isBackgroundProcessing"
             >
               {{ isSubmitting ? t('common.submitting') : t('common.submit') }}
@@ -190,7 +199,9 @@
           <div class="space-y-2">
             <p class="neo-subheading">{{ t('session.suggestionTitle') }}</p>
             <p class="neo-note">
-              {{ latestEvaluation.suggestion || t('session.suggestionFallback') }}
+              {{
+                latestEvaluation.suggestion || t('session.suggestionFallback')
+              }}
             </p>
           </div>
 
@@ -236,6 +247,7 @@ import NoticePanel from '../components/NoticePanel.vue';
 import ProgressPanel from '../components/ProgressPanel.vue';
 import StreamTracePanel from '../components/StreamTracePanel.vue';
 import { formatStatusLabel } from '../lib/labels';
+import { isSubmitShortcut } from '../lib/shortcuts';
 import { appendStreamEvent, type StreamSection } from '../lib/streaming';
 import { useProgressSteps } from '../lib/useProgressSteps';
 
@@ -276,8 +288,14 @@ const latestEvaluation = computed(() => {
 });
 const followupIntent = computed(() => {
   // 追问意图来自上一轮评估（当前 turn 还没答时才显示）
-  if (currentTurnIndex.value > 1 && !currentTurn.value?.answer && turns.value.length >= 2) {
-    return turns.value[turns.value.length - 2]?.evaluation?.followup_intent ?? '';
+  if (
+    currentTurnIndex.value > 1 &&
+    !currentTurn.value?.answer &&
+    turns.value.length >= 2
+  ) {
+    return (
+      turns.value[turns.value.length - 2]?.evaluation?.followup_intent ?? ''
+    );
   }
   return '';
 });
@@ -458,6 +476,15 @@ function submit() {
     return;
   }
   mutation.mutate(draftAnswer.value);
+}
+
+function handleAnswerKeydown(event: KeyboardEvent) {
+  if (!isSubmitShortcut(event)) {
+    return;
+  }
+
+  event.preventDefault();
+  submit();
 }
 
 function retryReview() {

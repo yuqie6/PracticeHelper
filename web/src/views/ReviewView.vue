@@ -16,7 +16,7 @@
     <button
       v-if="loadError"
       type="button"
-      class="neo-button-dark"
+      class="neo-button-dark w-full sm:w-auto"
       @click="refetch()"
     >
       {{ t('common.retry') }}
@@ -34,9 +34,29 @@
         {{ t('review.emptyTitle') }}
       </p>
       <p class="text-sm font-semibold">{{ t('review.emptyDescription') }}</p>
-      <RouterLink to="/train" class="neo-button-dark mt-2">
+      <RouterLink to="/train" class="neo-button-dark mt-2 w-full sm:w-auto">
         {{ t('review.continueAction') }}
       </RouterLink>
+    </div>
+
+    <NoticePanel
+      v-if="exportError"
+      tone="error"
+      :title="t('review.exportErrorTitle')"
+      :message="exportError"
+    />
+
+    <div v-if="review" class="flex justify-end">
+      <button
+        type="button"
+        class="neo-button-dark w-full sm:w-auto"
+        :disabled="isExporting"
+        @click="exportReport"
+      >
+        {{
+          isExporting ? t('review.exportingAction') : t('review.exportAction')
+        }}
+      </button>
     </div>
 
     <div v-if="review" class="neo-grid lg:grid-cols-[0.9fr_1.1fr]">
@@ -91,7 +111,10 @@
             <p v-if="review.recommended_next?.reason" class="neo-note">
               {{ review.recommended_next.reason }}
             </p>
-            <RouterLink :to="continueTarget" class="neo-button-red mt-2">
+            <RouterLink
+              :to="continueTarget"
+              class="neo-button-red mt-2 w-full sm:w-auto"
+            >
               {{ t('review.startRecommendedAction') }}
             </RouterLink>
           </div>
@@ -152,7 +175,10 @@
               {{ item }}
             </li>
           </ul>
-          <RouterLink :to="continueTarget" class="neo-button-red mt-4">
+          <RouterLink
+            :to="continueTarget"
+            class="neo-button-red mt-4 w-full sm:w-auto"
+          >
             {{ t('review.continueAction') }}
           </RouterLink>
         </div>
@@ -163,17 +189,20 @@
 
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute } from 'vue-router';
 
-import { getReview } from '../api/client';
+import { ApiError, downloadSessionExport, getReview } from '../api/client';
 import NoticePanel from '../components/NoticePanel.vue';
+import { triggerFileDownload } from '../lib/export';
 import { formatModeLabel, formatTopicLabel } from '../lib/labels';
 
 const route = useRoute();
 const reviewId = computed(() => route.params.id as string);
 const { t } = useI18n();
+const exportError = ref('');
+const isExporting = ref(false);
 
 const { data, error, isLoading, refetch } = useQuery({
   queryKey: ['review', reviewId],
@@ -232,4 +261,30 @@ const recommendedNextLabel = computed(() => {
     mode: formatModeLabel(t, recommended.mode),
   });
 });
+
+async function exportReport() {
+  if (!review.value?.session_id || isExporting.value) {
+    return;
+  }
+
+  exportError.value = '';
+  isExporting.value = true;
+
+  try {
+    const { blob, filename } = await downloadSessionExport(
+      review.value.session_id,
+    );
+    triggerFileDownload(blob, filename);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      exportError.value = error.message;
+    } else if (error instanceof Error) {
+      exportError.value = error.message;
+    } else {
+      exportError.value = t('common.requestFailed');
+    }
+  } finally {
+    isExporting.value = false;
+  }
+}
 </script>
