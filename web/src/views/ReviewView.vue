@@ -7,7 +7,7 @@
           {{ review?.overall ?? reviewHeaderText }}
         </h1>
         <p class="review-stage-note">
-          {{ review?.top_fix_reason || reviewHeaderText }}
+          {{ reviewStageNote }}
         </p>
       </div>
 
@@ -117,7 +117,11 @@
               {{ t('review.highlights') }}
             </p>
             <ul class="review-list">
-              <li v-for="item in review.highlights" :key="item" class="neo-note">
+              <li
+                v-for="item in review.highlights"
+                :key="item"
+                class="neo-note"
+              >
                 {{ item }}
               </li>
             </ul>
@@ -299,7 +303,9 @@
             >
               <div class="flex items-center justify-between gap-3">
                 <span class="font-black">{{ key }}</span>
-                <span class="neo-badge bg-[var(--neo-yellow)]">{{ value }}</span>
+                <span class="neo-badge bg-[var(--neo-yellow)]">{{
+                  value
+                }}</span>
               </div>
             </div>
           </div>
@@ -363,6 +369,12 @@ const reviewHeaderText = computed(() => {
     return t('review.hero.loading');
   }
   return t('review.emptyDescription');
+});
+const reviewStageNote = computed(() => {
+  if (review.value) {
+    return review.value.top_fix_reason || t('review.topFixFallbackReason');
+  }
+  return reviewHeaderText.value;
 });
 
 const continueTarget = computed(() => {
@@ -576,7 +588,8 @@ function toggleAuditDetails() {
 
 .review-section-head {
   align-items: end;
-  border-bottom: 2px solid color-mix(in srgb, var(--neo-border) 18%, transparent);
+  border-bottom: 2px solid
+    color-mix(in srgb, var(--neo-border) 18%, transparent);
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;

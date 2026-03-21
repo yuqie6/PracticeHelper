@@ -1,29 +1,26 @@
 <template>
-  <div class="neo-panel space-y-4 bg-white">
-    <div>
+  <div class="neo-panel stream-trace bg-white">
+    <div class="stream-head">
       <p class="neo-kicker bg-[var(--neo-blue)]">{{ kicker }}</p>
-      <h3 class="text-xl font-black uppercase tracking-[0.06em]">
+      <h3 class="stream-title">
         {{ title }}
       </h3>
-      <p class="mt-2 text-base font-semibold">{{ description }}</p>
+      <p class="stream-note">{{ description }}</p>
     </div>
 
     <article
       v-for="(section, index) in sections"
       :key="section.id"
-      class="space-y-4 border-2 border-black bg-[var(--neo-paper)] px-3 py-3 md:border-4"
+      class="stream-section"
     >
       <div class="space-y-2">
-        <p class="text-xs font-black uppercase tracking-[0.08em] text-black/65">
+        <p class="stream-counter">
           {{ t('session.streamSectionCounter', { index: index + 1 }) }}
         </p>
-        <h4 class="text-lg font-black">
+        <h4 class="stream-section-title">
           {{ resolveSectionTitle(section) }}
         </h4>
-        <p
-          v-if="section.contexts.length"
-          class="text-sm font-semibold leading-6 text-black/80"
-        >
+        <p v-if="section.contexts.length" class="stream-contexts">
           {{ describeContexts(section.contexts) }}
         </p>
       </div>
@@ -397,3 +394,64 @@ function describeContexts(contexts: string[]): string {
     .join(' / ');
 }
 </script>
+
+<style scoped>
+.stream-trace {
+  display: grid;
+  gap: 1rem;
+}
+
+.stream-head {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.stream-title {
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.stream-note {
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.7;
+  margin: 0;
+}
+
+.stream-section {
+  background: color-mix(in srgb, var(--neo-paper) 88%, transparent);
+  border: 2px solid color-mix(in srgb, var(--neo-border) 18%, transparent);
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.stream-counter {
+  color: color-mix(in srgb, var(--neo-text) 64%, transparent);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.stream-section-title {
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.stream-contexts {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.6;
+  margin: 0;
+  opacity: 0.82;
+}
+</style>

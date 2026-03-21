@@ -14,11 +14,18 @@
       <div class="session-stage-stats">
         <article class="session-stage-stat">
           <span>{{ turnDisplay }}</span>
-          <small>{{ t('session.turnIndicator', { current: currentTurnIndex, total: session?.max_turns ?? 0 }) }}</small>
+          <small>{{
+            t('session.turnIndicator', {
+              current: currentTurnIndex,
+              total: session?.max_turns ?? 0,
+            })
+          }}</small>
         </article>
         <article class="session-stage-stat">
           <span>{{ latestScoreDisplay }}</span>
-          <small>{{ t('session.mainScore', { score: latestScoreDisplay }) }}</small>
+          <small>{{
+            t('session.mainScore', { score: latestScoreDisplay })
+          }}</small>
         </article>
         <article class="session-stage-stat">
           <span>{{ session?.job_target ? 'JD' : 'GEN' }}</span>
@@ -69,10 +76,7 @@
       </button>
     </div>
 
-    <div
-      v-else-if="session && currentTurn"
-      class="session-shell"
-    >
+    <div v-else-if="session && currentTurn" class="session-shell">
       <main class="session-main">
         <section class="neo-panel session-question-panel">
           <div class="session-section-head">
@@ -92,10 +96,7 @@
             <span class="neo-badge bg-white">{{ currentStatusLabel }}</span>
           </div>
 
-          <div
-            v-if="followupIntent"
-            class="session-intent-box"
-          >
+          <div v-if="followupIntent" class="session-intent-box">
             <p class="neo-subheading">{{ t('session.followupIntentTitle') }}</p>
             <p class="text-sm font-semibold leading-6">{{ followupIntent }}</p>
           </div>
@@ -162,7 +163,7 @@
       <aside class="session-side">
         <section
           v-if="showProgressPanel"
-          class="neo-panel session-side-panel"
+          class="session-side-panel"
           aria-live="polite"
         >
           <ProgressPanel
@@ -173,7 +174,10 @@
             :active-index="progressStepIndex"
           />
 
-          <div v-if="streamSections.length" class="max-h-[50vh] overflow-y-auto">
+          <div
+            v-if="streamSections.length"
+            class="max-h-[50vh] overflow-y-auto"
+          >
             <StreamTracePanel
               :kicker="t('session.processingKicker')"
               :title="progressTitle"
@@ -207,7 +211,10 @@
           <p class="neo-kicker bg-[var(--neo-green)]">
             {{ t('session.feedback') }}
           </p>
-          <FeedbackPanel v-if="latestEvaluation" :evaluation="latestEvaluation" />
+          <FeedbackPanel
+            v-if="latestEvaluation"
+            :evaluation="latestEvaluation"
+          />
           <p v-else class="neo-note">{{ t('session.feedbackEmpty') }}</p>
         </section>
       </aside>
@@ -726,7 +733,8 @@ function buildProgressStepDefinitions(
 
 .session-section-head {
   align-items: end;
-  border-bottom: 2px solid color-mix(in srgb, var(--neo-border) 18%, transparent);
+  border-bottom: 2px solid
+    color-mix(in srgb, var(--neo-border) 18%, transparent);
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;

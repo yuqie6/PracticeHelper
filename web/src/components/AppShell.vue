@@ -1,77 +1,75 @@
 <template>
-  <div class="min-h-screen bg-[var(--neo-bg)] text-[var(--neo-text)]">
-    <header class="border-b-2 border-black bg-[var(--neo-red)] md:border-b-4">
-      <div
-        class="neo-page flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
-      >
-        <div>
-          <p class="neo-kicker bg-[var(--neo-yellow)]">{{ t('app.name') }}</p>
-          <h1
-            class="text-2xl font-black uppercase tracking-[0.08em] md:text-4xl"
-          >
-            {{ t('app.title') }}
-          </h1>
+  <div class="app-shell min-h-screen bg-[var(--neo-bg)] text-[var(--neo-text)]">
+    <header class="app-header">
+      <div class="neo-page app-header-main">
+        <div class="app-brand">
+          <div class="space-y-3">
+            <p class="neo-kicker bg-[var(--neo-yellow)]">{{ t('app.name') }}</p>
+            <div class="space-y-2">
+              <h1 class="app-brand-title">{{ t('app.title') }}</h1>
+              <p class="app-brand-note">{{ activeNavLabel }}</p>
+            </div>
+          </div>
+
           <RouterLink
             v-if="activeImportSummary"
             to="/projects"
-            class="mt-3 inline-flex w-full border-2 border-black bg-white px-3 py-2 text-sm font-black uppercase tracking-[0.08em] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] md:w-auto md:border-4"
+            class="app-import-notice"
           >
             {{ activeImportSummary }}
           </RouterLink>
         </div>
 
-        <div class="flex flex-col gap-3 md:items-end">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="text-sm font-black uppercase tracking-[0.08em]">
-              {{ t('app.language') }}
-            </span>
-            <button
-              v-for="item in localeOptions"
-              :key="item.value"
-              type="button"
-              class="border-2 border-black px-3 py-1 text-xs font-black uppercase transition-colors md:border-4"
-              :aria-pressed="currentLocale === item.value"
-              :class="
-                currentLocale === item.value
-                  ? 'bg-[var(--neo-yellow)]'
-                  : 'bg-white'
-              "
-              @click="switchLocale(item.value)"
-            >
-              {{ item.label }}
-            </button>
+        <div class="app-controls">
+          <div class="app-toggle-group">
+            <span class="app-toggle-label">{{ t('app.language') }}</span>
+            <div class="app-toggle-row">
+              <button
+                v-for="item in localeOptions"
+                :key="item.value"
+                type="button"
+                class="app-toggle-chip"
+                :aria-pressed="currentLocale === item.value"
+                :class="
+                  currentLocale === item.value ? 'app-toggle-chip-active' : ''
+                "
+                @click="switchLocale(item.value)"
+              >
+                {{ item.label }}
+              </button>
+            </div>
           </div>
 
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="text-sm font-black uppercase tracking-[0.08em]">
-              {{ t('app.theme') }}
-            </span>
-            <button
-              v-for="item in themeOptions"
-              :key="item.value"
-              type="button"
-              class="border-2 border-black px-3 py-1 text-xs font-black uppercase transition-colors md:border-4"
-              :aria-pressed="currentTheme === item.value"
-              :class="
-                currentTheme === item.value
-                  ? 'bg-[var(--neo-yellow)]'
-                  : 'bg-white'
-              "
-              @click="switchTheme(item.value)"
-            >
-              {{ item.label }}
-            </button>
+          <div class="app-toggle-group">
+            <span class="app-toggle-label">{{ t('app.theme') }}</span>
+            <div class="app-toggle-row">
+              <button
+                v-for="item in themeOptions"
+                :key="item.value"
+                type="button"
+                class="app-toggle-chip"
+                :aria-pressed="currentTheme === item.value"
+                :class="
+                  currentTheme === item.value ? 'app-toggle-chip-active' : ''
+                "
+                @click="switchTheme(item.value)"
+              >
+                {{ item.label }}
+              </button>
+            </div>
           </div>
+        </div>
+      </div>
 
-          <nav
-            class="flex gap-3 overflow-x-auto pb-1 sm:flex-wrap sm:justify-end"
-            aria-label="Main navigation"
-          >
+      <div class="app-nav-shell">
+        <div class="neo-page app-nav-wrap">
+          <nav class="app-nav" aria-label="Main navigation">
             <RouterLink
               v-for="item in navItems"
               :key="item.to"
               :to="item.to"
-              class="neo-button-dark min-w-max shrink-0"
+              class="app-nav-link"
+              :class="item.active ? 'app-nav-link-active' : ''"
             >
               {{ item.label }}
             </RouterLink>
@@ -80,7 +78,7 @@
       </div>
     </header>
 
-    <main>
+    <main class="app-main">
       <slot />
     </main>
 
@@ -92,7 +90,7 @@
 import { useQuery } from '@tanstack/vue-query';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { RouterLink } from 'vue-router';
+import { RouterLink, useRoute } from 'vue-router';
 
 import { listImportJobs, type ProjectImportJob } from '../api/client';
 import ToastContainer from './ToastContainer.vue';
@@ -107,6 +105,7 @@ import {
 } from '../lib/theme';
 
 const { t, locale } = useI18n();
+const route = useRoute();
 
 const currentLocale = computed(() => locale.value as AppLocale);
 const currentTheme = ref<AppTheme>(
@@ -139,15 +138,44 @@ const activeImportSummary = computed(() => {
   });
 });
 
-const navItems = computed(() => [
-  { label: t('app.nav.home'), to: '/' },
-  { label: t('app.nav.profile'), to: '/profile' },
-  { label: t('app.nav.jobs'), to: '/job-targets' },
-  { label: t('app.nav.projects'), to: '/projects' },
-  { label: t('app.nav.promptExperiments'), to: '/prompt-experiments' },
-  { label: t('app.nav.train'), to: '/train' },
-  { label: t('app.nav.history'), to: '/history' },
-]);
+const navItems = computed(() =>
+  [
+    { label: t('app.nav.home'), to: '/', prefixes: ['/'] },
+    { label: t('app.nav.profile'), to: '/profile', prefixes: ['/profile'] },
+    {
+      label: t('app.nav.jobs'),
+      to: '/job-targets',
+      prefixes: ['/job-targets'],
+    },
+    {
+      label: t('app.nav.projects'),
+      to: '/projects',
+      prefixes: ['/projects'],
+    },
+    {
+      label: t('app.nav.promptExperiments'),
+      to: '/prompt-experiments',
+      prefixes: ['/prompt-experiments'],
+    },
+    {
+      label: t('app.nav.train'),
+      to: '/train',
+      prefixes: ['/train', '/sessions'],
+    },
+    {
+      label: t('app.nav.history'),
+      to: '/history',
+      prefixes: ['/history', '/reviews'],
+    },
+  ].map((item) => ({
+    ...item,
+    active: isRouteActive(item.prefixes),
+  })),
+);
+const activeNavLabel = computed(() => {
+  const active = navItems.value.find((item) => item.active);
+  return active?.label ?? t('app.nav.home');
+});
 
 const localeOptions = computed(() => [
   { value: 'zh-CN' as AppLocale, label: t('app.locales.zhCN') },
@@ -193,4 +221,175 @@ function prefersDarkMode(): boolean {
 
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
+
+function isRouteActive(prefixes: string[]): boolean {
+  if (prefixes.length === 1 && prefixes[0] === '/') {
+    return route.path === '/';
+  }
+
+  return prefixes.some(
+    (prefix) => route.path === prefix || route.path.startsWith(`${prefix}/`),
+  );
+}
 </script>
+
+<style scoped>
+.app-shell {
+  position: relative;
+}
+
+.app-header {
+  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--neo-bg) 82%, transparent);
+  border-bottom: 2px solid
+    color-mix(in srgb, var(--neo-border) 18%, transparent);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.app-header-main {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  padding-top: 1.25rem;
+}
+
+.app-brand {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.app-brand-title {
+  font-size: clamp(1.8rem, 4vw, 2.9rem);
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  line-height: 0.95;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.app-brand-note {
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  line-height: 1.4;
+  margin: 0;
+  opacity: 0.72;
+  text-transform: uppercase;
+}
+
+.app-import-notice {
+  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
+  border: 2px solid var(--neo-border);
+  box-shadow: 4px 4px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  max-width: 100%;
+  padding: 0.75rem 0.9rem;
+  text-transform: uppercase;
+}
+
+.app-controls {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.app-toggle-group {
+  align-items: start;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.app-toggle-label {
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.app-toggle-chip {
+  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
+  border: 2px solid var(--neo-border);
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  min-height: 2.1rem;
+  padding: 0.45rem 0.8rem;
+  text-transform: uppercase;
+  transition: background-color 180ms ease;
+}
+
+.app-toggle-chip-active {
+  background: color-mix(in srgb, var(--neo-yellow) 70%, white);
+}
+
+.app-nav-shell {
+  border-top: 1px solid color-mix(in srgb, var(--neo-border) 14%, transparent);
+  padding-bottom: 0.75rem;
+}
+
+.app-nav-wrap {
+  padding-bottom: 0;
+  padding-top: 0.75rem;
+}
+
+.app-nav {
+  display: flex;
+  gap: 0.65rem;
+  overflow-x: auto;
+  padding-bottom: 0.15rem;
+}
+
+.app-nav-link {
+  background: color-mix(in srgb, var(--neo-surface) 86%, transparent);
+  border: 2px solid color-mix(in srgb, var(--neo-border) 24%, transparent);
+  color: var(--neo-text);
+  display: inline-flex;
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  min-height: 2.4rem;
+  min-width: max-content;
+  padding: 0.55rem 0.9rem;
+  text-transform: uppercase;
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.app-nav-link:hover {
+  transform: translateY(-1px);
+}
+
+.app-nav-link-active {
+  background: var(--neo-black);
+  border-color: var(--neo-border);
+  color: white;
+}
+
+.app-main {
+  min-height: calc(100vh - 10rem);
+}
+
+@media (min-width: 1024px) {
+  .app-header-main {
+    align-items: end;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .app-controls {
+    justify-items: end;
+  }
+}
+</style>

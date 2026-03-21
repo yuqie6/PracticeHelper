@@ -1,61 +1,79 @@
 <template>
-  <div class="space-y-4">
-    <div
-      class="flex items-center gap-4 border-l-8 bg-white px-4 py-4"
-      :style="{ borderColor: `var(${scoreColor(evaluation.score)})` }"
+  <div class="feedback-panel">
+    <section
+      class="feedback-score"
+      :style="{ '--feedback-accent': `var(${scoreColor(evaluation.score)})` }"
     >
-      <span class="text-5xl font-black">{{ evaluation.score }}</span>
-      <div>
-        <p class="text-sm font-bold uppercase tracking-[0.08em]">/10</p>
-        <p class="text-base font-semibold leading-7">
-          {{ evaluation.headline || t('session.feedbackHeadlineFallback') }}
-        </p>
+      <div class="feedback-score-value">
+        <span>{{ evaluation.score }}</span>
+        <small>/10</small>
       </div>
+      <div class="feedback-score-copy">
+        <p class="neo-kicker bg-white">{{ t('session.feedback') }}</p>
+        <h3 class="feedback-score-headline">
+          {{ evaluation.headline || t('session.feedbackHeadlineFallback') }}
+        </h3>
+      </div>
+    </section>
+
+    <div
+      v-if="evaluation.strengths.length || evaluation.gaps.length"
+      class="feedback-grid"
+    >
+      <details v-if="evaluation.strengths.length" class="feedback-detail" open>
+        <summary class="feedback-detail-summary">
+          {{ t('session.strengths') }}
+        </summary>
+        <ul class="feedback-list">
+          <li
+            v-for="item in evaluation.strengths"
+            :key="item"
+            class="feedback-list-item"
+          >
+            {{ item }}
+          </li>
+        </ul>
+      </details>
+
+      <details v-if="evaluation.gaps.length" class="feedback-detail" open>
+        <summary class="feedback-detail-summary">
+          {{ t('session.gaps') }}
+        </summary>
+        <ul class="feedback-list">
+          <li
+            v-for="item in evaluation.gaps"
+            :key="item"
+            class="feedback-list-item"
+          >
+            {{ item }}
+          </li>
+        </ul>
+      </details>
     </div>
 
-    <details v-if="evaluation.strengths.length" class="space-y-2">
-      <summary class="neo-subheading cursor-pointer">
-        {{ t('session.strengths') }}
-      </summary>
-      <ul class="mt-3 space-y-2">
-        <li v-for="item in evaluation.strengths" :key="item" class="neo-note">
-          {{ item }}
-        </li>
-      </ul>
-    </details>
-
-    <details v-if="evaluation.gaps.length" class="space-y-2" open>
-      <summary class="neo-subheading cursor-pointer">
-        {{ t('session.gaps') }}
-      </summary>
-      <ul class="mt-3 space-y-2">
-        <li v-for="item in evaluation.gaps" :key="item" class="neo-note">
-          {{ item }}
-        </li>
-      </ul>
-    </details>
-
-    <div class="space-y-2">
+    <section class="feedback-suggestion">
       <p class="neo-subheading">{{ t('session.suggestionTitle') }}</p>
       <p class="neo-note">
         {{ evaluation.suggestion || t('session.suggestionFallback') }}
       </p>
-    </div>
+    </section>
 
     <details
       v-if="Object.keys(evaluation.score_breakdown ?? {}).length"
-      class="space-y-2"
+      class="feedback-detail"
     >
-      <summary class="neo-subheading cursor-pointer">
+      <summary class="feedback-detail-summary">
         {{ t('session.scoreBreakdownTitle') }}
       </summary>
-      <ul class="mt-3 space-y-2">
+      <ul class="feedback-breakdown">
         <li
           v-for="(score, label) in evaluation.score_breakdown"
           :key="label"
-          class="border-2 border-black bg-white px-3 py-2 md:border-4"
+          class="feedback-breakdown-row"
         >
-          <div class="flex items-center justify-between text-sm font-semibold">
+          <div
+            class="flex items-center justify-between gap-3 text-sm font-semibold"
+          >
             <span>{{ label }}</span>
             <span>{{ score }}/10</span>
           </div>
@@ -89,3 +107,107 @@ function scoreColor(score: number): string {
   return '--neo-red';
 }
 </script>
+
+<style scoped>
+.feedback-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.feedback-score {
+  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
+  border: 2px solid var(--neo-border);
+  border-left: 10px solid var(--feedback-accent);
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.feedback-score-value {
+  align-items: end;
+  display: flex;
+  gap: 0.45rem;
+}
+
+.feedback-score-value span {
+  font-size: clamp(2.8rem, 8vw, 4.4rem);
+  font-weight: 900;
+  letter-spacing: -0.08em;
+  line-height: 0.85;
+}
+
+.feedback-score-value small {
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.feedback-score-copy {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.feedback-score-headline {
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.7;
+  margin: 0;
+}
+
+.feedback-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.feedback-detail {
+  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
+  border: 2px solid color-mix(in srgb, var(--neo-border) 18%, transparent);
+  padding: 1rem;
+}
+
+.feedback-detail-summary {
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.feedback-detail-summary::-webkit-details-marker {
+  display: none;
+}
+
+.feedback-list,
+.feedback-breakdown {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.85rem 0 0;
+  padding: 0;
+}
+
+.feedback-list-item,
+.feedback-breakdown-row {
+  background: color-mix(in srgb, var(--neo-paper) 86%, transparent);
+  border: 2px solid var(--neo-border);
+  list-style: none;
+  padding: 0.85rem 1rem;
+}
+
+.feedback-suggestion {
+  display: grid;
+  gap: 0.6rem;
+}
+
+@media (min-width: 768px) {
+  .feedback-score {
+    align-items: center;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .feedback-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+</style>
