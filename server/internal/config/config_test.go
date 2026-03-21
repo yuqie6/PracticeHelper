@@ -24,3 +24,13 @@ func TestLoadFallsBackWhenSidecarTimeoutEnvIsInvalid(t *testing.T) {
 		t.Fatalf("unexpected fallback timeout: got %s want %s", cfg.SidecarTimeout, 90*time.Second)
 	}
 }
+
+func TestLoadReadsInternalTokenFromEnv(t *testing.T) {
+	t.Setenv("PRACTICEHELPER_INTERNAL_TOKEN", "secret-token")
+
+	cfg := Load()
+
+	if cfg.InternalToken != "secret-token" {
+		t.Fatalf("unexpected internal token: got %q want %q", cfg.InternalToken, "secret-token")
+	}
+}

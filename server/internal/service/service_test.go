@@ -1773,6 +1773,226 @@ func TestSubmitAnswerStreamEmitsStatusSequenceForLastTurn(t *testing.T) {
 	})
 }
 
+func TestSubmitAnswerStreamAppliesDepthSignalFromStreamSideEffects(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := &domain.TrainingSession{
+		ID:        "sess_stream_extend",
+		Mode:      domain.ModeBasics,
+		Topic:     "redis",
+		Intensity: "standard",
+		MaxTurns:  1,
+		Status:    domain.StatusWaitingAnswer,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_stream_extend_1",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Redis 为什么快？",
+		ExpectedPoints: []string{"内存访问", "事件循环"},
+	}
+	if err := store.CreateSession(context.Background(), session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/evaluate_answer/stream" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		encoder := json.NewEncoder(w)
+		if err := encoder.Encode(domain.StreamEvent{Type: "phase", Phase: "call_model"}); err != nil {
+			t.Fatalf("encode phase event: %v", err)
+		}
+		if err := encoder.Encode(domain.StreamEvent{
+			Type: "result",
+			Data: map[string]any{
+				"result": map[string]any{
+					"score":                    82,
+					"score_breakdown":          map[string]float64{"准确性": 82},
+					"strengths":                []string{"主线完整"},
+					"gaps":                     []string{"案例不够具体"},
+					"followup_question":        "如果线上抖动，你先看什么？",
+					"followup_expected_points": []string{"先止血", "再定位"},
+					"weakness_hits":            []map[string]any{},
+				},
+				"side_effects": map[string]any{
+					"depth_signal": "extend",
+				},
+				"raw_output": `{"score":82}`,
+			},
+		}); err != nil {
+			t.Fatalf("encode result event: %v", err)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	updated, err := svc.SubmitAnswerStream(
+		context.Background(),
+		session.ID,
+		domain.SubmitAnswerRequest{Answer: "因为它主要在内存里，单线程也减少了锁竞争。"},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("SubmitAnswerStream() error = %v", err)
+	}
+
+	if updated.Status != domain.StatusWaitingAnswer {
+		t.Fatalf("expected waiting_answer status after extend, got %s", updated.Status)
+	}
+	if updated.MaxTurns != 2 {
+		t.Fatalf("expected max turns to extend to 2, got %d", updated.MaxTurns)
+	}
+	if len(updated.Turns) != 2 {
+		t.Fatalf("expected a followup turn after extend, got %d turns", len(updated.Turns))
+	}
+	if updated.ReviewID != "" {
+		t.Fatalf("expected no review to be created after extend, got %s", updated.ReviewID)
+	}
+}
+
+func TestSubmitAnswerStreamPersistsReviewSideEffects(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := &domain.TrainingSession{
+		ID:        "sess_stream_review_side_effects",
+		Mode:      domain.ModeBasics,
+		Topic:     "redis",
+		Intensity: "standard",
+		MaxTurns:  1,
+		Status:    domain.StatusWaitingAnswer,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_stream_review_side_effects_1",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Redis 为什么快？",
+		ExpectedPoints: []string{"内存访问", "事件循环"},
+	}
+	if err := store.CreateSession(context.Background(), session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		encoder := json.NewEncoder(w)
+
+		switch r.URL.Path {
+		case "/internal/evaluate_answer/stream":
+			if err := encoder.Encode(domain.StreamEvent{Type: "phase", Phase: "call_model"}); err != nil {
+				t.Fatalf("encode evaluation phase event: %v", err)
+			}
+			if err := encoder.Encode(domain.StreamEvent{
+				Type: "result",
+				Data: map[string]any{
+					"result": map[string]any{
+						"score":           84,
+						"score_breakdown": map[string]float64{"准确性": 84},
+						"strengths":       []string{"主线完整"},
+						"gaps":            []string{"案例不够具体"},
+					},
+					"raw_output": `{"score":84}`,
+				},
+			}); err != nil {
+				t.Fatalf("encode evaluation result event: %v", err)
+			}
+		case "/internal/generate_review/stream":
+			if err := encoder.Encode(domain.StreamEvent{Type: "phase", Phase: "call_model"}); err != nil {
+				t.Fatalf("encode review phase event: %v", err)
+			}
+			if err := encoder.Encode(domain.StreamEvent{
+				Type: "result",
+				Data: map[string]any{
+					"result": map[string]any{
+						"overall":             "整体过线，但缓存一致性表达还不够硬。",
+						"top_fix":             "补缓存一致性取舍",
+						"top_fix_reason":      "这是这轮最缺说服力的地方",
+						"highlights":          []string{"主线完整"},
+						"gaps":                []string{"缺缓存一致性取舍"},
+						"suggested_topics":    []string{"redis"},
+						"next_training_focus": []string{"补缓存一致性表达"},
+						"score_breakdown":     map[string]float64{"准确性": 84},
+					},
+					"side_effects": map[string]any{
+						"recommended_next": map[string]any{
+							"mode":   "basics",
+							"topic":  "redis",
+							"reason": "先补缓存一致性取舍",
+						},
+						"observations": []map[string]any{
+							{
+								"category":  "pattern",
+								"content":   "用户主线能站住，但 trade-off 细节还不够具体。",
+								"tags":      []string{"redis", "tradeoff"},
+								"relevance": 0.9,
+								"topic":     "redis",
+							},
+						},
+					},
+					"raw_output": `{"overall":"整体过线，但缓存一致性表达还不够硬。"}`,
+				},
+			}); err != nil {
+				t.Fatalf("encode review result event: %v", err)
+			}
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	updated, err := svc.SubmitAnswerStream(
+		context.Background(),
+		session.ID,
+		domain.SubmitAnswerRequest{Answer: "因为 Redis 主要走内存访问，事件循环也减少了线程切换。"},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("SubmitAnswerStream() error = %v", err)
+	}
+
+	review, err := store.GetReview(context.Background(), updated.ReviewID)
+	if err != nil {
+		t.Fatalf("GetReview() error = %v", err)
+	}
+	if review == nil || review.RecommendedNext == nil {
+		t.Fatalf("expected recommended next to be persisted, got %#v", review)
+	}
+	if review.RecommendedNext.Topic != domain.BasicsTopicRedis {
+		t.Fatalf("expected recommended next topic redis, got %#v", review.RecommendedNext)
+	}
+
+	observations, err := store.ListRelevantObservations(
+		context.Background(),
+		session.ID,
+		"",
+		"",
+		domain.BasicsTopicRedis,
+		5,
+	)
+	if err != nil {
+		t.Fatalf("ListRelevantObservations() error = %v", err)
+	}
+	if len(observations) == 0 {
+		t.Fatal("expected review observations to be persisted")
+	}
+	if observations[0].Content != "用户主线能站住，但 trade-off 细节还不够具体。" {
+		t.Fatalf("unexpected observation content: %#v", observations[0])
+	}
+}
+
 func assertStatusEventNames(t *testing.T, events []domain.StreamEvent, want []string) {
 	t.Helper()
 

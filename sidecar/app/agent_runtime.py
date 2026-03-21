@@ -4,12 +4,23 @@ import json
 import logging
 import time
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import BaseModel
 
+from app.agent_tools import (
+    build_evaluate_answer_agent_tools,
+    build_generate_question_agent_tools,
+    build_generate_review_agent_tools,
+    is_action_tool,
+    make_record_observation_tool,
+    make_set_depth_signal_tool,
+    make_suggest_next_session_tool,
+    make_update_knowledge_tool,
+)
 from app.config import Settings
+from app.go_client import GoBackendClient
 from app.llm_client import ModelClientError, OpenAICompatibleModelClient
 from app.repo_context import RepoAnalysisBundle, collect_repo_analysis_bundle
 from app.runtime_prompts import (
@@ -42,10 +53,12 @@ from app.schemas import (
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass(frozen=True)
 class TaskExecutionResult[ResultModelT: BaseModel]:
     result: ResultModelT
     raw_output: str = ""
+    side_effects: dict[str, Any] = field(default_factory=dict)
 
 
 class AgentRuntime:
@@ -54,9 +67,11 @@ class AgentRuntime:
         settings: Settings,
         *,
         model_client: OpenAICompatibleModelClient | None = None,
+        go_client: GoBackendClient | None = None,
     ) -> None:
         self._settings = settings
         self._model_client = model_client
+        self._go_client = go_client or GoBackendClient(settings)
         if self._model_client is None and settings.llm_enabled:
             self._model_client = OpenAICompatibleModelClient(settings)
 
@@ -139,12 +154,16 @@ class AgentRuntime:
     ) -> TaskExecutionResult[GenerateQuestionResponse]:
         started_at = time.perf_counter()
         logger.info("generate_question started mode=%s topic=%s", request.mode, request.topic)
-        system_prompt, user_prompt, tools = question_prompt_bundle(request)
+        system_prompt, user_prompt, prompt_tools = question_prompt_bundle(request)
+        tools = prompt_tools + build_generate_question_agent_tools(
+            request, backend_client=self._go_client
+        )
         response = self._run_task(
             response_model=GenerateQuestionResponse,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=tools,
+            fallback_tools=_read_only_tools(tools),
         )
         logger.info(
             "generate_question completed mode=%s topic=%s duration_ms=%.2f",
@@ -180,12 +199,16 @@ class AgentRuntime:
             request.turn_index,
             request.max_turns,
         )
-        system_prompt, user_prompt, tools = evaluate_prompt_bundle(request)
+        system_prompt, user_prompt, prompt_tools = evaluate_prompt_bundle(request)
+        tools = prompt_tools + build_evaluate_answer_agent_tools(
+            request, {}, backend_client=self._go_client
+        )
         response = self._run_task(
             response_model=EvaluationResult,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=tools,
+            fallback_tools=_read_only_tools(tools),
         )
         logger.info(
             "evaluate_answer completed mode=%s topic=%s turn=%d/%d duration_ms=%.2f",
@@ -215,12 +238,16 @@ class AgentRuntime:
     ) -> TaskExecutionResult[ReviewCard]:
         started_at = time.perf_counter()
         logger.info("generate_review started session_id=%s", request.session.id)
-        system_prompt, user_prompt, tools = review_prompt_bundle(request)
+        system_prompt, user_prompt, prompt_tools = review_prompt_bundle(request)
+        tools = prompt_tools + build_generate_review_agent_tools(
+            request, {}, backend_client=self._go_client
+        )
         response = self._run_task(
             response_model=ReviewCard,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=tools,
+            fallback_tools=_read_only_tools(tools),
         )
         logger.info(
             "generate_review completed session_id=%s duration_ms=%.2f",
@@ -248,12 +275,14 @@ class AgentRuntime:
         system_prompt: str,
         user_prompt: str,
         tools: list[RuntimeTool],
+        fallback_tools: list[RuntimeTool] | None = None,
     ) -> TaskExecutionResult[BaseModel]:
         self._require_model_client()
+        fallback_tools = fallback_tools or _read_only_tools(tools)
 
         try:
-            # 先走带工具的主链路；只有 tool call 或 JSON 收口不稳定时才退回单轮生成。
-            return self._run_tool_loop(
+            # 先走非流式 agent loop；只有 tool call 或 JSON 收口不稳定时才退回单轮生成。
+            return self._run_agent_loop(
                 response_model=response_model,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
@@ -267,13 +296,13 @@ class AgentRuntime:
                 response_model=response_model,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                tools=tools,
+                tools=fallback_tools,
             )
         except (ModelClientError, ValueError, json.JSONDecodeError) as exc:
             logger.warning("agent single-shot failed with no heuristic fallback: %s", exc)
             raise
 
-    def _run_tool_loop(
+    def _run_agent_loop(
         self,
         *,
         response_model: type[BaseModel],
@@ -289,9 +318,10 @@ class AgentRuntime:
         ]
         tool_map = {tool.name: tool for tool in tools}
         used_any_tool = False
+        side_effects: dict[str, Any] = {}
 
         # 轮数上限用于兜住 prompt/tool 契约失配，避免 sidecar 卡在无限工具往返里。
-        for _ in range(4):
+        for _ in range(8):
             completion = model_client.create_completion(
                 messages=messages,
                 tools=[tool.spec() for tool in tools],
@@ -312,6 +342,16 @@ class AgentRuntime:
                     if tool is None:
                         tool_result = {"error": f"unknown tool: {tool_name}"}
                     else:
+                        if is_action_tool(tool_name):
+                            arguments = dict(arguments)
+                        if tool_name in {
+                            "record_observation",
+                            "update_knowledge",
+                            "suggest_next_session",
+                            "set_depth_signal",
+                        }:
+                            # 行动工具通过闭包把副作用暂存在 side_effects，不直接写 DB。
+                            tool = _rebind_action_tool(tool, side_effects)
                         tool_result = tool.handler(arguments)
                     messages.append(
                         {
@@ -333,6 +373,7 @@ class AgentRuntime:
                 return TaskExecutionResult(
                     result=result_model,
                     raw_output=completion.content.strip(),
+                    side_effects=side_effects,
                 )
 
             raise ModelClientError("model returned neither content nor tool calls")
@@ -437,3 +478,21 @@ class AgentRuntime:
                 "PRACTICEHELPER_SIDECAR_OPENAI_BASE_URL, and PRACTICEHELPER_SIDECAR_OPENAI_API_KEY."
             )
         return self._model_client
+
+
+def _read_only_tools(tools: list[RuntimeTool]) -> list[RuntimeTool]:
+    return [tool for tool in tools if not is_action_tool(tool.name)]
+
+
+def _rebind_action_tool(tool: RuntimeTool, side_effects: dict[str, Any]) -> RuntimeTool:
+    if tool.name == "record_observation":
+        rebound = make_record_observation_tool(side_effects)
+    elif tool.name == "update_knowledge":
+        rebound = make_update_knowledge_tool(side_effects)
+    elif tool.name == "suggest_next_session":
+        rebound = make_suggest_next_session_tool(side_effects)
+    elif tool.name == "set_depth_signal":
+        rebound = make_set_depth_signal_tool(side_effects)
+    else:
+        return tool
+    return rebound

@@ -11,6 +11,7 @@ type Config struct {
 	DatabasePath   string
 	SidecarURL     string
 	SidecarTimeout time.Duration
+	InternalToken  string
 	LogPath        string
 }
 
@@ -20,6 +21,7 @@ func Load() Config {
 		DatabasePath:   getEnv("PRACTICEHELPER_SERVER_DB_PATH", "../data/practicehelper.db"),
 		SidecarURL:     getEnv("PRACTICEHELPER_SERVER_SIDECAR_URL", "http://127.0.0.1:8000"),
 		SidecarTimeout: getEnvDurationSeconds("PRACTICEHELPER_SERVER_SIDECAR_TIMEOUT_SECONDS", 90*time.Second),
+		InternalToken:  getEnv("PRACTICEHELPER_INTERNAL_TOKEN", ""),
 		LogPath:        getEnv("PRACTICEHELPER_SERVER_LOG_PATH", "../data/logs/server.log"),
 	}
 }

@@ -165,6 +165,21 @@ func (s *Service) prepareSession(
 		return nil, domain.GenerateQuestionRequest{}, ErrInvalidMode
 	}
 
+	agentContext, err := s.getAgentContext(ctx, agentContextParams{
+		Topic:               session.Topic,
+		ProjectID:           session.ProjectID,
+		JobTargetID:         session.JobTargetID,
+		SessionID:           session.ID,
+		WeaknessLimit:       5,
+		ObservationLimit:    4,
+		SessionSummaryLimit: 3,
+		KnowledgeNodeLimit:  8,
+	})
+	if err != nil {
+		return nil, domain.GenerateQuestionRequest{}, err
+	}
+	generateRequest.AgentContext = agentContext
+
 	return session, generateRequest, nil
 }
 

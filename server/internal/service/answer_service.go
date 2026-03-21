@@ -12,7 +12,7 @@ import (
 type evaluateFunc func(
 	ctx context.Context,
 	request domain.EvaluateAnswerRequest,
-) (*domain.EvaluationResult, *domain.PromptExecutionMeta, error)
+) (*domain.EvaluationResult, *domain.EvaluateAnswerSideEffects, *domain.PromptExecutionMeta, error)
 
 type finalizeFunc func(ctx context.Context, sessionID string) (*domain.TrainingSession, error)
 
@@ -21,7 +21,7 @@ func (s *Service) SubmitAnswer(ctx context.Context, sessionID string, request do
 		ctx,
 		sessionID,
 		request,
-		func(ctx context.Context, request domain.EvaluateAnswerRequest) (*domain.EvaluationResult, *domain.PromptExecutionMeta, error) {
+		func(ctx context.Context, request domain.EvaluateAnswerRequest) (*domain.EvaluationResult, *domain.EvaluateAnswerSideEffects, *domain.PromptExecutionMeta, error) {
 			return s.sidecar.EvaluateAnswer(ctx, request)
 		},
 		func(ctx context.Context, sessionID string) (*domain.TrainingSession, error) {
@@ -42,7 +42,7 @@ func (s *Service) SubmitAnswerStream(
 		ctx,
 		sessionID,
 		request,
-		func(ctx context.Context, request domain.EvaluateAnswerRequest) (*domain.EvaluationResult, *domain.PromptExecutionMeta, error) {
+		func(ctx context.Context, request domain.EvaluateAnswerRequest) (*domain.EvaluationResult, *domain.EvaluateAnswerSideEffects, *domain.PromptExecutionMeta, error) {
 			return s.sidecar.EvaluateAnswerStream(ctx, request, emit)
 		},
 		func(ctx context.Context, sessionID string) (*domain.TrainingSession, error) {
@@ -88,12 +88,26 @@ func (s *Service) submitAnswerCore(
 		s.restoreSessionStatus(ctx, session.ID, previousStatus)
 		return nil, err
 	}
+	agentContext, err := s.getAgentContext(ctx, agentContextParams{
+		Topic:               session.Topic,
+		ProjectID:           session.ProjectID,
+		JobTargetID:         session.JobTargetID,
+		SessionID:           session.ID,
+		WeaknessLimit:       5,
+		ObservationLimit:    4,
+		SessionSummaryLimit: 3,
+		KnowledgeNodeLimit:  8,
+	})
+	if err != nil {
+		s.restoreSessionStatus(ctx, session.ID, previousStatus)
+		return nil, err
+	}
 
 	isLastTurn := turn.TurnIndex >= session.MaxTurns
 	emitStatus(emit, "evaluation_started")
 
 	evalStart := time.Now()
-	evaluation, promptMeta, err := evaluate(ctx, domain.EvaluateAnswerRequest{
+	evaluation, sideEffects, promptMeta, err := evaluate(ctx, domain.EvaluateAnswerRequest{
 		Mode:              session.Mode,
 		Topic:             session.Topic,
 		PromptSetID:       session.PromptSetID,
@@ -106,6 +120,7 @@ func (s *Service) submitAnswerCore(
 		MaxTurns:          session.MaxTurns,
 		ScoreWeights:      scoreWeights,
 		JobTargetAnalysis: jobTargetAnalysis,
+		AgentContext:      agentContext,
 	})
 	if err != nil {
 		s.restoreSessionStatus(ctx, session.ID, previousStatus)
@@ -127,11 +142,25 @@ func (s *Service) submitAnswerCore(
 		s.restoreSessionStatus(ctx, session.ID, previousStatus)
 		return nil, err
 	}
+	if err := s.applyEvaluateAnswerSideEffects(ctx, session, sideEffects); err != nil {
+		s.restoreSessionStatus(ctx, session.ID, previousStatus)
+		return nil, err
+	}
 
 	session.TotalScore = s.computeSessionScore(session)
 
 	if evaluation.Score >= 75 {
 		_ = s.coolDownSessionWeakness(ctx, session, turn.Question, evaluation.WeaknessHits)
+	}
+
+	switch sideEffects.DepthSignal {
+	case domain.DepthSignalSkipFollowup:
+		isLastTurn = true
+	case domain.DepthSignalExtend:
+		if turn.TurnIndex >= session.MaxTurns && session.MaxTurns < 6 {
+			session.MaxTurns++
+			isLastTurn = false
+		}
 	}
 
 	if isLastTurn {
@@ -156,6 +185,30 @@ func (s *Service) submitAnswerCore(
 	}
 
 	return s.repo.GetSession(ctx, session.ID)
+}
+
+func (s *Service) applyEvaluateAnswerSideEffects(
+	ctx context.Context,
+	session *domain.TrainingSession,
+	sideEffects *domain.EvaluateAnswerSideEffects,
+) error {
+	if sideEffects == nil {
+		return nil
+	}
+	if len(sideEffects.Observations) > 0 {
+		if err := s.repo.CreateObservations(ctx, session.ID, sideEffects.Observations); err != nil {
+			return fmt.Errorf("create observations: %w", err)
+		}
+	}
+	if len(sideEffects.KnowledgeUpdates) > 0 {
+		if err := s.repo.UpsertKnowledgeNodes(ctx, session.ID, sideEffects.KnowledgeUpdates); err != nil {
+			return fmt.Errorf("upsert knowledge updates: %w", err)
+		}
+	}
+	if sideEffects.DepthSignal == "" {
+		sideEffects.DepthSignal = domain.DepthSignalNormal
+	}
+	return nil
 }
 
 func buildFollowupTrainingTurn(

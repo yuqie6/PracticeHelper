@@ -108,6 +108,17 @@ def parse_tool_arguments(tool_call: dict[str, Any]) -> dict[str, Any]:
 
 def tool_summary(tool_name: str) -> str:
     summaries = {
+        "recall_training_context": "已读取当前训练上下文，正在围绕这次任务的真实材料组织输出。",
+        "recall_weakness_profile": "已读取历史弱项画像，正在优先对准薄弱点。",
+        "recall_knowledge_graph": "已读取知识图谱子图，正在结合掌握度判断该追问到哪里。",
+        "recall_observations": "已读取历史观察和策略笔记，正在避免重复踩同样的问题。",
+        "recall_session_summaries": "已读取相近训练摘要，正在参考长期模式而不是只看这一轮。",
+        "search_repo_chunks": "已向 Go 后端追加检索代码片段，正在补足项目上下文。",
+        "get_session_detail": "已向 Go 后端读取更完整的历史训练详情，正在补足复盘证据。",
+        "record_observation": "已记录新的观察候选，后续会由 Go 统一落库。",
+        "update_knowledge": "已准备知识图谱更新，后续会由 Go 统一写回。",
+        "suggest_next_session": "已准备下一轮训练建议，后续会由 Go 统一处理。",
+        "set_depth_signal": "已设置追问深度信号，后续会交给 Go 状态机决定是否跳过或加深。",
         "read_question_templates": "已读取基础题模板，正在挑选更适合当前训练目标的问题。",
         "read_project_brief": "已读取项目摘要与亮点，正在组织更贴近真实项目的问题。",
         "read_context_chunks": "已读取源码与文档片段，正在结合具体上下文生成内容。",

@@ -48,8 +48,9 @@ type streamEvent struct {
 }
 
 type responseEnvelope struct {
-	Result    json.RawMessage `json:"result"`
-	RawOutput string          `json:"raw_output,omitempty"`
+	Result      json.RawMessage `json:"result"`
+	SideEffects json.RawMessage `json:"side_effects,omitempty"`
+	RawOutput   string          `json:"raw_output,omitempty"`
 }
 
 func New(baseURL string, timeout time.Duration) *Client {
@@ -63,7 +64,7 @@ func New(baseURL string, timeout time.Duration) *Client {
 
 func (c *Client) AnalyzeRepo(ctx context.Context, request domain.AnalyzeRepoRequest) (*domain.AnalyzeRepoResponse, error) {
 	var response domain.AnalyzeRepoResponse
-	if _, _, err := c.postJSON(ctx, "/internal/analyze_repo", request, &response); err != nil {
+	if _, _, err := c.postJSON(ctx, "/internal/analyze_repo", request, &response, nil); err != nil {
 		return nil, err
 	}
 
@@ -75,7 +76,7 @@ func (c *Client) AnalyzeJobTarget(
 	request domain.AnalyzeJobTargetRequest,
 ) (*domain.AnalyzeJobTargetResponse, error) {
 	var response domain.AnalyzeJobTargetResponse
-	if _, _, err := c.postJSON(ctx, "/internal/analyze_job_target", request, &response); err != nil {
+	if _, _, err := c.postJSON(ctx, "/internal/analyze_job_target", request, &response, nil); err != nil {
 		return nil, err
 	}
 
@@ -87,7 +88,7 @@ func (c *Client) GenerateQuestion(
 	request domain.GenerateQuestionRequest,
 ) (*domain.GenerateQuestionResponse, *domain.PromptExecutionMeta, error) {
 	var response domain.GenerateQuestionResponse
-	headers, rawOutput, err := c.postJSON(ctx, "/internal/generate_question", request, &response)
+	headers, rawOutput, err := c.postJSON(ctx, "/internal/generate_question", request, &response, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -103,7 +104,7 @@ func (c *Client) GenerateQuestionStream(
 	emit func(domain.StreamEvent) error,
 ) (*domain.GenerateQuestionResponse, *domain.PromptExecutionMeta, error) {
 	var response domain.GenerateQuestionResponse
-	headers, rawOutput, err := c.postJSONStream(ctx, "/internal/generate_question/stream", request, &response, emit)
+	headers, rawOutput, err := c.postJSONStream(ctx, "/internal/generate_question/stream", request, &response, nil, emit)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -116,63 +117,81 @@ func (c *Client) GenerateQuestionStream(
 func (c *Client) EvaluateAnswer(
 	ctx context.Context,
 	request domain.EvaluateAnswerRequest,
-) (*domain.EvaluationResult, *domain.PromptExecutionMeta, error) {
+) (*domain.EvaluationResult, *domain.EvaluateAnswerSideEffects, *domain.PromptExecutionMeta, error) {
 	var response domain.EvaluationResult
-	headers, rawOutput, err := c.postJSON(ctx, "/internal/evaluate_answer", request, &response)
+	var sideEffects domain.EvaluateAnswerSideEffects
+	headers, rawOutput, err := c.postJSON(ctx, "/internal/evaluate_answer", request, &response, &sideEffects)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	meta := promptMetaFromHeaders(headers)
 	meta.RawOutput = rawOutput
-	return &response, meta, nil
+	return &response, &sideEffects, meta, nil
 }
 
 func (c *Client) EvaluateAnswerStream(
 	ctx context.Context,
 	request domain.EvaluateAnswerRequest,
 	emit func(domain.StreamEvent) error,
-) (*domain.EvaluationResult, *domain.PromptExecutionMeta, error) {
+) (*domain.EvaluationResult, *domain.EvaluateAnswerSideEffects, *domain.PromptExecutionMeta, error) {
 	var response domain.EvaluationResult
-	headers, rawOutput, err := c.postJSONStream(ctx, "/internal/evaluate_answer/stream", request, &response, emit)
+	var sideEffects domain.EvaluateAnswerSideEffects
+	headers, rawOutput, err := c.postJSONStream(
+		ctx,
+		"/internal/evaluate_answer/stream",
+		request,
+		&response,
+		&sideEffects,
+		emit,
+	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	meta := promptMetaFromHeaders(headers)
 	meta.RawOutput = rawOutput
-	return &response, meta, nil
+	return &response, &sideEffects, meta, nil
 }
 
 func (c *Client) GenerateReview(
 	ctx context.Context,
 	request domain.GenerateReviewRequest,
-) (*domain.ReviewCard, *domain.PromptExecutionMeta, error) {
+) (*domain.ReviewCard, *domain.GenerateReviewSideEffects, *domain.PromptExecutionMeta, error) {
 	var response domain.ReviewCard
-	headers, rawOutput, err := c.postJSON(ctx, "/internal/generate_review", request, &response)
+	var sideEffects domain.GenerateReviewSideEffects
+	headers, rawOutput, err := c.postJSON(ctx, "/internal/generate_review", request, &response, &sideEffects)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	meta := promptMetaFromHeaders(headers)
 	meta.RawOutput = rawOutput
-	return &response, meta, nil
+	return &response, &sideEffects, meta, nil
 }
 
 func (c *Client) GenerateReviewStream(
 	ctx context.Context,
 	request domain.GenerateReviewRequest,
 	emit func(domain.StreamEvent) error,
-) (*domain.ReviewCard, *domain.PromptExecutionMeta, error) {
+) (*domain.ReviewCard, *domain.GenerateReviewSideEffects, *domain.PromptExecutionMeta, error) {
 	var response domain.ReviewCard
-	headers, rawOutput, err := c.postJSONStream(ctx, "/internal/generate_review/stream", request, &response, emit)
+	var sideEffects domain.GenerateReviewSideEffects
+	headers, rawOutput, err := c.postJSONStream(
+		ctx,
+		"/internal/generate_review/stream",
+		request,
+		&response,
+		&sideEffects,
+		emit,
+	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	meta := promptMetaFromHeaders(headers)
 	meta.RawOutput = rawOutput
-	return &response, meta, nil
+	return &response, &sideEffects, meta, nil
 }
 
 func (c *Client) ListPromptSets(ctx context.Context) ([]domain.PromptSetSummary, error) {
@@ -210,6 +229,7 @@ func (c *Client) postJSON(
 	path string,
 	requestBody any,
 	target any,
+	sideEffectsTarget any,
 ) (http.Header, string, error) {
 	body, err := json.Marshal(requestBody)
 	if err != nil {
@@ -243,7 +263,7 @@ func (c *Client) postJSON(
 	if err != nil {
 		return nil, "", fmt.Errorf("read sidecar response: %w", err)
 	}
-	rawOutput, err := decodeResultPayload(payload, target)
+	rawOutput, err := decodeResultPayload(payload, target, sideEffectsTarget)
 	if err != nil {
 		return nil, "", fmt.Errorf("decode sidecar response: %w", err)
 	}
@@ -258,6 +278,7 @@ func (c *Client) postJSONStream(
 	path string,
 	requestBody any,
 	target any,
+	sideEffectsTarget any,
 	emit func(domain.StreamEvent) error,
 ) (http.Header, string, error) {
 	var rawOutput string
@@ -310,7 +331,7 @@ func (c *Client) postJSONStream(
 
 		if event.Type == "result" {
 			var err error
-			rawOutput, err = decodeResultPayload(event.Data, target)
+			rawOutput, err = decodeResultPayload(event.Data, target, sideEffectsTarget)
 			if err != nil {
 				return nil, "", fmt.Errorf("decode sidecar stream result: %w", err)
 			}
@@ -404,11 +425,16 @@ func retryJitter() time.Duration {
 	return time.Duration(rand.Intn(maxJitterMs*2+1)-maxJitterMs) * time.Millisecond
 }
 
-func decodeResultPayload(payload []byte, target any) (string, error) {
+func decodeResultPayload(payload []byte, target any, sideEffectsTarget any) (string, error) {
 	var envelope responseEnvelope
 	if err := json.Unmarshal(payload, &envelope); err == nil && len(envelope.Result) > 0 {
 		if err := json.Unmarshal(envelope.Result, target); err != nil {
 			return "", err
+		}
+		if sideEffectsTarget != nil && len(envelope.SideEffects) > 0 {
+			if err := json.Unmarshal(envelope.SideEffects, sideEffectsTarget); err != nil {
+				return "", err
+			}
 		}
 		return envelope.RawOutput, nil
 	}

@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator
 
 WeaknessKind = Literal["topic", "project", "expression", "followup_breakdown", "depth", "detail"]
+DepthSignal = Literal["skip_followup", "extend", "normal"]
 
 
 def _normalize_weakness_kind(value: str) -> str:
@@ -87,6 +88,105 @@ class WeaknessTag(BaseModel):
         return _normalize_weakness_kind(value)
 
 
+class JobTargetRef(BaseModel):
+    id: str
+    title: str
+    company_name: str = ""
+    latest_analysis_status: str = ""
+
+
+class ProfileSnapshot(BaseModel):
+    target_role: str = ""
+    target_company_type: str = ""
+    current_stage: str = ""
+    application_deadline: str | None = None
+    tech_stacks: list[str] = Field(default_factory=list)
+    primary_projects: list[str] = Field(default_factory=list)
+    self_reported_weaknesses: list[str] = Field(default_factory=list)
+    active_job_target: JobTargetRef | None = None
+
+
+class KnowledgeNode(BaseModel):
+    id: str
+    scope_type: str = "global"
+    scope_id: str = ""
+    parent_id: str = ""
+    label: str
+    node_type: Literal["topic", "concept", "skill"]
+    proficiency: float = Field(default=0, ge=0.0, le=5.0)
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    hit_count: int = Field(default=0, ge=0)
+    last_assessed_at: str | None = None
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class KnowledgeEdge(BaseModel):
+    source_id: str
+    target_id: str
+    edge_type: Literal["contains", "prerequisite", "related"]
+    created_at: str = ""
+
+
+class KnowledgeSubgraph(BaseModel):
+    nodes: list[KnowledgeNode] = Field(default_factory=list)
+    edges: list[KnowledgeEdge] = Field(default_factory=list)
+
+
+class AgentObservation(BaseModel):
+    id: str = ""
+    session_id: str = ""
+    scope_type: str = "global"
+    scope_id: str = ""
+    topic: str = ""
+    category: Literal["pattern", "misconception", "growth", "strategy_note"]
+    content: str
+    tags: list[str] = Field(default_factory=list)
+    relevance: float = Field(default=1.0, ge=0.0, le=10.0)
+    created_at: str = ""
+    archived_at: str | None = None
+
+
+class SessionMemorySummary(BaseModel):
+    id: str = ""
+    session_id: str
+    mode: Literal["basics", "project"]
+    topic: str = ""
+    project_id: str = ""
+    job_target_id: str = ""
+    prompt_set_id: str = ""
+    summary: str
+    strengths: list[str] = Field(default_factory=list)
+    gaps: list[str] = Field(default_factory=list)
+    misconceptions: list[str] = Field(default_factory=list)
+    growth: list[str] = Field(default_factory=list)
+    recommended_focus: list[str] = Field(default_factory=list)
+    salience: float = Field(default=0.5, ge=0.0, le=1.0)
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class AgentContext(BaseModel):
+    profile: ProfileSnapshot | None = None
+    knowledge_subgraph: KnowledgeSubgraph | None = None
+    observations: list[AgentObservation] = Field(default_factory=list)
+    weakness_profile: list[WeaknessTag] = Field(default_factory=list)
+    session_summaries: list[SessionMemorySummary] = Field(default_factory=list)
+
+
+class KnowledgeUpdate(BaseModel):
+    node_id: str = ""
+    scope_type: str = "global"
+    scope_id: str = ""
+    parent_id: str = ""
+    label: str = ""
+    node_type: str = ""
+    proficiency: float = Field(default=0.0, ge=0.0, le=5.0)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    evidence: str = ""
+    observed_label: str = ""
+
+
 class QuestionTemplate(BaseModel):
     id: str = ""
     mode: str
@@ -165,6 +265,7 @@ class GenerateQuestionRequest(BaseModel):
     context_chunks: list[RepoChunk] = Field(default_factory=list)
     weaknesses: list[WeaknessTag] = Field(default_factory=list)
     job_target_analysis: JobTargetAnalysisSnapshot | None = None
+    agent_context: AgentContext | None = None
 
 
 class GenerateQuestionResponse(BaseModel):
@@ -191,6 +292,7 @@ class EvaluateAnswerRequest(BaseModel):
     score_weights: dict[str, float] = Field(default_factory=dict)
     job_target_analysis: JobTargetAnalysisSnapshot | None = None
     retry_feedback: str = ""
+    agent_context: AgentContext | None = None
 
 
 class EvaluationResult(BaseModel):
@@ -206,8 +308,15 @@ class EvaluationResult(BaseModel):
     weakness_hits: list[WeaknessHit] = Field(default_factory=list)
 
 
+class EvaluateAnswerSideEffects(BaseModel):
+    observations: list[AgentObservation] = Field(default_factory=list)
+    knowledge_updates: list[KnowledgeUpdate] = Field(default_factory=list)
+    depth_signal: DepthSignal = "normal"
+
+
 class EvaluateAnswerEnvelope(BaseModel):
     result: EvaluationResult
+    side_effects: EvaluateAnswerSideEffects = Field(default_factory=EvaluateAnswerSideEffects)
     raw_output: str = ""
 
 
@@ -227,9 +336,13 @@ class TrainingSession(BaseModel):
     project_id: str = ""
     job_target_id: str = ""
     job_target_analysis_id: str = ""
+    prompt_set_id: str = ""
     intensity: str = "standard"
     status: str = ""
+    max_turns: int = 0
     total_score: float = 0.0
+    project: ProjectProfile | None = None
+    turns: list[TrainingTurn] = Field(default_factory=list)
 
 
 class GenerateReviewRequest(BaseModel):
@@ -239,6 +352,7 @@ class GenerateReviewRequest(BaseModel):
     prompt_set_id: str = ""
     job_target_analysis: JobTargetAnalysisSnapshot | None = None
     retry_feedback: str = ""
+    agent_context: AgentContext | None = None
 
 
 class NextSession(BaseModel):
@@ -262,6 +376,21 @@ class ReviewCard(BaseModel):
     score_breakdown: dict[str, float] = Field(default_factory=dict)
 
 
+class AgentSessionDetail(BaseModel):
+    session: TrainingSession
+    review: ReviewCard | None = None
+
+
+class GenerateReviewSideEffects(BaseModel):
+    observations: list[AgentObservation] = Field(default_factory=list)
+    knowledge_updates: list[KnowledgeUpdate] = Field(default_factory=list)
+    recommended_next: NextSession | None = None
+
+
 class GenerateReviewEnvelope(BaseModel):
     result: ReviewCard
+    side_effects: GenerateReviewSideEffects = Field(default_factory=GenerateReviewSideEffects)
     raw_output: str = ""
+
+
+EvaluateAnswerEnvelope.model_rebuild()

@@ -41,6 +41,28 @@ const (
 	ProjectImportStagePersisting = "persisting_project"
 	ProjectImportStageCompleted  = "completed"
 	ProjectImportStageFailed     = "failed"
+
+	MemoryScopeGlobal    = "global"
+	MemoryScopeProject   = "project"
+	MemoryScopeSession   = "session"
+	MemoryScopeJobTarget = "job_target"
+
+	KnowledgeNodeTypeTopic   = "topic"
+	KnowledgeNodeTypeConcept = "concept"
+	KnowledgeNodeTypeSkill   = "skill"
+
+	KnowledgeEdgeContains     = "contains"
+	KnowledgeEdgePrerequisite = "prerequisite"
+	KnowledgeEdgeRelated      = "related"
+
+	ObservationCategoryPattern       = "pattern"
+	ObservationCategoryMisconception = "misconception"
+	ObservationCategoryGrowth        = "growth"
+	ObservationCategoryStrategyNote  = "strategy_note"
+
+	DepthSignalNormal       = "normal"
+	DepthSignalSkipFollowup = "skip_followup"
+	DepthSignalExtend       = "extend"
 )
 
 type UserProfile struct {
@@ -308,6 +330,145 @@ type ReviewCard struct {
 	PromptSet           *PromptSetSummary  `json:"prompt_set,omitempty"`
 }
 
+type ProfileSnapshot struct {
+	TargetRole           string        `json:"target_role,omitempty"`
+	TargetCompanyType    string        `json:"target_company_type,omitempty"`
+	CurrentStage         string        `json:"current_stage,omitempty"`
+	ApplicationDeadline  *time.Time    `json:"application_deadline,omitempty"`
+	TechStacks           []string      `json:"tech_stacks,omitempty"`
+	PrimaryProjects      []string      `json:"primary_projects,omitempty"`
+	SelfReportedWeakness []string      `json:"self_reported_weaknesses,omitempty"`
+	ActiveJobTarget      *JobTargetRef `json:"active_job_target,omitempty"`
+}
+
+type KnowledgeNode struct {
+	ID             string     `json:"id"`
+	ScopeType      string     `json:"scope_type,omitempty"`
+	ScopeID        string     `json:"scope_id,omitempty"`
+	ParentID       string     `json:"parent_id,omitempty"`
+	Label          string     `json:"label"`
+	NodeType       string     `json:"node_type"`
+	Proficiency    float64    `json:"proficiency"`
+	Confidence     float64    `json:"confidence"`
+	HitCount       int        `json:"hit_count"`
+	LastAssessedAt *time.Time `json:"last_assessed_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+type KnowledgeEdge struct {
+	SourceID  string    `json:"source_id"`
+	TargetID  string    `json:"target_id"`
+	EdgeType  string    `json:"edge_type"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type KnowledgeSubgraph struct {
+	Nodes []KnowledgeNode `json:"nodes"`
+	Edges []KnowledgeEdge `json:"edges"`
+}
+
+type KnowledgeSnapshot struct {
+	ID          string    `json:"id"`
+	NodeID      string    `json:"node_id"`
+	SessionID   string    `json:"session_id,omitempty"`
+	Proficiency float64   `json:"proficiency"`
+	Evidence    string    `json:"evidence,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type KnowledgeUpdate struct {
+	NodeID        string  `json:"node_id,omitempty"`
+	ScopeType     string  `json:"scope_type,omitempty"`
+	ScopeID       string  `json:"scope_id,omitempty"`
+	ParentID      string  `json:"parent_id,omitempty"`
+	Label         string  `json:"label,omitempty"`
+	NodeType      string  `json:"node_type,omitempty"`
+	Proficiency   float64 `json:"proficiency"`
+	Confidence    float64 `json:"confidence,omitempty"`
+	Evidence      string  `json:"evidence,omitempty"`
+	ObservedLabel string  `json:"observed_label,omitempty"`
+}
+
+type AgentObservation struct {
+	ID         string     `json:"id"`
+	SessionID  string     `json:"session_id,omitempty"`
+	ScopeType  string     `json:"scope_type,omitempty"`
+	ScopeID    string     `json:"scope_id,omitempty"`
+	Topic      string     `json:"topic,omitempty"`
+	Category   string     `json:"category"`
+	Content    string     `json:"content"`
+	Tags       []string   `json:"tags,omitempty"`
+	Relevance  float64    `json:"relevance"`
+	CreatedAt  time.Time  `json:"created_at"`
+	ArchivedAt *time.Time `json:"archived_at,omitempty"`
+}
+
+type SessionMemorySummary struct {
+	ID               string    `json:"id"`
+	SessionID        string    `json:"session_id"`
+	Mode             string    `json:"mode"`
+	Topic            string    `json:"topic,omitempty"`
+	ProjectID        string    `json:"project_id,omitempty"`
+	JobTargetID      string    `json:"job_target_id,omitempty"`
+	PromptSetID      string    `json:"prompt_set_id,omitempty"`
+	Summary          string    `json:"summary"`
+	Strengths        []string  `json:"strengths,omitempty"`
+	Gaps             []string  `json:"gaps,omitempty"`
+	Misconceptions   []string  `json:"misconceptions,omitempty"`
+	GrowthSignals    []string  `json:"growth,omitempty"`
+	RecommendedFocus []string  `json:"recommended_focus,omitempty"`
+	Salience         float64   `json:"salience"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+type MemoryIndexEntry struct {
+	ID          string    `json:"id"`
+	MemoryType  string    `json:"memory_type"`
+	ScopeType   string    `json:"scope_type"`
+	ScopeID     string    `json:"scope_id,omitempty"`
+	Topic       string    `json:"topic,omitempty"`
+	ProjectID   string    `json:"project_id,omitempty"`
+	SessionID   string    `json:"session_id,omitempty"`
+	JobTargetID string    `json:"job_target_id,omitempty"`
+	Tags        []string  `json:"tags,omitempty"`
+	Entities    []string  `json:"entities,omitempty"`
+	Summary     string    `json:"summary,omitempty"`
+	Salience    float64   `json:"salience"`
+	Confidence  float64   `json:"confidence"`
+	Freshness   float64   `json:"freshness"`
+	RefTable    string    `json:"ref_table"`
+	RefID       string    `json:"ref_id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type AgentContext struct {
+	Profile           *ProfileSnapshot       `json:"profile,omitempty"`
+	KnowledgeSubgraph *KnowledgeSubgraph     `json:"knowledge_subgraph,omitempty"`
+	Observations      []AgentObservation     `json:"observations,omitempty"`
+	WeaknessProfile   []WeaknessTag          `json:"weakness_profile,omitempty"`
+	SessionSummaries  []SessionMemorySummary `json:"session_summaries,omitempty"`
+}
+
+type EvaluateAnswerSideEffects struct {
+	Observations     []AgentObservation `json:"observations,omitempty"`
+	KnowledgeUpdates []KnowledgeUpdate  `json:"knowledge_updates,omitempty"`
+	DepthSignal      string             `json:"depth_signal,omitempty"`
+}
+
+type GenerateReviewSideEffects struct {
+	Observations     []AgentObservation `json:"observations,omitempty"`
+	KnowledgeUpdates []KnowledgeUpdate  `json:"knowledge_updates,omitempty"`
+	RecommendedNext  *NextSession       `json:"recommended_next,omitempty"`
+}
+
+type AgentSessionDetail struct {
+	Session *TrainingSession `json:"session"`
+	Review  *ReviewCard      `json:"review,omitempty"`
+}
+
 type NextSession struct {
 	Mode      string `json:"mode"`
 	Topic     string `json:"topic,omitempty"`
@@ -431,6 +592,7 @@ type GenerateQuestionRequest struct {
 	ContextChunks     []RepoChunk               `json:"context_chunks,omitempty"`
 	Weaknesses        []WeaknessTag             `json:"weaknesses,omitempty"`
 	JobTargetAnalysis *AnalyzeJobTargetResponse `json:"job_target_analysis,omitempty"`
+	AgentContext      *AgentContext             `json:"agent_context,omitempty"`
 }
 
 type GenerateQuestionResponse struct {
@@ -451,6 +613,7 @@ type EvaluateAnswerRequest struct {
 	MaxTurns          int                       `json:"max_turns"`
 	ScoreWeights      map[string]float64        `json:"score_weights,omitempty"`
 	JobTargetAnalysis *AnalyzeJobTargetResponse `json:"job_target_analysis,omitempty"`
+	AgentContext      *AgentContext             `json:"agent_context,omitempty"`
 }
 
 type GenerateReviewRequest struct {
@@ -459,6 +622,7 @@ type GenerateReviewRequest struct {
 	Turns             []TrainingTurn            `json:"turns"`
 	PromptSetID       string                    `json:"prompt_set_id,omitempty"`
 	JobTargetAnalysis *AnalyzeJobTargetResponse `json:"job_target_analysis,omitempty"`
+	AgentContext      *AgentContext             `json:"agent_context,omitempty"`
 }
 
 type EvaluationLogEntry struct {

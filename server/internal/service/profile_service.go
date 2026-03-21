@@ -11,7 +11,14 @@ func (s *Service) GetProfile(ctx context.Context) (*domain.UserProfile, error) {
 }
 
 func (s *Service) SaveProfile(ctx context.Context, input domain.UserProfileInput) (*domain.UserProfile, error) {
-	return s.repo.SaveUserProfile(ctx, input)
+	profile, err := s.repo.SaveUserProfile(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.EnsureKnowledgeSeeds(ctx); err != nil {
+		return nil, err
+	}
+	return profile, nil
 }
 
 func (s *Service) GetDashboard(ctx context.Context) (*domain.Dashboard, error) {

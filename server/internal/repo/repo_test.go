@@ -100,6 +100,27 @@ func TestListQuestionTemplatesByTopicsReturnsTemplatesAcrossSelectedTopics(t *te
 	}
 }
 
+func TestBootstrapSeedsKnowledgeNodesForBasicsTopics(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	var count int
+	if err := store.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM knowledge_nodes
+		WHERE scope_type = ? AND node_type = ?
+	`, domain.MemoryScopeGlobal, domain.KnowledgeNodeTypeTopic).Scan(&count); err != nil {
+		t.Fatalf("query knowledge_nodes count: %v", err)
+	}
+
+	if count < 10 {
+		t.Fatalf("expected at least 10 seeded topic knowledge nodes, got %d", count)
+	}
+}
+
 func TestBootstrapBackfillsMissingQuestionTemplatesIntoExistingDatabase(t *testing.T) {
 	store, err := openTestStore(t)
 	if err != nil {

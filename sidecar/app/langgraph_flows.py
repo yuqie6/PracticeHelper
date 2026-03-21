@@ -333,9 +333,10 @@ def _validate_review_result(result: ReviewCard) -> str:
 
 
 def _to_envelope(task_result: TaskExecutionResult, envelope_cls):
-    return envelope_cls.model_validate(
-        {
-            "result": task_result.result.model_dump(mode="json"),
-            "raw_output": task_result.raw_output,
-        }
-    )
+    payload = {
+        "result": task_result.result.model_dump(mode="json"),
+        "raw_output": task_result.raw_output,
+    }
+    if task_result.side_effects:
+        payload["side_effects"] = task_result.side_effects
+    return envelope_cls.model_validate(payload)

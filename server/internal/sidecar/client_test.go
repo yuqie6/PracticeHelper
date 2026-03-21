@@ -30,6 +30,9 @@ func TestEvaluateAnswerSupportsEnvelopedResultPayload(t *testing.T) {
 				"followup_expected_points": []string{"先止血", "再定位"},
 				"weakness_hits":            []map[string]any{},
 			},
+			"side_effects": map[string]any{
+				"depth_signal": "extend",
+			},
 			"raw_output": `{"score":82}`,
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
@@ -38,7 +41,7 @@ func TestEvaluateAnswerSupportsEnvelopedResultPayload(t *testing.T) {
 	defer server.Close()
 
 	client := New(server.URL, time.Second)
-	result, meta, err := client.EvaluateAnswer(context.Background(), domain.EvaluateAnswerRequest{
+	result, sideEffects, meta, err := client.EvaluateAnswer(context.Background(), domain.EvaluateAnswerRequest{
 		Mode:      domain.ModeBasics,
 		Topic:     domain.BasicsTopicRedis,
 		Question:  "Redis 为什么快？",
@@ -68,6 +71,9 @@ func TestEvaluateAnswerSupportsEnvelopedResultPayload(t *testing.T) {
 	if meta.RawOutput != `{"score":82}` {
 		t.Fatalf("expected raw output to be preserved, got %q", meta.RawOutput)
 	}
+	if sideEffects == nil || sideEffects.DepthSignal != domain.DepthSignalExtend {
+		t.Fatalf("expected depth signal extend, got %+v", sideEffects)
+	}
 }
 
 func TestGenerateReviewStreamReadsRawOutputFromResultEventEnvelope(t *testing.T) {
@@ -95,6 +101,13 @@ func TestGenerateReviewStreamReadsRawOutputFromResultEventEnvelope(t *testing.T)
 						"next_training_focus": []string{"围绕缓存一致性做专项"},
 						"score_breakdown":     map[string]float64{"准确性": 84},
 					},
+					"side_effects": map[string]any{
+						"recommended_next": map[string]any{
+							"mode":   "basics",
+							"topic":  "redis",
+							"reason": "先补缓存一致性取舍",
+						},
+					},
 					"raw_output": `{"overall":"整体过线，但还可以再补强。"}`,
 				},
 			},
@@ -110,7 +123,7 @@ func TestGenerateReviewStreamReadsRawOutputFromResultEventEnvelope(t *testing.T)
 
 	client := New(server.URL, time.Second)
 	var phases []string
-	result, meta, err := client.GenerateReviewStream(
+	result, sideEffects, meta, err := client.GenerateReviewStream(
 		context.Background(),
 		domain.GenerateReviewRequest{
 			Session: &domain.TrainingSession{
@@ -152,6 +165,80 @@ func TestGenerateReviewStreamReadsRawOutputFromResultEventEnvelope(t *testing.T)
 	if meta.RawOutput != `{"overall":"整体过线，但还可以再补强。"}` {
 		t.Fatalf("unexpected raw output: %q", meta.RawOutput)
 	}
+	if sideEffects == nil || sideEffects.RecommendedNext == nil {
+		t.Fatalf("expected recommended_next side effects, got %+v", sideEffects)
+	}
+	if sideEffects.RecommendedNext.Topic != domain.BasicsTopicRedis {
+		t.Fatalf("expected side effect topic redis, got %+v", sideEffects.RecommendedNext)
+	}
+}
+
+func TestEvaluateAnswerStreamReadsSideEffectsFromResultEventEnvelope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/evaluate_answer/stream" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set(promptSetHeader, "stable-v1")
+		w.Header().Set(promptHashHeader, "hash-answer-stream")
+		w.Header().Set(modelNameHeader, "gpt-test")
+		w.Header().Set("Content-Type", "application/x-ndjson")
+
+		lines := []map[string]any{
+			{"type": "phase", "phase": "call_model"},
+			{
+				"type": "result",
+				"data": map[string]any{
+					"result": map[string]any{
+						"score":                    79,
+						"score_breakdown":          map[string]float64{"准确性": 79},
+						"strengths":                []string{"主线完整"},
+						"gaps":                     []string{"细节不够具体"},
+						"followup_question":        "如果线上抖动，你先看什么？",
+						"followup_expected_points": []string{"先止血", "再定位"},
+						"weakness_hits":            []map[string]any{},
+					},
+					"side_effects": map[string]any{
+						"depth_signal": "extend",
+					},
+					"raw_output": `{"score":79}`,
+				},
+			},
+		}
+
+		for _, line := range lines {
+			if err := json.NewEncoder(w).Encode(line); err != nil {
+				t.Fatalf("encode stream line: %v", err)
+			}
+		}
+	}))
+	defer server.Close()
+
+	client := New(server.URL, time.Second)
+	result, sideEffects, meta, err := client.EvaluateAnswerStream(
+		context.Background(),
+		domain.EvaluateAnswerRequest{
+			Mode:      domain.ModeBasics,
+			Topic:     domain.BasicsTopicRedis,
+			Question:  "Redis 为什么快？",
+			Answer:    "因为数据主要在内存里。",
+			TurnIndex: 1,
+			MaxTurns:  2,
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("EvaluateAnswerStream() error = %v", err)
+	}
+
+	if result.Score != 79 {
+		t.Fatalf("expected score 79, got %.1f", result.Score)
+	}
+	if meta == nil || meta.RawOutput != `{"score":79}` {
+		t.Fatalf("unexpected prompt meta: %+v", meta)
+	}
+	if sideEffects == nil || sideEffects.DepthSignal != domain.DepthSignalExtend {
+		t.Fatalf("expected depth signal extend, got %+v", sideEffects)
+	}
 }
 
 func TestEvaluateAnswerRetriesOnRetryableStatus(t *testing.T) {
@@ -183,7 +270,7 @@ func TestEvaluateAnswerRetriesOnRetryableStatus(t *testing.T) {
 	defer server.Close()
 
 	client := New(server.URL, time.Second)
-	result, _, err := client.EvaluateAnswer(context.Background(), domain.EvaluateAnswerRequest{
+	result, _, _, err := client.EvaluateAnswer(context.Background(), domain.EvaluateAnswerRequest{
 		Mode:      domain.ModeBasics,
 		Topic:     domain.BasicsTopicRedis,
 		Question:  "Redis 为什么快？",
@@ -242,7 +329,7 @@ func TestGenerateReviewStreamRetriesBeforeConsumingBody(t *testing.T) {
 	defer server.Close()
 
 	client := New(server.URL, time.Second)
-	result, meta, err := client.GenerateReviewStream(
+	result, _, meta, err := client.GenerateReviewStream(
 		context.Background(),
 		domain.GenerateReviewRequest{
 			Session: &domain.TrainingSession{

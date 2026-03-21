@@ -23,6 +23,10 @@ type Handler struct {
 }
 
 func NewRouter(svc *service.Service) *gin.Engine {
+	return NewRouterWithInternalToken(svc, "")
+}
+
+func NewRouterWithInternalToken(svc *service.Service, internalToken string) *gin.Engine {
 	handler := &Handler{service: svc}
 
 	router := gin.New()
@@ -77,6 +81,13 @@ func NewRouter(svc *service.Service) *gin.Engine {
 		api.GET("/weaknesses/trends", handler.getWeaknessTrends)
 		api.GET("/reviews/due", handler.listDueReviews)
 		api.POST("/reviews/due/:id/complete", handler.completeDueReview)
+	}
+
+	internal := router.Group("/internal")
+	internal.Use(internalAuthMiddleware(internalToken))
+	{
+		internal.GET("/search-chunks", handler.searchChunksInternal)
+		internal.GET("/session-detail/:id", handler.getSessionDetailInternal)
 	}
 
 	return router

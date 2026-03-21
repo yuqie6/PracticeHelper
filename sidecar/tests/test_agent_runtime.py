@@ -6,6 +6,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.agent_runtime import AgentRuntime, TaskExecutionResult
+from app.agent_tools import build_generate_review_agent_tools
 from app.config import Settings
 from app.langgraph_flows import (
     _build_analyze_repo_graph,
@@ -21,6 +22,7 @@ from app.runtime_prompts import (
     review_prompt_bundle,
 )
 from app.schemas import (
+    AgentSessionDetail,
     AnalyzeJobTargetRequest,
     AnalyzeRepoEnvelope,
     AnalyzeRepoRequest,
@@ -110,6 +112,32 @@ class FakeQuestionGraphRuntime:
         return TaskExecutionResult(
             result=GenerateQuestionResponse(question="问题", expected_points=["点1"]),
             raw_output='{"question":"问题","expected_points":["点1"]}',
+        )
+
+
+class FakeBackendClient:
+    def __init__(self) -> None:
+        self.enabled = True
+        self.search_queries: list[tuple[str, str, int]] = []
+        self.session_ids: list[str] = []
+
+    def search_repo_chunks(self, project_id: str, query: str, limit: int = 6) -> list[RepoChunk]:
+        self.search_queries.append((project_id, query, limit))
+        return [
+            RepoChunk(
+                file_path="internal/cache.go",
+                file_type=".go",
+                content="retry and cache consistency",
+                importance=1.0,
+                fts_key="internal/cache.go#0",
+            )
+        ]
+
+    def get_session_detail(self, session_id: str):
+        self.session_ids.append(session_id)
+        return AgentSessionDetail(
+            session=TrainingSession(id=session_id, mode="basics", topic="redis", turns=[]),
+            review=None,
         )
 
 
@@ -333,6 +361,61 @@ def test_generate_question_falls_back_to_single_shot_when_model_skips_tools() ->
     assert len(client.calls) == 2
     assert "下面是你已经可以直接使用的上下文" in client.calls[1]["messages"][1]["content"]
     assert "read_project_brief" in client.calls[1]["messages"][1]["content"]
+
+
+def test_generate_question_can_use_search_repo_chunks_callback_tool() -> None:
+    backend_client = FakeBackendClient()
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+            server_base_url="http://127.0.0.1:8090",
+            internal_token="secret-token",
+        ),
+        model_client=FakeModelClient(
+            [
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_search",
+                            "function": {
+                                "name": "search_repo_chunks",
+                                "arguments": '{"query":"retry path","limit":2}',
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content=(
+                        '{"question":"讲讲项目里的重试链路设计。",'
+                        '"expected_points":["触发条件","兜底策略","一致性"]}'
+                    ),
+                    tool_calls=[],
+                ),
+            ]
+        ),
+        go_client=backend_client,
+    )
+
+    response = runtime.generate_question(
+        GenerateQuestionRequest(
+            mode="project",
+            intensity="standard",
+            project=ProjectProfile(
+                id="proj_1",
+                name="Mirror",
+                summary="Agent workflow",
+                followup_points=["retry"],
+            ),
+        )
+    )
+
+    assert response.question == "讲讲项目里的重试链路设计。"
+    assert backend_client.search_queries == [("proj_1", "retry path", 2)]
 
 
 def test_analyze_job_target_returns_structured_snapshot() -> None:
@@ -593,6 +676,7 @@ def test_evaluate_answer_graph_retries_after_invalid_output() -> None:
     assert isinstance(result["result"], EvaluateAnswerEnvelope)
     assert result["result"].result.followup_question == "如果线上抖动，你会先看什么？"
     assert runtime.retry_feedback[1] == "missing strengths/gaps"
+    assert result["result"].side_effects.depth_signal == "normal"
 
 
 def test_evaluate_answer_graph_raises_after_retry_budget_is_exhausted() -> None:
@@ -640,6 +724,191 @@ def test_generate_review_graph_retries_after_invalid_output() -> None:
     assert isinstance(result["result"], GenerateReviewEnvelope)
     assert result["result"].result.top_fix == "先补最关键缺口"
     assert runtime.retry_feedback[1] == "missing top_fix"
+
+
+def test_evaluate_answer_returns_side_effects_from_action_tools() -> None:
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=FakeModelClient(
+            [
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_ctx",
+                            "function": {
+                                "name": "recall_training_context",
+                                "arguments": "{}",
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_obs",
+                            "function": {
+                                "name": "record_observation",
+                                "arguments": (
+                                    '{"category":"pattern","content":"用户会讲主线，但案例不够具体。",'
+                                    '"tags":["表达","案例"],"relevance":0.9,"topic":"redis"}'
+                                ),
+                            },
+                        },
+                        {
+                            "id": "call_kn",
+                            "function": {
+                                "name": "update_knowledge",
+                                "arguments": (
+                                    '{"label":"redis","node_type":"topic","proficiency":2.5,'
+                                    '"confidence":0.8,"evidence":"能讲清主线，但案例不足"}'
+                                ),
+                            },
+                        },
+                        {
+                            "id": "call_depth",
+                            "function": {
+                                "name": "set_depth_signal",
+                                "arguments": '{"depth_signal":"extend"}',
+                            },
+                        },
+                    ],
+                ),
+                ChatCompletionResult(
+                    content=(
+                        '{"score":78,"score_breakdown":{"准确性":78},"headline":"主线清楚",'
+                        '"strengths":["主线完整"],"gaps":["案例不够具体"],"suggestion":"补真实案例",'
+                        '"followup_question":"如果线上抖动，你先看什么？",'
+                        '"followup_expected_points":["先止血","再定位"],'
+                        '"weakness_hits":[{"kind":"detail","label":"案例不够具体","severity":0.7}]}'
+                    ),
+                    tool_calls=[],
+                ),
+            ]
+        ),
+    )
+
+    graph = _build_evaluate_answer_graph(runtime)
+    result = graph.invoke(
+        {
+            "request": EvaluateAnswerRequest(
+                mode="basics",
+                topic="redis",
+                question="Redis 为什么快？",
+                expected_points=["内存访问", "事件循环"],
+                answer="因为主要在内存里，线程模型也比较简单。",
+                turn_index=1,
+                max_turns=2,
+            )
+        }
+    )
+
+    envelope = result["result"]
+    assert isinstance(envelope, EvaluateAnswerEnvelope)
+    assert envelope.side_effects.depth_signal == "extend"
+    assert len(envelope.side_effects.observations) == 1
+    assert envelope.side_effects.observations[0].content == "用户会讲主线，但案例不够具体。"
+    assert len(envelope.side_effects.knowledge_updates) == 1
+    assert envelope.side_effects.knowledge_updates[0].label == "redis"
+
+
+def test_generate_review_returns_recommended_next_from_action_tool() -> None:
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=FakeModelClient(
+            [
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_session",
+                            "function": {
+                                "name": "recall_training_context",
+                                "arguments": "{}",
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_next",
+                            "function": {
+                                "name": "suggest_next_session",
+                                "arguments": (
+                                    '{"mode":"basics","topic":"redis","reason":"先补缓存击穿止血顺序"}'
+                                ),
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content=(
+                        '{"overall":"总结","top_fix":"先补关键缺口","top_fix_reason":"这是最大短板",'
+                        '"highlights":["主线清楚"],"gaps":["案例不够具体"],'
+                        '"suggested_topics":["redis"],"next_training_focus":["补细节"],'
+                        '"recommended_next":{"mode":"basics","topic":"redis","reason":"补短板"},'
+                        '"score_breakdown":{"准确性":72}}'
+                    ),
+                    tool_calls=[],
+                ),
+            ]
+        ),
+    )
+
+    graph = _build_generate_review_graph(runtime)
+    result = graph.invoke(
+        {
+            "request": GenerateReviewRequest(
+                session=TrainingSession(id="sess_1", mode="basics", topic="redis"),
+                turns=[
+                    TrainingTurn(
+                        question="Redis 为什么快？",
+                        expected_points=["内存访问", "事件循环"],
+                        answer="因为它主要在内存里。",
+                    )
+                ],
+            )
+        }
+    )
+
+    envelope = result["result"]
+    assert isinstance(envelope, GenerateReviewEnvelope)
+    assert envelope.side_effects.recommended_next is not None
+    assert envelope.side_effects.recommended_next.topic == "redis"
+    assert envelope.side_effects.recommended_next.reason == "先补缓存击穿止血顺序"
+
+
+def test_generate_review_tools_include_session_detail_callback_when_backend_enabled() -> None:
+    backend_client = FakeBackendClient()
+    tools = build_generate_review_agent_tools(
+        GenerateReviewRequest(
+            session=TrainingSession(id="sess_1", mode="basics", topic="redis"),
+            turns=[],
+        ),
+        {},
+        backend_client=backend_client,
+    )
+
+    by_name = {tool.name: tool for tool in tools}
+    assert "get_session_detail" in by_name
+    payload = by_name["get_session_detail"].handler({})
+    assert payload["session"]["id"] == "sess_1"
+    assert backend_client.session_ids == ["sess_1"]
 
 
 def test_review_prompt_bundle_includes_job_target_analysis_context() -> None:

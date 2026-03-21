@@ -90,3 +90,20 @@ func dedupeWeaknessHits(hits []domain.WeaknessHit) []domain.WeaknessHit {
 
 	return result
 }
+
+func normalizeMemoryScope(scopeType string) string {
+	switch strings.TrimSpace(scopeType) {
+	case domain.MemoryScopeProject:
+		return domain.MemoryScopeProject
+	case domain.MemoryScopeSession:
+		return domain.MemoryScopeSession
+	case domain.MemoryScopeJobTarget:
+		return domain.MemoryScopeJobTarget
+	default:
+		return domain.MemoryScopeGlobal
+	}
+}
+
+func normalizeTopicLabel(raw string) string {
+	return strings.TrimSpace(strings.ToLower(raw))
+}

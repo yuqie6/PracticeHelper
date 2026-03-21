@@ -21,21 +21,35 @@ func (s *Service) finalizeReview(ctx context.Context, sessionID string) (*domain
 	if err != nil {
 		return nil, err
 	}
+	agentContext, err := s.getAgentContext(ctx, agentContextParams{
+		Topic:               updatedSession.Topic,
+		ProjectID:           updatedSession.ProjectID,
+		JobTargetID:         updatedSession.JobTargetID,
+		SessionID:           updatedSession.ID,
+		WeaknessLimit:       5,
+		ObservationLimit:    5,
+		SessionSummaryLimit: 3,
+		KnowledgeNodeLimit:  10,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	startedAt := time.Now()
-	review, promptMeta, err := s.sidecar.GenerateReview(ctx, domain.GenerateReviewRequest{
+	review, sideEffects, promptMeta, err := s.sidecar.GenerateReview(ctx, domain.GenerateReviewRequest{
 		Session:           updatedSession,
 		Project:           updatedSession.Project,
 		Turns:             updatedSession.Turns,
 		PromptSetID:       updatedSession.PromptSetID,
 		JobTargetAnalysis: jobTargetAnalysis,
+		AgentContext:      agentContext,
 	})
 	if err != nil {
 		return nil, err
 	}
 	s.recordEvaluationLog(ctx, updatedSession.ID, "", "generate_review", startedAt, promptMeta)
 
-	return s.persistReview(ctx, updatedSession, review)
+	return s.persistReview(ctx, updatedSession, review, sideEffects)
 }
 
 func (s *Service) finalizeReviewStream(
@@ -54,21 +68,35 @@ func (s *Service) finalizeReviewStream(
 	if err != nil {
 		return nil, err
 	}
+	agentContext, err := s.getAgentContext(ctx, agentContextParams{
+		Topic:               updatedSession.Topic,
+		ProjectID:           updatedSession.ProjectID,
+		JobTargetID:         updatedSession.JobTargetID,
+		SessionID:           updatedSession.ID,
+		WeaknessLimit:       5,
+		ObservationLimit:    5,
+		SessionSummaryLimit: 3,
+		KnowledgeNodeLimit:  10,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	startedAt := time.Now()
-	review, promptMeta, err := s.sidecar.GenerateReviewStream(ctx, domain.GenerateReviewRequest{
+	review, sideEffects, promptMeta, err := s.sidecar.GenerateReviewStream(ctx, domain.GenerateReviewRequest{
 		Session:           updatedSession,
 		Project:           updatedSession.Project,
 		Turns:             updatedSession.Turns,
 		PromptSetID:       updatedSession.PromptSetID,
 		JobTargetAnalysis: jobTargetAnalysis,
+		AgentContext:      agentContext,
 	}, emit)
 	if err != nil {
 		return nil, err
 	}
 	s.recordEvaluationLog(ctx, updatedSession.ID, "", "generate_review_stream", startedAt, promptMeta)
 
-	savedSession, err := s.persistReview(ctx, updatedSession, review)
+	savedSession, err := s.persistReview(ctx, updatedSession, review, sideEffects)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +109,11 @@ func (s *Service) persistReview(
 	ctx context.Context,
 	session *domain.TrainingSession,
 	review *domain.ReviewCard,
+	sideEffects *domain.GenerateReviewSideEffects,
 ) (*domain.TrainingSession, error) {
+	if sideEffects != nil && review.RecommendedNext == nil && sideEffects.RecommendedNext != nil {
+		review.RecommendedNext = sideEffects.RecommendedNext
+	}
 	review.ID = newID("review")
 	review.SessionID = session.ID
 	review.PromptSetID = session.PromptSetID
@@ -97,10 +129,72 @@ func (s *Service) persistReview(
 	if err := s.repo.SaveSession(ctx, session); err != nil {
 		return nil, err
 	}
+	if err := s.repo.UpsertSessionMemorySummary(ctx, buildSessionMemorySummary(session, review)); err != nil {
+		return nil, fmt.Errorf("save session memory summary: %w", err)
+	}
+	if err := s.applyGenerateReviewSideEffects(ctx, session, sideEffects); err != nil {
+		return nil, err
+	}
 
 	_ = s.scheduleReview(ctx, session, review)
 
 	return session, nil
+}
+
+func (s *Service) applyGenerateReviewSideEffects(
+	ctx context.Context,
+	session *domain.TrainingSession,
+	sideEffects *domain.GenerateReviewSideEffects,
+) error {
+	if sideEffects == nil {
+		return nil
+	}
+	if len(sideEffects.Observations) > 0 {
+		if err := s.repo.CreateObservations(ctx, session.ID, sideEffects.Observations); err != nil {
+			return fmt.Errorf("create review observations: %w", err)
+		}
+	}
+	if len(sideEffects.KnowledgeUpdates) > 0 {
+		if err := s.repo.UpsertKnowledgeNodes(ctx, session.ID, sideEffects.KnowledgeUpdates); err != nil {
+			return fmt.Errorf("upsert review knowledge updates: %w", err)
+		}
+	}
+	return nil
+}
+
+func buildSessionMemorySummary(
+	session *domain.TrainingSession,
+	review *domain.ReviewCard,
+) *domain.SessionMemorySummary {
+	if session == nil || review == nil {
+		return nil
+	}
+
+	growthSignals := make([]string, 0, 1)
+	if session.TotalScore >= 75 {
+		growthSignals = append(growthSignals, fmt.Sprintf("本轮总分 %.1f，说明主线回答已经能稳定站住。", session.TotalScore))
+	}
+
+	recommendedFocus := append([]string(nil), review.NextTrainingFocus...)
+	if len(recommendedFocus) == 0 {
+		recommendedFocus = append(recommendedFocus, review.SuggestedTopics...)
+	}
+
+	return &domain.SessionMemorySummary{
+		SessionID:        session.ID,
+		Mode:             session.Mode,
+		Topic:            session.Topic,
+		ProjectID:        session.ProjectID,
+		JobTargetID:      session.JobTargetID,
+		PromptSetID:      session.PromptSetID,
+		Summary:          review.Overall,
+		Strengths:        append([]string(nil), review.Highlights...),
+		Gaps:             append([]string(nil), review.Gaps...),
+		Misconceptions:   nil,
+		GrowthSignals:    growthSignals,
+		RecommendedFocus: recommendedFocus,
+		Salience:         0.8,
+	}
 }
 
 func (s *Service) scheduleReview(ctx context.Context, session *domain.TrainingSession, review *domain.ReviewCard) error {

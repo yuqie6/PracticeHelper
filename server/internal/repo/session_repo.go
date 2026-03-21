@@ -143,10 +143,11 @@ func (s *Store) SaveTurn(ctx context.Context, turn *domain.TrainingTurn) error {
 func (s *Store) SaveSession(ctx context.Context, session *domain.TrainingSession) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE training_sessions
-		SET status = ?, total_score = ?, started_at = ?, ended_at = ?, review_id = ?, updated_at = ?
+		SET status = ?, max_turns = ?, total_score = ?, started_at = ?, ended_at = ?, review_id = ?, updated_at = ?
 		WHERE id = ?
 	`,
 		session.Status,
+		session.MaxTurns,
 		session.TotalScore,
 		toNullableTimeString(session.StartedAt),
 		toNullableTimeString(session.EndedAt),

@@ -388,6 +388,199 @@ func scanWeaknessTag(scanner interface{ Scan(dest ...any) error }) (*domain.Weak
 	}, nil
 }
 
+func scanKnowledgeNode(scanner interface{ Scan(dest ...any) error }) (*domain.KnowledgeNode, error) {
+	var (
+		id, scopeType, scopeID, parentID, label, nodeType string
+		lastAssessedAt, createdAt, updatedAt              string
+	)
+	var proficiency, confidence float64
+	var hitCount int
+	if err := scanner.Scan(
+		&id,
+		&scopeType,
+		&scopeID,
+		&parentID,
+		&label,
+		&nodeType,
+		&proficiency,
+		&confidence,
+		&hitCount,
+		&lastAssessedAt,
+		&createdAt,
+		&updatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return &domain.KnowledgeNode{
+		ID:             id,
+		ScopeType:      scopeType,
+		ScopeID:        scopeID,
+		ParentID:       parentID,
+		Label:          label,
+		NodeType:       nodeType,
+		Proficiency:    proficiency,
+		Confidence:     confidence,
+		HitCount:       hitCount,
+		LastAssessedAt: parseNullableTime(lastAssessedAt),
+		CreatedAt:      parseTime(createdAt),
+		UpdatedAt:      parseTime(updatedAt),
+	}, nil
+}
+
+func scanKnowledgeEdge(scanner interface{ Scan(dest ...any) error }) (*domain.KnowledgeEdge, error) {
+	var sourceID, targetID, edgeType, createdAt string
+	if err := scanner.Scan(&sourceID, &targetID, &edgeType, &createdAt); err != nil {
+		return nil, err
+	}
+
+	return &domain.KnowledgeEdge{
+		SourceID:  sourceID,
+		TargetID:  targetID,
+		EdgeType:  edgeType,
+		CreatedAt: parseTime(createdAt),
+	}, nil
+}
+
+func scanAgentObservation(scanner interface{ Scan(dest ...any) error }) (*domain.AgentObservation, error) {
+	var (
+		id, sessionID, scopeType, scopeID, topic string
+		category, content, tagsJSON              string
+		createdAt, archivedAt                    string
+	)
+	var relevance float64
+	if err := scanner.Scan(
+		&id,
+		&sessionID,
+		&scopeType,
+		&scopeID,
+		&topic,
+		&category,
+		&content,
+		&tagsJSON,
+		&relevance,
+		&createdAt,
+		&archivedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return &domain.AgentObservation{
+		ID:         id,
+		SessionID:  sessionID,
+		ScopeType:  scopeType,
+		ScopeID:    scopeID,
+		Topic:      topic,
+		Category:   category,
+		Content:    content,
+		Tags:       parseStringList(tagsJSON),
+		Relevance:  relevance,
+		CreatedAt:  parseTime(createdAt),
+		ArchivedAt: parseNullableTime(archivedAt),
+	}, nil
+}
+
+func scanSessionMemorySummary(scanner interface{ Scan(dest ...any) error }) (*domain.SessionMemorySummary, error) {
+	var (
+		id, sessionID, mode, topic, projectID, jobTargetID, promptSetID string
+		summary, strengthsJSON, gapsJSON                                string
+		misconceptionsJSON, growthJSON, recommendedFocusJSON            string
+		createdAt, updatedAt                                            string
+	)
+	var salience float64
+	if err := scanner.Scan(
+		&id,
+		&sessionID,
+		&mode,
+		&topic,
+		&projectID,
+		&jobTargetID,
+		&promptSetID,
+		&summary,
+		&strengthsJSON,
+		&gapsJSON,
+		&misconceptionsJSON,
+		&growthJSON,
+		&recommendedFocusJSON,
+		&salience,
+		&createdAt,
+		&updatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return &domain.SessionMemorySummary{
+		ID:               id,
+		SessionID:        sessionID,
+		Mode:             mode,
+		Topic:            topic,
+		ProjectID:        projectID,
+		JobTargetID:      jobTargetID,
+		PromptSetID:      promptSetID,
+		Summary:          summary,
+		Strengths:        parseStringList(strengthsJSON),
+		Gaps:             parseStringList(gapsJSON),
+		Misconceptions:   parseStringList(misconceptionsJSON),
+		GrowthSignals:    parseStringList(growthJSON),
+		RecommendedFocus: parseStringList(recommendedFocusJSON),
+		Salience:         salience,
+		CreatedAt:        parseTime(createdAt),
+		UpdatedAt:        parseTime(updatedAt),
+	}, nil
+}
+
+func scanMemoryIndexEntry(scanner interface{ Scan(dest ...any) error }) (*domain.MemoryIndexEntry, error) {
+	var (
+		id, memoryType, scopeType, scopeID, topic, projectID, sessionID, jobTargetID string
+		tagsJSON, entitiesJSON, summary, refTable, refID                             string
+		createdAt, updatedAt                                                         string
+	)
+	var salience, confidence, freshness float64
+	if err := scanner.Scan(
+		&id,
+		&memoryType,
+		&scopeType,
+		&scopeID,
+		&topic,
+		&projectID,
+		&sessionID,
+		&jobTargetID,
+		&tagsJSON,
+		&entitiesJSON,
+		&summary,
+		&salience,
+		&confidence,
+		&freshness,
+		&refTable,
+		&refID,
+		&createdAt,
+		&updatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return &domain.MemoryIndexEntry{
+		ID:          id,
+		MemoryType:  memoryType,
+		ScopeType:   scopeType,
+		ScopeID:     scopeID,
+		Topic:       topic,
+		ProjectID:   projectID,
+		SessionID:   sessionID,
+		JobTargetID: jobTargetID,
+		Tags:        parseStringList(tagsJSON),
+		Entities:    parseStringList(entitiesJSON),
+		Summary:     summary,
+		Salience:    salience,
+		Confidence:  confidence,
+		Freshness:   freshness,
+		RefTable:    refTable,
+		RefID:       refID,
+		CreatedAt:   parseTime(createdAt),
+		UpdatedAt:   parseTime(updatedAt),
+	}, nil
+}
+
 func parseStringList(raw string) []string {
 	items := make([]string, 0)
 	_ = json.Unmarshal([]byte(raw), &items)

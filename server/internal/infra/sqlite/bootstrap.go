@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"practicehelper/server/internal/domain"
 )
@@ -17,6 +18,9 @@ func Bootstrap(db *sql.DB) error {
 	}
 
 	if err := seedQuestionTemplates(db); err != nil {
+		return err
+	}
+	if err := seedKnowledgeNodes(db); err != nil {
 		return err
 	}
 
@@ -207,6 +211,99 @@ func migrate(db *sql.DB) error {
 			latency_ms REAL NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS knowledge_nodes (
+			id TEXT PRIMARY KEY,
+			scope_type TEXT NOT NULL DEFAULT 'global' CHECK(scope_type IN ('global','project','session','job_target')),
+			scope_id TEXT NOT NULL DEFAULT '',
+			parent_id TEXT NOT NULL DEFAULT '',
+			label TEXT NOT NULL,
+			node_type TEXT NOT NULL CHECK(node_type IN ('topic','concept','skill')),
+			proficiency REAL NOT NULL DEFAULT 0,
+			confidence REAL NOT NULL DEFAULT 0.5,
+			hit_count INTEGER NOT NULL DEFAULT 0,
+			last_assessed_at TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			UNIQUE(scope_type, scope_id, parent_id, label)
+		);`,
+		`CREATE TABLE IF NOT EXISTS knowledge_edges (
+			source_id TEXT NOT NULL,
+			target_id TEXT NOT NULL,
+			edge_type TEXT NOT NULL CHECK(edge_type IN ('contains','prerequisite','related')),
+			created_at TEXT NOT NULL,
+			PRIMARY KEY(source_id, target_id, edge_type)
+		);`,
+		`CREATE TABLE IF NOT EXISTS knowledge_snapshots (
+			id TEXT PRIMARY KEY,
+			node_id TEXT NOT NULL,
+			session_id TEXT NOT NULL DEFAULT '',
+			proficiency REAL NOT NULL,
+			evidence TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS agent_observations (
+			id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL DEFAULT '',
+			scope_type TEXT NOT NULL DEFAULT 'global' CHECK(scope_type IN ('global','project','session','job_target')),
+			scope_id TEXT NOT NULL DEFAULT '',
+			topic TEXT NOT NULL DEFAULT '',
+			category TEXT NOT NULL CHECK(category IN ('pattern','misconception','growth','strategy_note')),
+			content TEXT NOT NULL,
+			tags_json TEXT NOT NULL DEFAULT '[]',
+			relevance REAL NOT NULL DEFAULT 1.0,
+			created_at TEXT NOT NULL,
+			archived_at TEXT NOT NULL DEFAULT ''
+		);`,
+		`CREATE TABLE IF NOT EXISTS session_memory_summaries (
+			id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL UNIQUE,
+			mode TEXT NOT NULL,
+			topic TEXT NOT NULL DEFAULT '',
+			project_id TEXT NOT NULL DEFAULT '',
+			job_target_id TEXT NOT NULL DEFAULT '',
+			prompt_set_id TEXT NOT NULL DEFAULT '',
+			summary TEXT NOT NULL,
+			strengths_json TEXT NOT NULL DEFAULT '[]',
+			gaps_json TEXT NOT NULL DEFAULT '[]',
+			misconceptions_json TEXT NOT NULL DEFAULT '[]',
+			growth_json TEXT NOT NULL DEFAULT '[]',
+			recommended_focus_json TEXT NOT NULL DEFAULT '[]',
+			salience REAL NOT NULL DEFAULT 0.5,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS memory_index (
+			id TEXT PRIMARY KEY,
+			memory_type TEXT NOT NULL,
+			scope_type TEXT NOT NULL CHECK(scope_type IN ('global','project','session','job_target')),
+			scope_id TEXT NOT NULL DEFAULT '',
+			topic TEXT NOT NULL DEFAULT '',
+			project_id TEXT NOT NULL DEFAULT '',
+			session_id TEXT NOT NULL DEFAULT '',
+			job_target_id TEXT NOT NULL DEFAULT '',
+			tags_json TEXT NOT NULL DEFAULT '[]',
+			entities_json TEXT NOT NULL DEFAULT '[]',
+			summary TEXT NOT NULL DEFAULT '',
+			salience REAL NOT NULL DEFAULT 0.5,
+			confidence REAL NOT NULL DEFAULT 0.5,
+			freshness REAL NOT NULL DEFAULT 1.0,
+			ref_table TEXT NOT NULL,
+			ref_id TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_scope_label
+			ON knowledge_nodes(scope_type, scope_id, node_type, label);`,
+		`CREATE INDEX IF NOT EXISTS idx_knowledge_snapshots_node_created
+			ON knowledge_snapshots(node_id, created_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_observations_active
+			ON agent_observations(archived_at, scope_type, scope_id, topic, created_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_session_memory_scope
+			ON session_memory_summaries(topic, project_id, job_target_id, updated_at DESC);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_index_ref
+			ON memory_index(ref_table, ref_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_memory_index_lookup
+			ON memory_index(scope_type, scope_id, memory_type, topic, updated_at DESC);`,
 	}
 
 	for _, statement := range statements {
@@ -342,6 +439,65 @@ func seedQuestionTemplates(db *sql.DB) error {
 	return nil
 }
 
+func seedKnowledgeNodes(db *sql.DB) error {
+	rows, err := db.Query(`
+		SELECT DISTINCT topic
+		FROM question_templates
+		WHERE mode = ? AND topic <> '' AND topic <> ?
+		ORDER BY topic ASC
+	`, domain.ModeBasics, domain.BasicsTopicMixed)
+	if err != nil {
+		return fmt.Errorf("query seed knowledge topics: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	topics := make([]string, 0)
+	for rows.Next() {
+		var topic string
+		if err := rows.Scan(&topic); err != nil {
+			return fmt.Errorf("scan seed knowledge topic: %w", err)
+		}
+		topics = append(topics, topic)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate seed knowledge topics: %w", err)
+	}
+
+	for _, topic := range topics {
+		result, err := db.Exec(`
+			INSERT INTO knowledge_nodes (
+				id, scope_type, scope_id, parent_id, label, node_type,
+				proficiency, confidence, hit_count, last_assessed_at, created_at, updated_at
+			)
+			SELECT ?, ?, ?, ?, ?, ?, 0, 0.5, 0, '', ?, ?
+			WHERE NOT EXISTS (
+				SELECT 1
+				FROM knowledge_nodes
+				WHERE scope_type = ? AND scope_id = '' AND parent_id = '' AND label = ?
+			)
+		`,
+			newID("kn"),
+			domain.MemoryScopeGlobal,
+			"",
+			"",
+			topic,
+			domain.KnowledgeNodeTypeTopic,
+			nowUTC(),
+			nowUTC(),
+			domain.MemoryScopeGlobal,
+			topic,
+		)
+		if err != nil {
+			return fmt.Errorf("insert seed knowledge node %s: %w", topic, err)
+		}
+		if _, err := result.RowsAffected(); err != nil {
+			return fmt.Errorf("count inserted knowledge node %s: %w", topic, err)
+		}
+	}
+
+	return nil
+}
+
 var seedFilePaths = []string{
 	"data/seed/question_templates.json",
 	"../data/seed/question_templates.json",
@@ -381,4 +537,8 @@ func newID(prefix string) string {
 	}
 
 	return fmt.Sprintf("%s_%s", prefix, hex.EncodeToString(buffer))
+}
+
+func nowUTC() string {
+	return time.Now().UTC().Format(time.RFC3339Nano)
 }
