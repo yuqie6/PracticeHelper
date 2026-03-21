@@ -153,3 +153,118 @@ func TestGenerateReviewStreamReadsRawOutputFromResultEventEnvelope(t *testing.T)
 		t.Fatalf("unexpected raw output: %q", meta.RawOutput)
 	}
 }
+
+func TestEvaluateAnswerRetriesOnRetryableStatus(t *testing.T) {
+	originalBackoffs := sidecarRetryBackoffs
+	originalJitter := sidecarRetryJitter
+	sidecarRetryBackoffs = []time.Duration{0, 0}
+	sidecarRetryJitter = 0
+	defer func() {
+		sidecarRetryBackoffs = originalBackoffs
+		sidecarRetryJitter = originalJitter
+	}()
+
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			http.Error(w, "busy", http.StatusServiceUnavailable)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(domain.EvaluationResult{
+			Score:          81,
+			ScoreBreakdown: map[string]float64{"准确性": 81},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(server.URL, time.Second)
+	result, _, err := client.EvaluateAnswer(context.Background(), domain.EvaluateAnswerRequest{
+		Mode:      domain.ModeBasics,
+		Topic:     domain.BasicsTopicRedis,
+		Question:  "Redis 为什么快？",
+		Answer:    "因为热点数据主要在内存。",
+		TurnIndex: 1,
+		MaxTurns:  2,
+	})
+	if err != nil {
+		t.Fatalf("EvaluateAnswer() error = %v", err)
+	}
+
+	if attempts != 2 {
+		t.Fatalf("expected 2 attempts, got %d", attempts)
+	}
+	if result.Score != 81 {
+		t.Fatalf("expected score 81 after retry, got %.1f", result.Score)
+	}
+}
+
+func TestGenerateReviewStreamRetriesBeforeConsumingBody(t *testing.T) {
+	originalBackoffs := sidecarRetryBackoffs
+	originalJitter := sidecarRetryJitter
+	sidecarRetryBackoffs = []time.Duration{0, 0}
+	sidecarRetryJitter = 0
+	defer func() {
+		sidecarRetryBackoffs = originalBackoffs
+		sidecarRetryJitter = originalJitter
+	}()
+
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			http.Error(w, "busy", http.StatusBadGateway)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"type": "result",
+			"data": map[string]any{
+				"result": map[string]any{
+					"overall":             "重试后拿到了复盘。",
+					"highlights":          []string{"主线完整"},
+					"gaps":                []string{"例子不够具体"},
+					"suggested_topics":    []string{"redis"},
+					"next_training_focus": []string{"补真实案例"},
+					"score_breakdown":     map[string]float64{"准确性": 80},
+				},
+				"raw_output": `{"overall":"重试后拿到了复盘。"}`,
+			},
+		}); err != nil {
+			t.Fatalf("encode stream result: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(server.URL, time.Second)
+	result, meta, err := client.GenerateReviewStream(
+		context.Background(),
+		domain.GenerateReviewRequest{
+			Session: &domain.TrainingSession{
+				ID:     "sess_retry_stream",
+				Mode:   domain.ModeBasics,
+				Topic:  domain.BasicsTopicRedis,
+				Status: domain.StatusReviewPending,
+			},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("GenerateReviewStream() error = %v", err)
+	}
+
+	if attempts != 2 {
+		t.Fatalf("expected 2 attempts, got %d", attempts)
+	}
+	if result.Overall != "重试后拿到了复盘。" {
+		t.Fatalf("unexpected review overall: %q", result.Overall)
+	}
+	if meta == nil || meta.RawOutput != `{"overall":"重试后拿到了复盘。"}` {
+		t.Fatalf("unexpected prompt meta: %+v", meta)
+	}
+}

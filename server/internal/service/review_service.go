@@ -87,7 +87,7 @@ func (s *Service) persistReview(
 	review.PromptSetID = session.PromptSetID
 	review.PromptSet = session.PromptSet
 	if err := s.repo.CreateReview(ctx, review); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create review: %w", err)
 	}
 
 	endedAt := time.Now().UTC()
@@ -109,7 +109,7 @@ func (s *Service) scheduleReview(ctx context.Context, session *domain.TrainingSe
 	for _, item := range items {
 		schedule := item
 		if err := s.repo.CreateReviewSchedule(ctx, &schedule); err != nil {
-			return err
+			return fmt.Errorf("create review schedule: %w", err)
 		}
 	}
 	return nil
@@ -122,7 +122,7 @@ func (s *Service) ListDueReviews(ctx context.Context) ([]domain.ReviewScheduleIt
 func (s *Service) CompleteDueReview(ctx context.Context, id int64) error {
 	item, err := s.repo.GetReviewSchedule(ctx, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("load review schedule: %w", err)
 	}
 	if item == nil {
 		return ErrReviewScheduleNotFound
@@ -130,7 +130,7 @@ func (s *Service) CompleteDueReview(ctx context.Context, id int64) error {
 
 	session, err := s.repo.GetSession(ctx, item.SessionID)
 	if err != nil {
-		return err
+		return fmt.Errorf("load session for due review: %w", err)
 	}
 	if session == nil {
 		return ErrSessionNotFound

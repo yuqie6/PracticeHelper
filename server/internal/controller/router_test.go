@@ -379,6 +379,50 @@ func TestExportSessionRouteReturnsNotFoundForMissingSession(t *testing.T) {
 	}
 }
 
+func TestSessionRouteRejectsInvalidStringID(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	router := NewRouter(service.New(store, nil))
+	request := httptest.NewRequest(http.MethodGet, "/api/sessions/sess.bad", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	payload := decodeErrorPayload(t, recorder.Body.Bytes())
+	if payload.Error.Message != "invalid id: sess.bad" {
+		t.Fatalf("unexpected error payload: %+v", payload)
+	}
+}
+
+func TestJobTargetRouteRejectsInvalidStringID(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	router := NewRouter(service.New(store, nil))
+	request := httptest.NewRequest(http.MethodGet, "/api/job-targets/job.bad", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	payload := decodeErrorPayload(t, recorder.Body.Bytes())
+	if payload.Error.Message != "invalid id: job.bad" {
+		t.Fatalf("unexpected error payload: %+v", payload)
+	}
+}
+
 type errorPayload struct {
 	Error struct {
 		Code    string `json:"code"`

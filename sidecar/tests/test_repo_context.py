@@ -38,8 +38,16 @@ def test_repo_name_from_url(repo_url: str, want: str) -> None:
             "secret-token",
             "https://secret-token@github.com/openai/practicehelper.git",
         ),
-        ("https://gitlab.com/openai/practicehelper.git", "secret-token", "https://gitlab.com/openai/practicehelper.git"),
-        ("https://github.com/openai/practicehelper.git", "", "https://github.com/openai/practicehelper.git"),
+        (
+            "https://gitlab.com/openai/practicehelper.git",
+            "secret-token",
+            "https://gitlab.com/openai/practicehelper.git",
+        ),
+        (
+            "https://github.com/openai/practicehelper.git",
+            "",
+            "https://github.com/openai/practicehelper.git",
+        ),
     ],
 )
 def test_maybe_apply_github_token(repo_url: str, token: str, want: str) -> None:
@@ -107,4 +115,6 @@ def test_sanitize_output_strips_token() -> None:
         "fatal: could not read from https://secret-token@github.com/openai/practicehelper.git"
     )
 
-    assert sanitized == "fatal: could not read from https://***@github.com/openai/practicehelper.git"
+    assert (
+        sanitized == "fatal: could not read from https://***@github.com/openai/practicehelper.git"
+    )

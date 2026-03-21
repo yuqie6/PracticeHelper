@@ -136,9 +136,7 @@ def clone_repo(repo_url: str, temp_root: Path, github_token: str) -> Path:
             timeout=120,
         )
     except subprocess.CalledProcessError as exc:
-        raise ModelClientError(
-            f"git clone failed: {_sanitize_output(exc.stderr)}"
-        ) from exc
+        raise ModelClientError(f"git clone failed: {_sanitize_output(exc.stderr)}") from exc
     except subprocess.TimeoutExpired as exc:
         raise ModelClientError(f"git clone timed out after {exc.timeout}s") from exc
     return repo_dir
@@ -173,9 +171,7 @@ def run_git(repo_dir: Path, *args: str) -> str:
             f"git {command_label} failed: {_sanitize_output(exc.stderr)}"
         ) from exc
     except subprocess.TimeoutExpired as exc:
-        raise ModelClientError(
-            f"git {command_label} timed out after {exc.timeout}s"
-        ) from exc
+        raise ModelClientError(f"git {command_label} timed out after {exc.timeout}s") from exc
     return result.stdout.strip()
 
 
