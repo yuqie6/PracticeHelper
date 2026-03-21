@@ -21,6 +21,7 @@ func (s *Service) finalizeReview(ctx context.Context, sessionID string) (*domain
 		return nil, err
 	}
 
+	startedAt := time.Now()
 	review, err := s.sidecar.GenerateReview(ctx, domain.GenerateReviewRequest{
 		Session:           updatedSession,
 		Project:           updatedSession.Project,
@@ -30,6 +31,7 @@ func (s *Service) finalizeReview(ctx context.Context, sessionID string) (*domain
 	if err != nil {
 		return nil, err
 	}
+	s.recordEvaluationLog(ctx, updatedSession.ID, "", "generate_review", startedAt)
 
 	return s.persistReview(ctx, updatedSession, review)
 }
@@ -51,6 +53,7 @@ func (s *Service) finalizeReviewStream(
 		return nil, err
 	}
 
+	startedAt := time.Now()
 	review, err := s.sidecar.GenerateReviewStream(ctx, domain.GenerateReviewRequest{
 		Session:           updatedSession,
 		Project:           updatedSession.Project,
@@ -60,6 +63,7 @@ func (s *Service) finalizeReviewStream(
 	if err != nil {
 		return nil, err
 	}
+	s.recordEvaluationLog(ctx, updatedSession.ID, "", "generate_review_stream", startedAt)
 
 	savedSession, err := s.persistReview(ctx, updatedSession, review)
 	if err != nil {
@@ -110,7 +114,27 @@ func (s *Service) ListDueReviews(ctx context.Context) ([]domain.ReviewScheduleIt
 	return s.repo.ListDueReviews(ctx, time.Now().UTC())
 }
 
-func (s *Service) CompleteDueReview(ctx context.Context, id int64, score float64) error {
+func (s *Service) CompleteDueReview(ctx context.Context, id int64) error {
+	item, err := s.repo.GetReviewSchedule(ctx, id)
+	if err != nil {
+		return err
+	}
+	if item == nil {
+		return ErrReviewScheduleNotFound
+	}
+
+	session, err := s.repo.GetSession(ctx, item.SessionID)
+	if err != nil {
+		return err
+	}
+	if session == nil {
+		return ErrSessionNotFound
+	}
+
+	score := session.TotalScore
+	if score <= 0 {
+		score = 60
+	}
 	return s.repo.CompleteReviewSchedule(ctx, id, score)
 }
 

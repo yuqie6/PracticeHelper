@@ -55,7 +55,7 @@ func (s *Service) SubmitAnswer(ctx context.Context, sessionID string, request do
 		s.restoreSessionStatus(ctx, session.ID, previousStatus)
 		return nil, err
 	}
-	_ = s.repo.RecordEvaluationLog(ctx, session.ID, turn.ID, "evaluate_answer", "", float64(time.Since(evalStart).Milliseconds()))
+	s.recordEvaluationLog(ctx, session.ID, turn.ID, "evaluate_answer", evalStart)
 
 	turn.Answer = request.Answer
 	turn.Evaluation = evaluation
@@ -159,7 +159,7 @@ func (s *Service) SubmitAnswerStream(
 		s.restoreSessionStatus(ctx, session.ID, previousStatus)
 		return nil, err
 	}
-	_ = s.repo.RecordEvaluationLog(ctx, session.ID, turn.ID, "evaluate_answer_stream", "", float64(time.Since(evalStart).Milliseconds()))
+	s.recordEvaluationLog(ctx, session.ID, turn.ID, "evaluate_answer_stream", evalStart)
 	emitStatus(emit, "feedback_ready")
 
 	turn.Answer = request.Answer

@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.agent_runtime import AgentRuntime
 from app.config import Settings
+from app.langgraph_flows import _build_evaluate_answer_graph, _build_generate_question_graph
 from app.llm_client import ChatCompletionResult, ModelClientError
 from app.runtime_prompts import (
     evaluate_prompt_bundle,
@@ -17,13 +18,15 @@ from app.schemas import (
     AnalyzeJobTargetRequest,
     AnalyzeRepoRequest,
     EvaluateAnswerRequest,
-    GenerateReviewRequest,
     GenerateQuestionRequest,
+    GenerateQuestionResponse,
+    GenerateReviewRequest,
     JobTargetAnalysisSnapshot,
-    QuestionTemplate,
     ProjectProfile,
+    QuestionTemplate,
     TrainingSession,
     TrainingTurn,
+    WeaknessTag,
     WeaknessHit,
 )
 
@@ -38,6 +41,34 @@ class FakeModelClient:
         if not self._responses:
             raise AssertionError("fake client has no more responses")
         return self._responses.pop(0)
+
+
+class FakeQuestionGraphRuntime:
+    def __init__(self) -> None:
+        self.requests: list[GenerateQuestionRequest] = []
+
+    def generate_question(self, request: GenerateQuestionRequest) -> GenerateQuestionResponse:
+        self.requests.append(request)
+        return GenerateQuestionResponse(question="问题", expected_points=["点1"])
+
+
+class FlakyEvaluateGraphRuntime:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def evaluate_answer(self, request: EvaluateAnswerRequest):
+        self.calls += 1
+        if self.calls == 1:
+            return {"score": 80}
+        return {
+            "score": 82,
+            "score_breakdown": {"准确性": 82},
+            "strengths": ["主线清楚"],
+            "gaps": ["例子不够具体"],
+            "followup_question": "如果线上抖动，你会先看什么？",
+            "followup_expected_points": ["先止血", "再定位"],
+            "weakness_hits": [],
+        }
 
 
 def test_generate_question_uses_tool_loop_before_returning_json() -> None:
@@ -224,6 +255,44 @@ def test_question_prompt_bundle_includes_job_target_analysis_when_present() -> N
     assert payload["job_target_analysis"]["must_have_skills"] == ["Redis", "缓存一致性"]
 
 
+def test_question_prompt_bundle_resolves_strategy_from_weaknesses() -> None:
+    _, user_prompt, _ = question_prompt_bundle(
+        GenerateQuestionRequest(
+            mode="basics",
+            topic="redis",
+            intensity="standard",
+            weaknesses=[
+                WeaknessTag(
+                    kind="topic",
+                    label="缓存一致性",
+                    severity=0.95,
+                    frequency=3,
+                )
+            ],
+        )
+    )
+
+    assert "优先围绕用户历史弱项出题" in user_prompt
+
+
+def test_generate_question_graph_passes_selected_strategy_to_runtime() -> None:
+    runtime = FakeQuestionGraphRuntime()
+    graph = _build_generate_question_graph(runtime)
+
+    graph.invoke(
+        {
+            "request": GenerateQuestionRequest(
+                mode="project",
+                intensity="standard",
+                project=ProjectProfile(name="Mirror", summary="Agent workflow"),
+            )
+        }
+    )
+
+    assert len(runtime.requests) == 1
+    assert runtime.requests[0].strategy == "project_deep_dive"
+
+
 def test_evaluate_prompt_bundle_requires_conservative_followup_when_evidence_is_thin() -> None:
     system_prompt, user_prompt, tools = evaluate_prompt_bundle(
         EvaluateAnswerRequest(
@@ -282,6 +351,28 @@ def test_evaluate_prompt_bundle_marks_followup_requests() -> None:
     assert payload["turn_index"] == 2
     assert "是否为追问回答：是" in user_prompt
     assert "最后一轮" in user_prompt
+
+
+def test_evaluate_answer_graph_retries_after_invalid_output() -> None:
+    runtime = FlakyEvaluateGraphRuntime()
+    graph = _build_evaluate_answer_graph(runtime)
+
+    result = graph.invoke(
+        {
+            "request": EvaluateAnswerRequest(
+                mode="basics",
+                topic="redis",
+                question="Redis 为什么快？",
+                expected_points=["内存访问", "事件循环"],
+                answer="因为它在内存里。",
+                turn_index=1,
+                max_turns=2,
+            )
+        }
+    )
+
+    assert runtime.calls == 2
+    assert result["result"].followup_question == "如果线上抖动，你会先看什么？"
 
 
 def test_review_prompt_bundle_includes_job_target_analysis_context() -> None:

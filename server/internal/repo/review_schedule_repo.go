@@ -2,6 +2,8 @@ package repo
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,24 +11,96 @@ import (
 )
 
 func (s *Store) CreateReviewSchedule(ctx context.Context, item *domain.ReviewScheduleItem) error {
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO review_schedule (session_id, review_card_id, weakness_tag_id, topic, next_review_at, interval_days, ease_factor, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`,
-		item.SessionID,
-		item.ReviewCardID,
-		item.WeaknessTagID,
-		item.Topic,
-		item.NextReviewAt.UTC().Format(time.RFC3339),
-		item.IntervalDays,
-		item.EaseFactor,
-		nowUTC(),
-		nowUTC(),
-	)
-	if err != nil {
-		return fmt.Errorf("create review schedule: %w", err)
+	var existingID int64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id
+		FROM review_schedule
+		WHERE session_id = ?
+		ORDER BY id DESC
+		LIMIT 1
+	`, item.SessionID).Scan(&existingID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		_, err = s.db.ExecContext(ctx, `
+			INSERT INTO review_schedule (session_id, review_card_id, weakness_tag_id, topic, next_review_at, interval_days, ease_factor, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`,
+			item.SessionID,
+			item.ReviewCardID,
+			item.WeaknessTagID,
+			item.Topic,
+			item.NextReviewAt.UTC().Format(time.RFC3339),
+			item.IntervalDays,
+			item.EaseFactor,
+			nowUTC(),
+			nowUTC(),
+		)
+		if err != nil {
+			return fmt.Errorf("create review schedule: %w", err)
+		}
+	case err != nil:
+		return fmt.Errorf("query review schedule by session: %w", err)
+	default:
+		_, err = s.db.ExecContext(ctx, `
+			UPDATE review_schedule
+			SET review_card_id = ?, weakness_tag_id = ?, topic = ?, next_review_at = ?, interval_days = ?, ease_factor = ?, updated_at = ?
+			WHERE id = ?
+		`,
+			item.ReviewCardID,
+			item.WeaknessTagID,
+			item.Topic,
+			item.NextReviewAt.UTC().Format(time.RFC3339),
+			item.IntervalDays,
+			item.EaseFactor,
+			nowUTC(),
+			existingID,
+		)
+		if err != nil {
+			return fmt.Errorf("update review schedule: %w", err)
+		}
+		_, err = s.db.ExecContext(ctx, `
+			DELETE FROM review_schedule
+			WHERE session_id = ? AND id <> ?
+		`, item.SessionID, existingID)
+		if err != nil {
+			return fmt.Errorf("dedupe review schedule: %w", err)
+		}
 	}
 	return nil
+}
+
+func (s *Store) GetReviewSchedule(ctx context.Context, id int64) (*domain.ReviewScheduleItem, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, session_id, review_card_id, weakness_tag_id, topic, next_review_at, interval_days, ease_factor, created_at
+		FROM review_schedule
+		WHERE id = ?
+	`, id)
+
+	var (
+		scheduleID                             int64
+		sessionID, reviewCardID, weaknessTagID string
+		topic, nextReviewAt, createdAt         string
+		intervalDays                           int
+		easeFactor                             float64
+	)
+	if err := row.Scan(&scheduleID, &sessionID, &reviewCardID, &weaknessTagID, &topic, &nextReviewAt, &intervalDays, &easeFactor, &createdAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get review schedule: %w", err)
+	}
+
+	return &domain.ReviewScheduleItem{
+		ID:            scheduleID,
+		SessionID:     sessionID,
+		ReviewCardID:  reviewCardID,
+		WeaknessTagID: weaknessTagID,
+		Topic:         topic,
+		NextReviewAt:  parseTime(nextReviewAt),
+		IntervalDays:  intervalDays,
+		EaseFactor:    easeFactor,
+		CreatedAt:     parseTime(createdAt),
+	}, nil
 }
 
 func (s *Store) ListDueReviews(ctx context.Context, now time.Time) ([]domain.ReviewScheduleItem, error) {

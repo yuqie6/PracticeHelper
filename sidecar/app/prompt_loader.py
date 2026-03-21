@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from functools import lru_cache
+from collections.abc import Mapping
+from functools import cache
 from pathlib import Path
-from typing import Mapping
 
 PROMPTS_DIR = Path(__file__).with_name("prompts")
 
 
-@lru_cache(maxsize=None)
+@cache
 def load_prompt(name: str) -> str:
     return (PROMPTS_DIR / name).read_text(encoding="utf-8").strip()
 

@@ -14,6 +14,7 @@ var (
 	ErrJobTargetNotFound         = errors.New("job target not found")
 	ErrJobTargetNotReady         = errors.New("job target is not ready")
 	ErrJobTargetAnalysisNotFound = errors.New("job target analysis not found")
+	ErrReviewScheduleNotFound    = errors.New("review schedule not found")
 	ErrSessionNotFound           = errors.New("session not found")
 	ErrImportJobNotFound         = errors.New("import job not found")
 	ErrSessionNotRecoverable     = errors.New("session is not in a recoverable state")

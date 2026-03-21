@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-func (s *Store) RecordEvaluationLog(
+func (s *Store) CreateEvaluationLog(
 	ctx context.Context,
 	sessionID string,
 	turnID string,
@@ -18,7 +18,7 @@ func (s *Store) RecordEvaluationLog(
 		VALUES (?, ?, ?, ?, ?, ?)
 	`, sessionID, turnID, flowName, modelName, latencyMs, nowUTC())
 	if err != nil {
-		return fmt.Errorf("record evaluation log: %w", err)
+		return fmt.Errorf("create evaluation log: %w", err)
 	}
 	return nil
 }

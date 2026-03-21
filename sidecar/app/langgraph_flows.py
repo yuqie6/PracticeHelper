@@ -4,6 +4,8 @@ import logging
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
+from app.llm_client import ModelClientError
+from app.runtime_prompts import resolve_question_strategy
 
 from app.agent_runtime import AgentRuntime
 from app.config import Settings
@@ -86,12 +88,7 @@ def _build_simple_graph(state_type, run_fn, result_model):
 def _build_generate_question_graph(runtime: AgentRuntime):
     def select_strategy(state: GenerateQuestionState) -> dict:
         req = state["request"]
-        if req.weaknesses and any(w.severity >= 0.8 for w in req.weaknesses):
-            strategy = "weakness_first"
-        elif req.mode == "project" and req.project:
-            strategy = "project_deep_dive"
-        else:
-            strategy = "template_based"
+        strategy = resolve_question_strategy(req)
         logger.info("generate_question strategy=%s mode=%s topic=%s", strategy, req.mode, req.topic)
         req_with_strategy = req.model_copy(update={"strategy": strategy})
         return {"strategy": strategy, "request": req_with_strategy}
@@ -125,21 +122,24 @@ def _build_evaluate_answer_graph(runtime: AgentRuntime):
         error = state.get("error", "")
         result = state.get("result")
 
-        if attempts >= _MAX_EVALUATE_ATTEMPTS:
-            if error and result is None:
-                raise RuntimeError(f"evaluate_answer failed after {attempts} attempts: {error}")
-            return "accept"
-
         if error or result is None:
+            if attempts >= _MAX_EVALUATE_ATTEMPTS:
+                raise ModelClientError(f"evaluate_answer failed after {attempts} attempts: {error or 'no result'}")
             logger.warning("evaluate_answer retrying due to: %s", error or "no result")
             return "retry"
 
         if not result.strengths and not result.gaps:
+            if attempts >= _MAX_EVALUATE_ATTEMPTS:
+                raise ModelClientError("evaluate_answer failed after retries: missing strengths/gaps")
             logger.warning("evaluate_answer output missing strengths/gaps, retrying")
             return "retry"
 
         is_last_turn = state["request"].turn_index >= state["request"].max_turns
         if not is_last_turn and not result.followup_question:
+            if attempts >= _MAX_EVALUATE_ATTEMPTS:
+                raise ModelClientError(
+                    "evaluate_answer failed after retries: missing followup_question on non-last turn"
+                )
             logger.warning("evaluate_answer missing followup_question on non-last turn, retrying")
             return "retry"
 

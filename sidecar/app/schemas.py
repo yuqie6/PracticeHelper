@@ -130,7 +130,7 @@ class GenerateQuestionRequest(BaseModel):
     mode: Literal["basics", "project"]
     topic: str = ""
     intensity: str = "standard"
-    strategy: str = "template_based"
+    strategy: str = ""
     project: ProjectProfile | None = None
     templates: list[QuestionTemplate] = Field(default_factory=list)
     context_chunks: list[RepoChunk] = Field(default_factory=list)

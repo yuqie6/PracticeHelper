@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -86,11 +85,12 @@ def question_prompt_bundle(
 ) -> tuple[str, str, list[RuntimeTool]]:
     system_prompt = load_prompt("generate_question_system.md")
     jd_label = "有" if request.job_target_analysis else "无"
+    strategy = resolve_question_strategy(request)
     strategy_hint = {
         "weakness_first": "出题策略：优先围绕用户历史弱项出题，确保题目直击薄弱环节。",
         "project_deep_dive": "出题策略：优先围绕项目的取舍、挑战和追问点深挖，而非泛问基础概念。",
         "template_based": "出题策略：从模板库选取合适题目，结合弱项和岗位要求微调。",
-    }.get(request.strategy, "")
+    }.get(strategy, "")
     user_prompt = (
         f"请生成本轮训练的主问题。\n"
         f"当前模式：{request.mode}，主题：{request.topic}，是否绑定岗位 JD：{jd_label}\n"
@@ -140,6 +140,16 @@ def question_prompt_bundle(
     return system_prompt, user_prompt, tools
 
 
+def resolve_question_strategy(request: GenerateQuestionRequest) -> str:
+    if request.strategy:
+        return request.strategy
+    if request.weaknesses and any(item.severity >= 0.8 for item in request.weaknesses):
+        return "weakness_first"
+    if request.mode == "project" and request.project:
+        return "project_deep_dive"
+    return "template_based"
+
+
 def evaluate_prompt_bundle(
     request: EvaluateAnswerRequest,
 ) -> tuple[str, str, list[RuntimeTool]]:
@@ -163,7 +173,10 @@ def evaluate_prompt_bundle(
         f"是否为追问回答：{followup_label}，当前轮次：{turn_label}，是否绑定岗位 JD：{jd_label}"
     )
     if is_last_turn:
-        user_prompt += "\n注意：这是最后一轮，不需要生成追问，followup_question 和 followup_expected_points 置空。"
+        user_prompt += (
+            "\n注意：这是最后一轮，不需要生成追问，"
+            "followup_question 和 followup_expected_points 置空。"
+        )
     tools = [
         RuntimeTool(
             name="read_evaluation_context",

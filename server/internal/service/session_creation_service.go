@@ -94,10 +94,12 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 		return nil, ErrInvalidMode
 	}
 
+	questionStartedAt := time.Now()
 	question, err := s.sidecar.GenerateQuestion(ctx, generateRequest)
 	if err != nil {
 		return nil, err
 	}
+	s.recordEvaluationLog(ctx, session.ID, "", "generate_question", questionStartedAt)
 
 	turn := &domain.TrainingTurn{
 		ID:             newID("turn"),
@@ -204,10 +206,12 @@ func (s *Service) CreateSessionStream(
 		return nil, ErrInvalidMode
 	}
 
+	questionStartedAt := time.Now()
 	question, err := s.sidecar.GenerateQuestionStream(ctx, generateRequest, emit)
 	if err != nil {
 		return nil, err
 	}
+	s.recordEvaluationLog(ctx, session.ID, "", "generate_question_stream", questionStartedAt)
 
 	turn := &domain.TrainingTurn{
 		ID:             newID("turn"),

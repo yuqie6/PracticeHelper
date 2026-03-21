@@ -448,6 +448,7 @@ export function createSession(payload: {
   job_target_id?: string;
   ignore_active_job_target?: boolean;
   intensity: string;
+  max_turns?: number;
 }): Promise<TrainingSession> {
   return request('/api/sessions', {
     method: 'POST',
@@ -463,6 +464,7 @@ export function createSessionStream(
     job_target_id?: string;
     ignore_active_job_target?: boolean;
     intensity: string;
+    max_turns?: number;
   },
   onEvent: (event: StreamEvent) => void,
 ): Promise<TrainingSession> {
@@ -576,12 +578,8 @@ export function listDueReviews(): Promise<ReviewScheduleItem[]> {
   return request('/api/reviews/due');
 }
 
-export function completeDueReview(
-  id: number,
-  score: number,
-): Promise<string> {
+export function completeDueReview(id: number): Promise<string> {
   return request(`/api/reviews/due/${id}/complete`, {
     method: 'POST',
-    body: JSON.stringify({ score }),
   });
 }

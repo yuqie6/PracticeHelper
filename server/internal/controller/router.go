@@ -493,21 +493,19 @@ func (h *Handler) listDueReviews(c *gin.Context) {
 }
 
 func (h *Handler) completeDueReview(c *gin.Context) {
-	var body struct {
-		Score float64 `json:"score"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		writeError(c, http.StatusBadRequest, err)
-		return
-	}
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		writeError(c, http.StatusBadRequest, fmt.Errorf("invalid id: %s", idStr))
 		return
 	}
-	if err := h.service.CompleteDueReview(c.Request.Context(), id, body.Score); err != nil {
-		writeError(c, http.StatusInternalServerError, err)
+	if err := h.service.CompleteDueReview(c.Request.Context(), id); err != nil {
+		switch {
+		case errors.Is(err, service.ErrReviewScheduleNotFound), errors.Is(err, service.ErrSessionNotFound):
+			writeError(c, http.StatusNotFound, err)
+		default:
+			writeError(c, http.StatusInternalServerError, err)
+		}
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": "ok"})

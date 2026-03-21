@@ -308,7 +308,7 @@ const dashboard = computed(() => data.value ?? null);
 const trends = computed(() => trendsData.value ?? []);
 const dueReviews = computed(() => dueReviewsData.value ?? []);
 const completeMutation = useMutation({
-  mutationFn: (id: number) => completeDueReview(id, 0),
+  mutationFn: (id: number) => completeDueReview(id),
   onSuccess: () => queryClient.invalidateQueries({ queryKey: ['due-reviews'] }),
 });
 const currentSession = computed(() => dashboard.value?.current_session ?? null);
