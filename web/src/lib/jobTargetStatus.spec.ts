@@ -36,12 +36,12 @@ describe('job target status helpers', () => {
       describeJobTargetStatus(t, 'trainFallback', 'stale', {
         name: '后端工程师 JD',
       }),
-    ).toContain('原文已经改过');
+    ).toContain('原文已变更');
     expect(
       describeJobTargetStatus(t, 'trainFallback', 'running', {
         name: '后端工程师 JD',
       }),
-    ).toContain('还在分析中');
+    ).toContain('正在分析中');
   });
 
   it('falls back to unknown copy for unsupported status', () => {

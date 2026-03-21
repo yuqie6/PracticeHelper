@@ -17,7 +17,7 @@ describe('theme helpers', () => {
     const storage = {
       getItem: () => 'dark',
     };
-    const root = { dataset: {} };
+    const root: { dataset: DOMStringMap } = { dataset: {} };
 
     const theme = readStoredTheme(storage);
     applyTheme(theme ?? 'light', root);

@@ -43,7 +43,7 @@
           </button>
         </div>
 
-        <div v-if="jobTargets.length" class="space-y-3">
+        <div v-if="jobTargets.length" class="neo-stagger-list space-y-3">
           <button
             v-for="target in jobTargets"
             :key="target.id"
@@ -59,7 +59,10 @@
                 <p class="text-sm font-black uppercase tracking-[0.08em]">
                   {{ target.title }}
                 </p>
-                <p v-if="target.company_name" class="text-sm font-semibold">
+                <p
+                  v-if="target.company_name"
+                  class="break-all text-sm font-semibold"
+                >
                   {{ target.company_name }}
                 </p>
               </div>
@@ -78,7 +81,7 @@
             >
               {{ t('jobs.activeBadge') }}
             </p>
-            <p class="mt-2 text-xs font-semibold text-black/80">
+            <p class="mt-2 break-all text-xs font-semibold text-black/80">
               {{
                 t('common.lastUpdated', {
                   value: formatDateTime(target.updated_at),
@@ -100,10 +103,13 @@
                   : t('jobs.createTitle')
               }}
             </p>
-            <div v-if="selectedJobTarget" class="flex flex-wrap gap-3">
+            <div
+              v-if="selectedJobTarget"
+              class="flex flex-col gap-3 sm:flex-row sm:flex-wrap"
+            >
               <button
                 type="button"
-                class="neo-button bg-white"
+                class="neo-button w-full bg-white sm:w-auto"
                 :disabled="isActivating"
                 @click="toggleActiveJobTarget"
               >
@@ -115,7 +121,7 @@
               </button>
               <button
                 type="button"
-                class="neo-button-dark"
+                class="neo-button-dark w-full sm:w-auto"
                 :disabled="isAnalyzing"
                 @click="runAnalysis"
               >
@@ -168,7 +174,7 @@
 
             <button
               type="submit"
-              class="neo-button-dark"
+              class="neo-button-dark w-full sm:w-auto"
               :disabled="isSaving || isCreating"
             >
               {{
@@ -283,7 +289,7 @@
           <p class="neo-kicker bg-[var(--neo-yellow)]">
             {{ t('jobs.historyTitle') }}
           </p>
-          <div v-if="analysisRuns.length" class="space-y-3">
+          <div v-if="analysisRuns.length" class="neo-stagger-list space-y-3">
             <article
               v-for="run in analysisRuns"
               :key="run.id"
@@ -306,7 +312,7 @@
               </p>
               <p
                 v-else-if="run.summary"
-                class="text-sm font-semibold text-black/80"
+                class="break-all text-sm font-semibold text-black/80"
               >
                 {{ run.summary }}
               </p>

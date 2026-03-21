@@ -1,4 +1,7 @@
-export const SESSION_EXPORT_FORMAT = 'markdown';
+export const SESSION_EXPORT_FORMATS = ['markdown', 'json', 'pdf'] as const;
+export type SessionExportFormat = (typeof SESSION_EXPORT_FORMATS)[number];
+export const SESSION_EXPORT_FORMAT: SessionExportFormat = 'markdown';
+export const SESSION_BATCH_EXPORT_PATH = '/api/sessions/export';
 
 export function buildSessionExportPath(
   sessionId: string,
@@ -9,16 +12,44 @@ export function buildSessionExportPath(
 }
 
 export function fallbackSessionExportFilename(sessionId: string): string {
-  return `practicehelper-session-${sessionId}.md`;
+  return `practicehelper-session-${sessionId}.${exportExtension(
+    SESSION_EXPORT_FORMAT,
+  )}`;
+}
+
+export function fallbackSessionExportFilenameByFormat(
+  sessionId: string,
+  format: SessionExportFormat,
+): string {
+  return `practicehelper-session-${sessionId}.${exportExtension(format)}`;
+}
+
+export function fallbackBatchExportFilename(
+  count: number,
+  format: SessionExportFormat,
+): string {
+  return `practicehelper-sessions-${Math.max(count, 1)}-${format}.zip`;
 }
 
 export function resolveDownloadFilename(
   sessionId: string,
+  format: SessionExportFormat,
   contentDisposition: string | null,
 ): string {
   return (
     parseContentDispositionFilename(contentDisposition) ??
-    fallbackSessionExportFilename(sessionId)
+    fallbackSessionExportFilenameByFormat(sessionId, format)
+  );
+}
+
+export function resolveBatchDownloadFilename(
+  count: number,
+  format: SessionExportFormat,
+  contentDisposition: string | null,
+): string {
+  return (
+    parseContentDispositionFilename(contentDisposition) ??
+    fallbackBatchExportFilename(count, format)
   );
 }
 
@@ -49,4 +80,15 @@ function parseContentDispositionFilename(value: string | null): string | null {
 
   const plain = value.match(/filename="?([^";]+)"?/i)?.[1];
   return plain ?? null;
+}
+
+function exportExtension(format: SessionExportFormat): string {
+  switch (format) {
+    case 'json':
+      return 'json';
+    case 'pdf':
+      return 'pdf';
+    default:
+      return 'md';
+  }
 }

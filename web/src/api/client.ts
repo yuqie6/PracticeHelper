@@ -1,6 +1,9 @@
 import {
   buildSessionExportPath,
+  resolveBatchDownloadFilename,
   resolveDownloadFilename,
+  type SessionExportFormat,
+  SESSION_BATCH_EXPORT_PATH,
   SESSION_EXPORT_FORMAT,
 } from '../lib/export';
 
@@ -220,6 +223,7 @@ export interface EvaluationLogEntry {
   model_name?: string;
   prompt_set_id?: string;
   prompt_hash?: string;
+  raw_output?: string;
   latency_ms: number;
   created_at: string;
 }
@@ -440,6 +444,10 @@ export function listPromptSets(): Promise<PromptSetSummary[]> {
   return request('/api/prompt-sets');
 }
 
+export function listPromptExperimentPromptSets(): Promise<PromptSetSummary[]> {
+  return request('/api/prompt-experiments/prompt-sets');
+}
+
 export function getPromptExperiment(params: {
   left: string;
   right: string;
@@ -604,15 +612,9 @@ export function listSessionEvaluationLogs(
 
 export async function downloadSessionExport(
   sessionId: string,
+  format: SessionExportFormat = SESSION_EXPORT_FORMAT,
 ): Promise<{ blob: Blob; filename: string }> {
-  const response = await fetch(
-    buildSessionExportPath(sessionId, SESSION_EXPORT_FORMAT),
-    {
-      headers: {
-        Accept: 'text/markdown',
-      },
-    },
-  );
+  const response = await fetch(buildSessionExportPath(sessionId, format));
 
   if (!response.ok) {
     const payload = (await response
@@ -628,6 +630,43 @@ export async function downloadSessionExport(
     blob: await response.blob(),
     filename: resolveDownloadFilename(
       sessionId,
+      format,
+      response.headers.get('Content-Disposition'),
+    ),
+  };
+}
+
+export async function downloadSessionBatchExport(
+  sessionIds: string[],
+  format: SessionExportFormat = SESSION_EXPORT_FORMAT,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(SESSION_BATCH_EXPORT_PATH, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/zip',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      session_ids: sessionIds,
+      format,
+    }),
+  });
+
+  if (!response.ok) {
+    const payload = (await response
+      .json()
+      .catch(() => null)) as ApiErrorPayload | null;
+    throw new ApiError(payload?.error?.message ?? '导出失败', {
+      code: payload?.error?.code,
+      status: response.status,
+    });
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: resolveBatchDownloadFilename(
+      sessionIds.length,
+      format,
       response.headers.get('Content-Disposition'),
     ),
   };
@@ -695,6 +734,9 @@ export interface ReviewScheduleItem {
   id: number;
   session_id: string;
   review_card_id?: string;
+  weakness_tag_id?: string;
+  weakness_kind?: string;
+  weakness_label?: string;
   topic?: string;
   next_review_at: string;
   interval_days: number;

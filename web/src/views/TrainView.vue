@@ -7,6 +7,17 @@
       </p>
     </header>
 
+    <div
+      v-if="onboardingMode && !currentSession"
+      class="neo-panel space-y-2 bg-[var(--neo-yellow)]"
+    >
+      <p class="neo-kicker bg-white">{{ t('train.onboarding.kicker') }}</p>
+      <h2 class="text-xl font-black">
+        {{ t('train.onboarding.title') }}
+      </h2>
+      <p class="neo-note">{{ t('train.onboarding.description') }}</p>
+    </div>
+
     <div v-if="currentSession" class="neo-panel bg-[var(--neo-yellow)]">
       <p class="neo-kicker bg-white">{{ t('home.currentSession.kicker') }}</p>
       <div
@@ -234,6 +245,7 @@ import { useProgressSteps } from '../lib/useProgressSteps';
 const router = useRouter();
 const route = useRoute();
 const { t, tm } = useI18n();
+const onboardingMode = computed(() => route.query.onboarding === '1');
 
 const form = reactive({
   mode: 'basics' as 'basics' | 'project',

@@ -67,11 +67,11 @@
     <div v-if="savedSummary" class="neo-panel space-y-3 bg-[var(--neo-green)]">
       <p class="text-lg font-black">{{ t('profile.saveSuccess') }}</p>
       <p class="text-base font-semibold">{{ savedSummary }}</p>
-      <div class="flex flex-wrap gap-3">
-        <RouterLink to="/train" class="neo-button-dark">{{
+      <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <RouterLink to="/train" class="neo-button-dark w-full sm:w-auto">{{
           t('common.start')
         }}</RouterLink>
-        <RouterLink to="/" class="neo-button bg-white">{{
+        <RouterLink to="/" class="neo-button w-full bg-white sm:w-auto">{{
           t('app.nav.home')
         }}</RouterLink>
       </div>
@@ -266,7 +266,11 @@
       </div>
 
       <div class="flex flex-wrap items-center gap-3">
-        <button type="submit" class="neo-button-dark" :disabled="isSaving">
+        <button
+          type="submit"
+          class="neo-button-dark w-full sm:w-auto"
+          :disabled="isSaving"
+        >
           {{
             isSaving
               ? t('common.saving')
@@ -291,7 +295,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, reactive, ref, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { RouterLink, useRouter } from 'vue-router';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
 
 import {
   getDashboard,
@@ -302,10 +306,12 @@ import {
   type WeaknessTag,
 } from '../api/client';
 import NoticePanel from '../components/NoticePanel.vue';
+import { buildOnboardingTarget } from '../lib/onboarding';
 import TagInput from '../components/TagInput.vue';
 
 const queryClient = useQueryClient();
 const router = useRouter();
+const route = useRoute();
 const savedSummary = ref('');
 const saveError = ref('');
 const startTrainingAfterSave = ref(false);
@@ -422,6 +428,7 @@ const loadError = computed(() =>
 );
 
 const isReturningUser = computed(() => hasMeaningfulProfile(data.value));
+const onboardingMode = computed(() => route.query.onboarding === '1');
 
 watchEffect(() => {
   const profile = data.value;
@@ -449,6 +456,15 @@ const mutation = useMutation({
     ].filter(Boolean);
     savedSummary.value = parts.join(' · ');
 
+    if (onboardingMode.value) {
+      await router.push(
+        projects.value.length > 0
+          ? buildOnboardingTarget('train')
+          : buildOnboardingTarget('projects'),
+      );
+      return;
+    }
+
     if (startTrainingAfterSave.value) {
       await router.push('/train');
     }
@@ -465,7 +481,8 @@ function submit() {
   validationErrors.target_role = !form.target_role.trim();
   if (validationErrors.target_role) return;
 
-  startTrainingAfterSave.value = !isReturningUser.value;
+  startTrainingAfterSave.value =
+    !isReturningUser.value && !onboardingMode.value;
   savedSummary.value = '';
   saveError.value = '';
   mutation.mutate({

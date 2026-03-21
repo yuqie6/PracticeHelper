@@ -1,12 +1,14 @@
 <template>
-  <div class="neo-panel bg-white space-y-4">
+  <div class="neo-panel space-y-4 bg-white">
     <div>
       <p class="neo-kicker bg-[var(--neo-blue)]">{{ kicker }}</p>
-      <h3 class="text-xl font-black uppercase tracking-[0.06em]">{{ title }}</h3>
+      <h3 class="text-xl font-black uppercase tracking-[0.06em]">
+        {{ title }}
+      </h3>
       <p class="mt-2 text-base font-semibold">{{ description }}</p>
     </div>
 
-    <ol class="space-y-2">
+    <ol class="neo-stagger-list space-y-2">
       <li
         v-for="(step, index) in steps"
         :key="step"

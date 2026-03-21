@@ -54,7 +54,9 @@
             t('promptExperiments.filters.mode')
           }}</span>
           <select v-model="filters.mode" class="neo-select">
-            <option value="">{{ t('promptExperiments.filters.allModes') }}</option>
+            <option value="">
+              {{ t('promptExperiments.filters.allModes') }}
+            </option>
             <option value="basics">{{ formatModeLabel(t, 'basics') }}</option>
             <option value="project">{{ formatModeLabel(t, 'project') }}</option>
           </select>
@@ -64,8 +66,14 @@
             t('promptExperiments.filters.topic')
           }}</span>
           <select v-model="filters.topic" class="neo-select">
-            <option value="">{{ t('promptExperiments.filters.allTopics') }}</option>
-            <option v-for="topic in availableTopics" :key="topic" :value="topic">
+            <option value="">
+              {{ t('promptExperiments.filters.allTopics') }}
+            </option>
+            <option
+              v-for="topic in availableTopics"
+              :key="topic"
+              :value="topic"
+            >
               {{ formatTopicLabel(t, topic) }}
             </option>
           </select>
@@ -84,10 +92,7 @@
       <p class="neo-note">{{ t('common.loading') }}</p>
     </div>
 
-    <div
-      v-else-if="report"
-      class="neo-grid lg:grid-cols-2"
-    >
+    <div v-else-if="report" class="neo-grid lg:grid-cols-2">
       <article
         v-for="item in [report.left, report.right]"
         :key="item.prompt_set.id"
@@ -98,7 +103,9 @@
             {{ item.prompt_set.status }}
           </p>
           <h2 class="text-xl font-black">{{ item.prompt_set.label }}</h2>
-          <p class="neo-note">{{ item.prompt_set.description }}</p>
+          <p v-if="item.prompt_set.description" class="neo-note">
+            {{ item.prompt_set.description }}
+          </p>
         </div>
         <div class="neo-grid md:grid-cols-2">
           <div class="border-2 border-black bg-white px-4 py-3 md:border-4">
@@ -168,13 +175,15 @@
         {{ t('promptExperiments.samples.empty') }}
       </div>
 
-      <div v-else class="space-y-3">
+      <div v-else class="neo-stagger-list space-y-3">
         <article
           v-for="sample in report.recent_samples"
           :key="sample.session_id"
           class="border-2 border-black bg-white p-4 md:border-4"
         >
-          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div
+            class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+          >
             <div class="space-y-2">
               <p class="text-base font-black">
                 {{ formatModeLabel(t, sample.mode) }}
@@ -183,7 +192,8 @@
                 </template>
               </p>
               <p class="neo-note">
-                {{ sample.prompt_set.label }} · {{ formatStatusLabel(t, sample.status) }}
+                {{ sample.prompt_set.label }} ·
+                {{ formatStatusLabel(t, sample.status) }}
               </p>
               <p class="neo-note text-xs">
                 {{ new Date(sample.updated_at).toLocaleString() }}
@@ -207,7 +217,10 @@
             </div>
           </div>
 
-          <div v-if="expandedSessionId === sample.session_id" class="mt-4 space-y-3">
+          <div
+            v-if="expandedSessionId === sample.session_id"
+            class="mt-4 space-y-3"
+          >
             <div v-if="isLoadingLogs" class="neo-note">
               {{ t('common.loading') }}
             </div>
@@ -217,7 +230,10 @@
               :title="t('promptExperiments.logs.errorTitle')"
               :message="logsError"
             />
-            <div v-else-if="sampleLogs.length" class="space-y-3">
+            <div
+              v-else-if="sampleLogs.length"
+              class="neo-stagger-list space-y-3"
+            >
               <div
                 v-for="log in sampleLogs"
                 :key="log.id"
@@ -256,7 +272,7 @@ import { useRoute } from 'vue-router';
 
 import {
   getPromptExperiment,
-  listPromptSets,
+  listPromptExperimentPromptSets,
   listSessionEvaluationLogs,
 } from '../api/client';
 import NoticePanel from '../components/NoticePanel.vue';
@@ -291,12 +307,9 @@ const availableTopics = [
   'docker_k8s',
 ];
 
-const {
-  data: promptSets,
-  error: promptSetsQueryError,
-} = useQuery({
-  queryKey: ['prompt-sets'],
-  queryFn: listPromptSets,
+const { data: promptSets, error: promptSetsQueryError } = useQuery({
+  queryKey: ['prompt-experiment-prompt-sets'],
+  queryFn: listPromptExperimentPromptSets,
 });
 
 watch(
@@ -324,8 +337,8 @@ watch(
   { immediate: true },
 );
 
-const comparisonEnabled = computed(
-  () => Boolean(filters.left && filters.right && filters.left !== filters.right),
+const comparisonEnabled = computed(() =>
+  Boolean(filters.left && filters.right && filters.left !== filters.right),
 );
 
 const {
@@ -333,7 +346,13 @@ const {
   error: comparisonQueryError,
   isLoading: isLoadingComparison,
 } = useQuery({
-  queryKey: ['prompt-experiment', filters.left, filters.right, filters.mode, filters.topic],
+  queryKey: [
+    'prompt-experiment',
+    filters.left,
+    filters.right,
+    filters.mode,
+    filters.topic,
+  ],
   enabled: comparisonEnabled,
   queryFn: () =>
     getPromptExperiment({
@@ -356,10 +375,14 @@ const {
 });
 
 const promptSetsError = computed(() =>
-  promptSetsQueryError.value instanceof Error ? promptSetsQueryError.value.message : '',
+  promptSetsQueryError.value instanceof Error
+    ? promptSetsQueryError.value.message
+    : '',
 );
 const comparisonError = computed(() =>
-  comparisonQueryError.value instanceof Error ? comparisonQueryError.value.message : '',
+  comparisonQueryError.value instanceof Error
+    ? comparisonQueryError.value.message
+    : '',
 );
 const logsError = computed(() =>
   sampleLogsError.value instanceof Error ? sampleLogsError.value.message : '',

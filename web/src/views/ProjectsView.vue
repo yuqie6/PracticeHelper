@@ -7,16 +7,60 @@
       </p>
     </header>
 
-    <form class="neo-panel flex flex-col gap-4 md:flex-row" @submit.prevent="submitImport">
+    <form
+      class="neo-panel flex flex-col gap-4 md:flex-row"
+      @submit.prevent="submitImport"
+    >
       <input
         v-model="repoUrl"
         class="neo-input flex-1"
         :placeholder="t('projects.importPlaceholder')"
       />
-      <button type="submit" class="neo-button-red" :disabled="isImporting">
+      <button
+        type="submit"
+        class="neo-button-red w-full md:w-auto"
+        :disabled="isImporting"
+      >
         {{ isImporting ? t('common.starting') : t('projects.importAction') }}
       </button>
     </form>
+
+    <div
+      v-if="onboardingMode"
+      class="neo-panel space-y-3 bg-[var(--neo-yellow)]"
+    >
+      <div class="space-y-1">
+        <p class="neo-kicker bg-white">{{ t('projects.onboarding.kicker') }}</p>
+        <h2 class="text-xl font-black">
+          {{ t('projects.onboarding.title') }}
+        </h2>
+        <p class="neo-note">
+          {{
+            projects.length
+              ? t('projects.onboarding.readyDescription')
+              : t('projects.onboarding.description')
+          }}
+        </p>
+      </div>
+      <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <RouterLink
+          to="/train?onboarding=1"
+          class="neo-button-dark w-full sm:w-auto"
+        >
+          {{
+            projects.length
+              ? t('projects.onboarding.continueAction')
+              : t('projects.onboarding.skipAction')
+          }}
+        </RouterLink>
+        <RouterLink
+          to="/profile?onboarding=1"
+          class="neo-button w-full bg-white sm:w-auto"
+        >
+          {{ t('projects.onboarding.backAction') }}
+        </RouterLink>
+      </div>
+    </div>
 
     <NoticePanel
       v-if="importError"
@@ -33,8 +77,10 @@
     />
 
     <div class="neo-panel space-y-3">
-      <p class="neo-kicker bg-[var(--neo-blue)]">{{ t('projects.jobsTitle') }}</p>
-      <div v-if="importJobs.length" class="space-y-3">
+      <p class="neo-kicker bg-[var(--neo-blue)]">
+        {{ t('projects.jobsTitle') }}
+      </p>
+      <div v-if="importJobs.length" class="neo-stagger-list space-y-3">
         <article
           v-for="job in importJobs"
           :key="job.id"
@@ -52,7 +98,7 @@
             </span>
           </div>
 
-          <div class="space-y-1 text-sm font-semibold text-black/80">
+          <div class="space-y-1 break-all text-sm font-semibold text-black/80">
             <p>{{ t('projects.jobRepo') }}: {{ job.repo_url }}</p>
             <p v-if="job.error_message">{{ job.error_message }}</p>
             <p v-if="job.project_name">
@@ -63,7 +109,7 @@
           <button
             v-if="job.project_id"
             type="button"
-            class="neo-button-dark"
+            class="neo-button-dark w-full sm:w-auto"
             @click="selectProject(job.project_id)"
           >
             {{ t('projects.openProject') }}
@@ -71,7 +117,7 @@
           <button
             v-if="job.status === 'failed'"
             type="button"
-            class="neo-button-red"
+            class="neo-button-red w-full sm:w-auto"
             :disabled="isRetrying"
             @click="retryJob(job.id)"
           >
@@ -84,26 +130,36 @@
 
     <div class="neo-grid lg:grid-cols-[0.8fr_1.2fr]">
       <div class="neo-panel space-y-3">
-        <p class="neo-kicker bg-[var(--neo-yellow)]">{{ t('projects.listTitle') }}</p>
+        <p class="neo-kicker bg-[var(--neo-yellow)]">
+          {{ t('projects.listTitle') }}
+        </p>
         <button
           v-for="project in projects"
           :key="project.id"
           type="button"
           class="w-full border-2 border-black bg-white px-4 py-3 text-left shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] md:border-4"
-          :class="{ 'bg-[var(--neo-yellow)]': selectedProjectId === project.id }"
+          :class="{
+            'bg-[var(--neo-yellow)]': selectedProjectId === project.id,
+          }"
           @click="selectProject(project.id)"
         >
           <p class="text-sm font-black uppercase">
             {{ formatImportStatusLabel(t, project.import_status) }}
           </p>
           <p class="text-lg font-bold">{{ project.name }}</p>
-          <p class="mt-1 text-sm font-semibold">{{ project.repo_url }}</p>
+          <p class="mt-1 break-all text-sm font-semibold">
+            {{ project.repo_url }}
+          </p>
         </button>
-        <p v-if="!projects.length" class="neo-note">{{ t('projects.emptyList') }}</p>
+        <p v-if="!projects.length" class="neo-note">
+          {{ t('projects.emptyList') }}
+        </p>
       </div>
 
       <div v-if="selectedProject" class="neo-panel">
-        <p class="neo-kicker bg-[var(--neo-red)]">{{ t('projects.editorTitle') }}</p>
+        <p class="neo-kicker bg-[var(--neo-red)]">
+          {{ t('projects.editorTitle') }}
+        </p>
         <form class="space-y-4" @submit.prevent="submitUpdate">
           <label class="space-y-2">
             <span class="neo-subheading">{{ t('projects.fields.name') }}</span>
@@ -111,41 +167,59 @@
           </label>
 
           <label class="space-y-2">
-            <span class="neo-subheading">{{ t('projects.fields.summary') }}</span>
+            <span class="neo-subheading">{{
+              t('projects.fields.summary')
+            }}</span>
             <textarea v-model="editor.summary" class="neo-textarea" />
           </label>
 
           <label class="space-y-2">
-            <span class="neo-subheading">{{ t('projects.fields.techStack') }}</span>
+            <span class="neo-subheading">{{
+              t('projects.fields.techStack')
+            }}</span>
             <input v-model="editor.tech_stack" class="neo-input" />
           </label>
 
           <label class="space-y-2">
-            <span class="neo-subheading">{{ t('projects.fields.highlights') }}</span>
+            <span class="neo-subheading">{{
+              t('projects.fields.highlights')
+            }}</span>
             <textarea v-model="editor.highlights" class="neo-textarea" />
           </label>
 
           <label class="space-y-2">
-            <span class="neo-subheading">{{ t('projects.fields.challenges') }}</span>
+            <span class="neo-subheading">{{
+              t('projects.fields.challenges')
+            }}</span>
             <textarea v-model="editor.challenges" class="neo-textarea" />
           </label>
 
           <label class="space-y-2">
-            <span class="neo-subheading">{{ t('projects.fields.tradeoffs') }}</span>
+            <span class="neo-subheading">{{
+              t('projects.fields.tradeoffs')
+            }}</span>
             <textarea v-model="editor.tradeoffs" class="neo-textarea" />
           </label>
 
           <label class="space-y-2">
-            <span class="neo-subheading">{{ t('projects.fields.ownership') }}</span>
+            <span class="neo-subheading">{{
+              t('projects.fields.ownership')
+            }}</span>
             <textarea v-model="editor.ownership_points" class="neo-textarea" />
           </label>
 
           <label class="space-y-2">
-            <span class="neo-subheading">{{ t('projects.fields.followups') }}</span>
+            <span class="neo-subheading">{{
+              t('projects.fields.followups')
+            }}</span>
             <textarea v-model="editor.followup_points" class="neo-textarea" />
           </label>
 
-          <button class="neo-button-dark" type="submit" :disabled="isUpdating">
+          <button
+            class="neo-button-dark w-full sm:w-auto"
+            type="submit"
+            :disabled="isUpdating"
+          >
             {{ isUpdating ? t('common.saving') : t('projects.saveAction') }}
           </button>
         </form>
@@ -165,6 +239,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
 
 import {
   importProject,
@@ -183,12 +258,15 @@ import {
 } from '../lib/labels';
 
 const queryClient = useQueryClient();
+const route = useRoute();
+const router = useRouter();
 const repoUrl = ref('');
 const selectedProjectId = ref('');
 const importError = ref('');
 const retryError = ref('');
 const saveError = ref('');
 const { t } = useI18n();
+const onboardingMode = computed(() => route.query.onboarding === '1');
 
 const editor = reactive({
   name: '',
@@ -213,14 +291,19 @@ const { data: importJobsData } = useQuery({
   queryFn: listImportJobs,
   refetchInterval: (query) => {
     const jobs = (query.state.data as ProjectImportJob[] | undefined) ?? [];
-    return jobs.some((job) => ['queued', 'running'].includes(job.status)) ? 3000 : false;
+    return jobs.some((job) => ['queued', 'running'].includes(job.status))
+      ? 3000
+      : false;
   },
 });
 
 const importJobs = computed(() => importJobsData.value ?? []);
 
 watch(
-  () => importJobs.value.map((job) => `${job.id}:${job.status}:${job.project_id}`).join('|'),
+  () =>
+    importJobs.value
+      .map((job) => `${job.id}:${job.status}:${job.project_id}`)
+      .join('|'),
   async () => {
     await queryClient.invalidateQueries({ queryKey: ['projects'] });
   },
@@ -238,8 +321,10 @@ watch(
   { immediate: true },
 );
 
-const selectedProject = computed(() =>
-  projects.value.find((project) => project.id === selectedProjectId.value) ?? null,
+const selectedProject = computed(
+  () =>
+    projects.value.find((project) => project.id === selectedProjectId.value) ??
+    null,
 );
 
 watch(selectedProject, (project) => {
@@ -268,9 +353,16 @@ const importMutation = useMutation({
     }
     await queryClient.invalidateQueries({ queryKey: ['import-jobs'] });
     await queryClient.invalidateQueries({ queryKey: ['projects'] });
+
+    if (onboardingMode.value && project.project_id) {
+      await router.push(
+        `/train?onboarding=1&mode=project&project_id=${encodeURIComponent(project.project_id)}`,
+      );
+    }
   },
   onError: (error) => {
-    importError.value = error instanceof Error ? error.message : t('common.requestFailed');
+    importError.value =
+      error instanceof Error ? error.message : t('common.requestFailed');
   },
 });
 
@@ -281,19 +373,26 @@ const retryMutation = useMutation({
     await queryClient.invalidateQueries({ queryKey: ['import-jobs'] });
   },
   onError: (error) => {
-    retryError.value = error instanceof Error ? error.message : t('common.requestFailed');
+    retryError.value =
+      error instanceof Error ? error.message : t('common.requestFailed');
   },
 });
 
 const updateMutation = useMutation({
-  mutationFn: ({ projectId, payload }: { projectId: string; payload: Partial<ProjectProfile> }) =>
-    updateProject(projectId, payload),
+  mutationFn: ({
+    projectId,
+    payload,
+  }: {
+    projectId: string;
+    payload: Partial<ProjectProfile>;
+  }) => updateProject(projectId, payload),
   onSuccess: async () => {
     saveError.value = '';
     await queryClient.invalidateQueries({ queryKey: ['projects'] });
   },
   onError: (error) => {
-    saveError.value = error instanceof Error ? error.message : t('common.requestFailed');
+    saveError.value =
+      error instanceof Error ? error.message : t('common.requestFailed');
   },
 });
 

@@ -1,23 +1,44 @@
 <template>
   <section class="neo-page space-y-6">
     <div
-      v-if="!dashboard?.profile"
+      v-if="showOnboarding"
       class="neo-panel space-y-4 bg-[var(--neo-yellow)]"
     >
       <p class="neo-kicker bg-white">{{ t('home.onboarding.kicker') }}</p>
       <h2 class="text-xl font-black">{{ t('home.onboarding.title') }}</h2>
-      <p class="text-sm font-semibold">{{ t('home.onboarding.description') }}</p>
-      <div class="flex flex-wrap gap-3">
-        <RouterLink to="/profile" class="neo-button-dark">
-          {{ t('home.onboarding.step1') }}
-        </RouterLink>
-        <RouterLink to="/projects" class="neo-button bg-white">
-          {{ t('home.onboarding.step2') }}
-        </RouterLink>
-        <RouterLink to="/train" class="neo-button bg-white">
-          {{ t('home.onboarding.step3') }}
-        </RouterLink>
-      </div>
+      <p class="text-sm font-semibold">
+        {{ t('home.onboarding.description') }}
+      </p>
+      <ol class="space-y-3">
+        <li
+          v-for="step in onboardingSteps"
+          :key="step.key"
+          class="border-2 border-black md:border-4"
+          :class="onboardingStepClass(step.status)"
+        >
+          <RouterLink
+            :to="step.href"
+            class="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div class="flex items-start gap-3">
+              <span class="neo-badge bg-white">
+                {{ step.index }}
+              </span>
+              <div class="space-y-1">
+                <p class="text-base font-black">
+                  {{ step.label }}
+                </p>
+                <p class="neo-note">
+                  {{ step.hint }}
+                </p>
+              </div>
+            </div>
+            <span class="text-xs font-black uppercase tracking-[0.08em]">
+              {{ t(`home.onboarding.status.${step.status}`) }}
+            </span>
+          </RouterLink>
+        </li>
+      </ol>
     </div>
 
     <div class="neo-grid xl:grid-cols-[1.3fr_0.7fr]">
@@ -26,11 +47,14 @@
         <p class="text-lg font-bold leading-7">
           {{ dashboard?.today_focus ?? t('common.firstTrainingHint') }}
         </p>
-        <div class="mt-4 flex flex-wrap gap-3">
-          <RouterLink to="/train" class="neo-button-red">
+        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+          <RouterLink to="/train" class="neo-button-red w-full sm:w-auto">
             {{ t('home.hero.actionPrimary') }}
           </RouterLink>
-          <RouterLink to="/projects" class="neo-button bg-white">
+          <RouterLink
+            to="/projects"
+            class="neo-button w-full bg-white sm:w-auto"
+          >
             {{ t('home.hero.actionSecondary') }}
           </RouterLink>
         </div>
@@ -113,24 +137,54 @@
       <p class="text-sm font-semibold">
         {{ t('home.dueReviews.description', { count: dueReviews.length }) }}
       </p>
-      <div class="mt-3 flex flex-wrap gap-2">
+      <div class="mt-3 grid gap-3 sm:flex sm:flex-wrap">
         <div
           v-for="item in dueReviews.slice(0, 5)"
           :key="item.id"
-          class="flex items-center gap-2"
+          class="border-2 border-black bg-white px-3 py-3 md:border-4"
         >
-          <RouterLink
-            :to="item.review_card_id ? `/reviews/${item.review_card_id}` : `/sessions/${item.session_id}`"
-            class="neo-button-dark"
-          >
-            {{ item.topic || t('home.dueReviews.review') }}
-          </RouterLink>
-          <button
-            class="neo-button bg-white text-xs"
-            @click="completeMutation.mutate(item.id)"
-          >
-            {{ t('home.dueReviews.markDone') }}
-          </button>
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="space-y-1">
+              <p class="text-sm font-black uppercase">
+                {{
+                  item.weakness_kind
+                    ? formatWeaknessKindLabel(t, item.weakness_kind)
+                    : t('home.dueReviews.review')
+                }}
+              </p>
+              <p class="text-base font-bold">
+                {{
+                  resolveDueReviewHeadline(item) ||
+                  (item.topic
+                    ? formatTopicLabel(t, item.topic)
+                    : t('home.dueReviews.review'))
+                }}
+              </p>
+              <p class="neo-note">
+                {{
+                  item.topic
+                    ? t('home.dueReviews.topicHint', {
+                        topic: formatTopicLabel(t, item.topic),
+                      })
+                    : t('home.dueReviews.genericHint')
+                }}
+              </p>
+            </div>
+            <div class="flex flex-col gap-2 sm:w-auto sm:min-w-[10rem]">
+              <RouterLink
+                :to="buildDueReviewTarget(item)"
+                class="neo-button-dark w-full"
+              >
+                {{ t('home.dueReviews.startAction') }}
+              </RouterLink>
+              <button
+                class="neo-button w-full bg-white text-xs"
+                @click="completeMutation.mutate(item.id)"
+              >
+                {{ t('home.dueReviews.markDone') }}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -169,7 +223,7 @@
         <p class="neo-kicker bg-[var(--neo-red)]">
           {{ t('home.sections.weaknesses') }}
         </p>
-        <ul class="space-y-3">
+        <ul class="neo-stagger-list space-y-3">
           <li
             v-for="item in dashboard?.weaknesses ?? []"
             :key="item.id"
@@ -194,9 +248,11 @@
           <div
             v-for="trend in trends"
             :key="trend.id"
-            class="flex items-center gap-3 border-2 border-black bg-white px-3 py-2 md:border-4"
+            class="flex flex-col items-start gap-3 border-2 border-black bg-white px-3 py-2 sm:flex-row sm:items-center md:border-4"
           >
-            <span class="w-24 truncate text-xs font-bold">{{ trend.label }}</span>
+            <span class="w-24 truncate text-xs font-bold">{{
+              trend.label
+            }}</span>
             <svg
               v-if="trend.points.length >= 2"
               viewBox="0 0 120 32"
@@ -222,7 +278,7 @@
           </p>
           <p class="text-sm font-semibold">{{ sessionSummary }}</p>
         </div>
-        <ul class="space-y-3">
+        <ul class="neo-stagger-list space-y-3">
           <li
             v-for="session in dashboard?.recent_sessions ?? []"
             :key="session.id"
@@ -271,14 +327,31 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
 
-import { completeDueReview, getDashboard, getWeaknessTrends, listDueReviews, type TrainingSessionSummary, type WeaknessTrend } from '../api/client';
+import {
+  completeDueReview,
+  getDashboard,
+  getWeaknessTrends,
+  listDueReviews,
+  listProjects,
+  type TrainingSessionSummary,
+  type WeaknessTrend,
+} from '../api/client';
 import StatCard from '../components/StatCard.vue';
+import {
+  buildDueReviewTarget,
+  resolveDueReviewHeadline,
+} from '../lib/dueReviews';
 import {
   describeProfile,
   describeSession,
   describeWeakness,
 } from '../lib/dashboard';
 import { describeJobTargetStatus } from '../lib/jobTargetStatus';
+import {
+  buildOnboardingHref,
+  buildOnboardingProgress,
+  type OnboardingStepStatus,
+} from '../lib/onboarding';
 import {
   formatModeLabel,
   formatStatusLabel,
@@ -301,17 +374,46 @@ const { data: dueReviewsData } = useQuery({
   queryFn: listDueReviews,
 });
 
+const { data: projectsData } = useQuery({
+  queryKey: ['projects'],
+  queryFn: listProjects,
+});
+
 const { t, locale } = useI18n();
 const queryClient = useQueryClient();
 
 const dashboard = computed(() => data.value ?? null);
 const trends = computed(() => trendsData.value ?? []);
 const dueReviews = computed(() => dueReviewsData.value ?? []);
+const projects = computed(() => projectsData.value ?? []);
 const completeMutation = useMutation({
   mutationFn: (id: number) => completeDueReview(id),
   onSuccess: () => queryClient.invalidateQueries({ queryKey: ['due-reviews'] }),
 });
 const currentSession = computed(() => dashboard.value?.current_session ?? null);
+const hasProfile = computed(() => Boolean(dashboard.value?.profile));
+const hasStartedSession = computed(
+  () =>
+    Boolean(dashboard.value?.current_session) ||
+    Boolean(dashboard.value?.recent_sessions?.length),
+);
+const onboarding = computed(() =>
+  buildOnboardingProgress({
+    hasProfile: hasProfile.value,
+    hasProjects: projects.value.length > 0,
+    hasSession: hasStartedSession.value,
+  }),
+);
+const showOnboarding = computed(() => !onboarding.value.completed);
+const onboardingSteps = computed(() =>
+  onboarding.value.steps.map((step, index) => ({
+    ...step,
+    index: index + 1,
+    label: t(`home.onboarding.steps.${step.key}.label`),
+    hint: t(`home.onboarding.steps.${step.key}.hint`),
+    href: buildOnboardingHref(step.key),
+  })),
+);
 const weaknessSummary = computed(() => {
   locale.value;
   return describeWeakness(dashboard.value, t);
@@ -394,5 +496,16 @@ function sparklinePath(trend: WeaknessTrend): string {
       return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(' ');
+}
+
+function onboardingStepClass(status: OnboardingStepStatus): string {
+  switch (status) {
+    case 'done':
+      return 'bg-[var(--neo-green)]';
+    case 'current':
+      return 'bg-white';
+    default:
+      return 'bg-[var(--neo-paper)]';
+  }
 }
 </script>

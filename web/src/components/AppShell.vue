@@ -14,7 +14,7 @@
           <RouterLink
             v-if="activeImportSummary"
             to="/projects"
-            class="mt-3 inline-flex border-2 border-black bg-white px-3 py-2 text-sm font-black uppercase tracking-[0.08em] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] md:border-4"
+            class="mt-3 inline-flex w-full border-2 border-black bg-white px-3 py-2 text-sm font-black uppercase tracking-[0.08em] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] md:w-auto md:border-4"
           >
             {{ activeImportSummary }}
           </RouterLink>
@@ -29,7 +29,7 @@
               v-for="item in localeOptions"
               :key="item.value"
               type="button"
-              class="border-2 border-black px-3 py-1 text-xs font-black uppercase md:border-4"
+              class="border-2 border-black px-3 py-1 text-xs font-black uppercase transition-colors md:border-4"
               :class="
                 currentLocale === item.value
                   ? 'bg-[var(--neo-yellow)]'
@@ -49,7 +49,7 @@
               v-for="item in themeOptions"
               :key="item.value"
               type="button"
-              class="border-2 border-black px-3 py-1 text-xs font-black uppercase md:border-4"
+              class="border-2 border-black px-3 py-1 text-xs font-black uppercase transition-colors md:border-4"
               :class="
                 currentTheme === item.value
                   ? 'bg-[var(--neo-yellow)]'
@@ -62,13 +62,13 @@
           </div>
 
           <nav
-            class="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:justify-end"
+            class="flex gap-3 overflow-x-auto pb-1 sm:flex-wrap sm:justify-end"
           >
             <RouterLink
               v-for="item in navItems"
               :key="item.to"
               :to="item.to"
-              class="neo-button-dark w-full sm:w-auto"
+              class="neo-button-dark min-w-max shrink-0"
             >
               {{ item.label }}
             </RouterLink>

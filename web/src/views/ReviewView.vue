@@ -47,7 +47,23 @@
     />
 
     <div v-if="review" class="flex justify-end">
-      <div class="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+      <div
+        class="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-end"
+      >
+        <label class="w-full space-y-2 sm:w-44">
+          <span class="text-xs font-black uppercase tracking-[0.08em]">
+            {{ t('common.exportFormatLabel') }}
+          </span>
+          <select v-model="exportFormat" class="neo-select">
+            <option
+              v-for="item in exportFormatOptions"
+              :key="item.value"
+              :value="item.value"
+            >
+              {{ item.label }}
+            </option>
+          </select>
+        </label>
         <RouterLink
           v-if="review.prompt_set?.id"
           :to="buildPromptExperimentLink(review.prompt_set.id)"
@@ -58,11 +74,24 @@
         <button
           type="button"
           class="neo-button-dark w-full sm:w-auto"
+          @click="toggleAuditDetails"
+        >
+          {{
+            showAuditDetails
+              ? t('review.auditHideAction')
+              : t('review.auditShowAction')
+          }}
+        </button>
+        <button
+          type="button"
+          class="neo-button-dark w-full sm:w-auto"
           :disabled="isExporting"
           @click="exportReport"
         >
           {{
-            isExporting ? t('review.exportingAction') : t('review.exportAction')
+            isExporting
+              ? t('review.exportingAction')
+              : t('review.exportAction', { format: exportFormatLabel })
           }}
         </button>
       </div>
@@ -213,6 +242,66 @@
         </div>
       </div>
     </div>
+
+    <div v-if="review && showAuditDetails" class="neo-panel space-y-4">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <p class="neo-kicker bg-[var(--neo-yellow)]">
+            {{ t('review.auditTitle') }}
+          </p>
+          <p class="neo-note">
+            {{ t('review.auditDescription') }}
+          </p>
+        </div>
+      </div>
+
+      <div v-if="isLoadingEvaluationLogs" class="neo-note">
+        {{ t('common.loading') }}
+      </div>
+
+      <NoticePanel
+        v-else-if="evaluationLogsError"
+        tone="error"
+        :title="t('review.auditErrorTitle')"
+        :message="evaluationLogsError"
+      />
+
+      <div v-else-if="evaluationLogs.length" class="neo-stagger-list space-y-3">
+        <article
+          v-for="item in evaluationLogs"
+          :key="item.id"
+          class="space-y-3 border-2 border-black bg-white px-4 py-4 md:border-4"
+        >
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div class="space-y-1">
+              <p class="text-base font-black">{{ item.flow_name }}</p>
+              <p class="neo-note">
+                {{ t('review.auditMeta') }}:
+                {{ item.model_name || '—' }} /
+                {{ item.prompt_hash || '—' }} /
+                {{ item.latency_ms.toFixed(1) }} ms
+              </p>
+            </div>
+            <p class="neo-note text-xs">
+              {{ new Date(item.created_at).toLocaleString() }}
+            </p>
+          </div>
+
+          <div v-if="hasEvaluationRawOutput(item.raw_output)" class="space-y-2">
+            <p class="text-xs font-black uppercase tracking-[0.08em]">
+              {{ t('review.auditRawOutput') }}
+            </p>
+            <pre class="max-h-72 overflow-auto border-2 border-black bg-[var(--neo-paper)] px-3 py-3 text-xs leading-6 md:border-4"><code>{{
+              formatEvaluationRawOutput(item.raw_output)
+            }}</code></pre>
+          </div>
+        </article>
+      </div>
+
+      <p v-else class="neo-note">
+        {{ t('review.auditEmpty') }}
+      </p>
+    </div>
   </section>
 </template>
 
@@ -222,9 +311,23 @@ import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute } from 'vue-router';
 
-import { ApiError, downloadSessionExport, getReview } from '../api/client';
+import {
+  ApiError,
+  downloadSessionExport,
+  getReview,
+  listSessionEvaluationLogs,
+} from '../api/client';
 import NoticePanel from '../components/NoticePanel.vue';
-import { triggerFileDownload } from '../lib/export';
+import {
+  formatEvaluationRawOutput,
+  hasEvaluationRawOutput,
+} from '../lib/evaluationLogs';
+import {
+  SESSION_EXPORT_FORMAT,
+  SESSION_EXPORT_FORMATS,
+  triggerFileDownload,
+  type SessionExportFormat,
+} from '../lib/export';
 import { formatModeLabel, formatTopicLabel } from '../lib/labels';
 import { buildPromptExperimentLink } from '../lib/promptExperiments';
 
@@ -233,6 +336,8 @@ const reviewId = computed(() => route.params.id as string);
 const { t } = useI18n();
 const exportError = ref('');
 const isExporting = ref(false);
+const exportFormat = ref<SessionExportFormat>(SESSION_EXPORT_FORMAT);
+const showAuditDetails = ref(false);
 
 const { data, error, isLoading, refetch } = useQuery({
   queryKey: ['review', reviewId],
@@ -240,6 +345,7 @@ const { data, error, isLoading, refetch } = useQuery({
 });
 
 const review = computed(() => data.value ?? null);
+const sessionId = computed(() => review.value?.session_id ?? '');
 const loadError = computed(() =>
   error.value instanceof Error ? error.value.message : '',
 );
@@ -292,6 +398,32 @@ const recommendedNextLabel = computed(() => {
   });
 });
 
+const exportFormatOptions = computed(() =>
+  SESSION_EXPORT_FORMATS.map((item) => ({
+    value: item,
+    label: t(`common.exportFormats.${item}`),
+  })),
+);
+
+const exportFormatLabel = computed(() =>
+  t(`common.exportFormats.${exportFormat.value}`),
+);
+const {
+  data: evaluationLogsData,
+  error: evaluationLogsQueryError,
+  isLoading: isLoadingEvaluationLogs,
+} = useQuery({
+  queryKey: ['review-evaluation-logs', sessionId],
+  enabled: computed(() => showAuditDetails.value && Boolean(sessionId.value)),
+  queryFn: () => listSessionEvaluationLogs(sessionId.value),
+});
+const evaluationLogs = computed(() => evaluationLogsData.value ?? []);
+const evaluationLogsError = computed(() =>
+  evaluationLogsQueryError.value instanceof Error
+    ? evaluationLogsQueryError.value.message
+    : '',
+);
+
 async function exportReport() {
   if (!review.value?.session_id || isExporting.value) {
     return;
@@ -303,6 +435,7 @@ async function exportReport() {
   try {
     const { blob, filename } = await downloadSessionExport(
       review.value.session_id,
+      exportFormat.value,
     );
     triggerFileDownload(blob, filename);
   } catch (error) {
@@ -316,5 +449,9 @@ async function exportReport() {
   } finally {
     isExporting.value = false;
   }
+}
+
+function toggleAuditDetails() {
+  showAuditDetails.value = !showAuditDetails.value;
 }
 </script>

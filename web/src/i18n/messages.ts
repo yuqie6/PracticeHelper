@@ -48,6 +48,12 @@ export const messages = {
       nextRecommendationHint: '完善画像后，系统会给出下一步建议。',
       noRecommendation: '暂无推荐，先完成第一轮训练。',
       setDeadlineHint: '在画像页设置目标投递时间后，这里会显示剩余天数。',
+      exportFormatLabel: '导出格式',
+      exportFormats: {
+        markdown: 'Markdown',
+        json: 'JSON',
+        pdf: 'PDF',
+      },
     },
     enums: {
       mode: {
@@ -117,50 +123,50 @@ export const messages = {
     },
     jobTargetStatus: {
       homeActive: {
-        idle: '当前默认 JD 是 {name}，但还没完成分析；首页推荐和训练会先停留在通用口径。',
+        idle: '当前默认 JD 是 {name}，但还未完成分析；首页推荐和训练仍按通用模式运行。',
         running:
-          '当前默认 JD 是 {name}，但还在分析中；分析完成前，首页推荐和训练不会自动使用它。',
-        succeeded: '当前默认 JD 是 {name}，首页推荐和训练默认已切到岗位视角。',
+          '当前默认 JD 是 {name}，正在分析中；分析完成前，首页推荐和训练不会自动使用它。',
+        succeeded: '当前默认 JD 是 {name}，首页推荐和训练已按岗位要求调整。',
         failed:
-          '当前默认 JD 是 {name}，但最近一次分析失败了；修正文案或重新分析后，岗位视角才会恢复。',
+          '当前默认 JD 是 {name}，但最近一次分析失败；修正内容或重新分析后才会恢复。',
         stale:
-          '当前默认 JD 是 {name}，但原文已经改过；旧分析只保留给你回看，新训练不会继续使用它。',
+          '当前默认 JD 是 {name}，但原文已变更；旧分析仅供回看，新训练不会使用。',
         unknown:
-          '当前默认 JD 暂时无法确认是否可用，首页推荐和训练会先保持通用口径。',
+          '当前默认 JD 暂时无法确认是否可用，首页推荐和训练暂按通用模式运行。',
       },
       trainSelection: {
-        idle: '这份 JD 还没分析，当前不能绑定训练。先去岗位页完成分析。',
-        running: '这份 JD 还在分析中，分析完成前不能绑定训练。',
+        idle: '这份 JD 还未分析，暂时无法用于训练。请先在岗位页完成分析。',
+        running: '这份 JD 正在分析中，分析完成前无法用于训练。',
         succeeded:
-          '这轮会固定绑定这份 JD 当前可用的分析快照；训练开始后，后续修改不会影响本轮结果。',
+          '本轮将使用这份 JD 当前的分析结果；训练开始后，后续修改不影响本轮。',
         failed:
-          '这份 JD 最近一次分析失败了，修正文案或重新分析后才能绑定训练。',
+          '这份 JD 最近一次分析失败，修正内容或重新分析后才能用于训练。',
         stale:
-          '这份 JD 原文已经改过，旧分析结果只供回看；重新分析后才能绑定训练。',
-        unknown: '当前无法确认这份 JD 是否可用于训练，请回岗位页重新检查。',
+          '这份 JD 原文已变更，旧分析仅供回看；重新分析后才能用于训练。',
+        unknown: '当前无法确认这份 JD 是否可用于训练，请在岗位页重新检查。',
       },
       trainFallback: {
-        idle: '当前默认 JD「{name}」还没分析，系统不会自动带入它；如果要走岗位视角，请先去岗位页完成分析。',
+        idle: '当前默认 JD「{name}」还未分析，系统不会自动应用；如需按岗位要求训练，请先在岗位页完成分析。',
         running:
-          '当前默认 JD「{name}」还在分析中，系统不会自动带入它；如果要走岗位视角，请等分析完成。',
+          '当前默认 JD「{name}」正在分析中，系统暂不自动应用；请等待分析完成。',
         succeeded:
-          '当前默认 JD「{name}」可直接用于训练；如果这轮不想带岗位视角，可以保持当前“通用训练”。',
+          '当前默认 JD「{name}」可直接用于训练；如本轮不需要岗位视角，可保持”通用训练”。',
         failed:
-          '当前默认 JD「{name}」最近一次分析失败了，系统不会自动带入它；修正文案或重新分析后才能恢复岗位视角。',
+          '当前默认 JD「{name}」最近一次分析失败，系统不会自动应用；修正内容或重新分析后可恢复。',
         stale:
-          '当前默认 JD「{name}」原文已经改过，系统不会自动带入旧分析；重新分析后才能恢复岗位视角。',
+          '当前默认 JD「{name}」原文已变更，系统不会自动应用旧分析；重新分析后可恢复。',
         unknown:
-          '当前默认 JD 暂时无法确认是否可用，系统不会自动带入它；如需岗位视角，请先回岗位页确认状态。',
+          '当前默认 JD 暂时无法确认是否可用，系统不会自动应用；如需岗位视角，请先在岗位页确认状态。',
       },
       jobsReadiness: {
-        idle: '这份 JD 还没有分析结果，当前不能用于新训练绑定。',
-        running: '这份 JD 正在分析中。分析完成前，你还不能把它用于新训练绑定。',
+        idle: '这份 JD 还没有分析结果，暂时无法用于新训练。',
+        running: '这份 JD 正在分析中，分析完成前暂时无法用于新训练。',
         succeeded:
-          '这份 JD 的当前原文和最新分析一致，可以直接用于新的训练绑定。',
+          '这份 JD 原文与最新分析一致，可直接用于新训练。',
         failed:
-          '这份 JD 的当前原文分析失败了。修正文案或重新分析后，才会恢复成可用状态。',
+          '这份 JD 当前分析失败。修正内容或重新分析后可恢复。',
         stale:
-          '这份 JD 的原文已经变更，当前分析已过期。你仍可回看旧快照，但新训练不会继续使用它。',
+          '这份 JD 原文已变更，当前分析已过期。旧分析仅供回看，新训练不会使用。',
         unknown: '这份 JD 暂时无法确认是否可用于训练，请重新检查。',
       },
       jobsSnapshot: {
@@ -183,6 +189,25 @@ export const messages = {
         step1: '1. 填写画像',
         step2: '2. 导入项目',
         step3: '3. 开始训练',
+        steps: {
+          profile: {
+            label: '填写画像',
+            hint: '先把目标岗位、阶段和技术栈补齐。',
+          },
+          projects: {
+            label: '导入项目',
+            hint: '可导入真实仓库，也可以先跳过。',
+          },
+          train: {
+            label: '开始训练',
+            hint: '从第一轮基础题或项目题开始建立训练记录。',
+          },
+        },
+        status: {
+          done: '已完成',
+          current: '当前',
+          next: '下一步',
+        },
       },
       hero: {
         kicker: '今日建议',
@@ -196,22 +221,25 @@ export const messages = {
       },
       dueReviews: {
         kicker: '今日待复习',
-        description: '你有 {count} 条待复习内容，点击进入回顾。',
+        description: '你有 {count} 条待复习内容，建议直接开一轮针对性训练。',
         review: '复习',
+        startAction: '开始补这一项',
         markDone: '已复习',
+        topicHint: '建议直接从 {topic} 开始补。',
+        genericHint: '当前还没归到具体主题，也可以先开一轮基础训练。',
       },
       currentSession: {
         kicker: '继续训练',
         title: '你有一轮训练还没结束',
         description: '{name} · {status}',
-        jobTargetDescription: '这轮绑定了岗位 JD：{name}',
+        jobTargetDescription: '本轮参考岗位：{name}',
         emptyTitle: '还没有进行中的训练',
         emptyDescription: '从基础训练或项目训练开始一轮新的练习。',
       },
       cards: {
         weaknessKicker: 'Top Issue',
         weaknessTitle: '当前短板',
-        weaknessEmpty: '还没有薄弱点记录，完成第一轮训练后这里会开始沉淀。',
+        weaknessEmpty: '还没有薄弱点记录，完成第一轮训练后会在这里显示。',
         weaknessDescription:
           '当前最需要补的是 {kind} / {label}，建议优先围绕这个点练习。',
         sessionKicker: 'Recent',
@@ -222,9 +250,9 @@ export const messages = {
         trackTitle: '推荐专项',
         jobTargetKicker: 'JD',
         jobTargetTitle: '当前岗位上下文',
-        jobTargetEmpty: '当前没有默认 JD，推荐和训练默认都会按通用口径处理。',
+        jobTargetEmpty: '当前没有默认 JD，推荐和训练按通用模式处理。',
         jobTargetScoped:
-          '当前默认 JD 是 {name}，首页推荐和训练默认已切到岗位视角。',
+          '当前默认 JD 是 {name}，推荐和训练已按岗位要求调整。',
         jobTargetUnavailable:
           '当前默认 JD 是 {name}，但当前原文还没有可用分析结果；重新分析后才会恢复岗位视角。',
         profileKicker: 'Profile',
@@ -235,7 +263,7 @@ export const messages = {
       sections: {
         weaknesses: '薄弱点',
         sessions: '训练记录',
-        jobTargetDescription: '本轮绑定岗位：{name}',
+        jobTargetDescription: '本轮参考岗位：{name}',
         weaknessesEmpty:
           '还没有历史薄弱点，完成第一轮训练后这里会显示重点问题。',
         weaknessTrends: '弱项趋势',
@@ -319,12 +347,24 @@ export const messages = {
         description:
           '先导入仓库，再补齐项目摘要、亮点、难点、取舍和个人贡献，方便后续训练直接使用。',
       },
+      onboarding: {
+        kicker: '第二步',
+        title: '导入项目，或者直接先开练',
+        description: '如果你现在没有现成仓库，也可以先跳过这一步，后面再补。',
+        readyDescription: '你已经有项目材料了，可以直接进入最后一步开始训练。',
+        skipAction: '跳过项目，直接训练',
+        continueAction: '继续去训练',
+        backAction: '返回画像',
+      },
       importPlaceholder: 'https://github.com/yourname/your-project',
       importAction: '导入仓库',
       importErrorTitle: '导入失败',
       retryAction: '重试导入',
       retryErrorTitle: '重试失败',
       jobsTitle: '后台导入任务',
+      onboardingSkipHint:
+        '项目导入这一步可以跳过，先开始第一轮训练也算完成首访链路。',
+      skipToTrainAction: '跳过项目，直接训练',
       jobsEmpty: '还没有导入任务。提交仓库后，这里会显示后台进度。',
       jobRepo: '仓库地址',
       jobStage: '当前阶段',
@@ -350,7 +390,7 @@ export const messages = {
       hero: {
         kicker: '岗位材料',
         description:
-          '先把目标岗位 JD 存下来，再生成结构化要求，后续训练才会真正带岗位视角。',
+          '保存目标岗位 JD 并生成结构化要求，后续训练即可按岗位要求进行。',
       },
       listTitle: 'JD 列表',
       emptyList: '还没有岗位 JD，先新建一份。',
@@ -404,6 +444,11 @@ export const messages = {
         description:
           '基础训练适合补知识点，项目训练适合练项目讲述。每轮训练包含多次追问，轮次可在下方调整。',
       },
+      onboarding: {
+        kicker: '最后一步',
+        title: '开始第一轮训练',
+        description: '参数不用一次配很复杂，先开始一轮，首页和历史数据就会真正跑起来。',
+      },
       fields: {
         mode: '训练模式',
         intensity: '训练强度',
@@ -421,7 +466,7 @@ export const messages = {
       jobTargetUnavailable:
         '这份 JD 还没有可用分析结果，暂时不能开始本轮训练。',
       activeJobTargetUnavailable:
-        '当前默认 JD「{name}」现在不能直接用于训练；如果要走岗位视角，请先去岗位页修正或重新分析。',
+        '当前默认 JD「{name}」现在不能直接用于训练；如需按岗位要求训练，请先在岗位页修正或重新分析。',
       startAction: '开始这一轮训练',
       startErrorTitle: '启动失败',
     },
@@ -430,14 +475,27 @@ export const messages = {
         kicker: '训练记录',
         title: '查看所有训练历史和成绩变化。',
       },
+      exportErrorTitle: '批量导出失败',
       filters: {
         allModes: '所有模式',
         allTopics: '所有主题',
         allStatuses: '所有状态',
       },
+      batch: {
+        kicker: '批量导出',
+        description:
+          '勾选需要导出的训练记录后，可以跨页累计，最后按 {format} 一次性打包导出。',
+        selectedCount: '已选 {count} 条训练记录',
+        selectPageAction: '全选当前页（{count} 条）',
+        clearPageAction: '取消当前页（{count} 条）',
+        clearAllAction: '清空全部选择',
+        exportAction: '导出所选 {format}（{count} 条）',
+        exportingAction: '正在打包导出...',
+      },
       empty: '还没有训练记录。',
-      noJobTarget: '无岗位绑定',
+      noJobTarget: '无岗位关联',
       promptSetBadge: 'Prompt：{name}',
+      openAction: '查看详情',
       prev: '上一页',
       next: '下一页',
     },
@@ -456,8 +514,8 @@ export const messages = {
       gaps: '待补强点',
       feedbackEmpty: '先回答当前问题，反馈会显示在这里。',
       processingKicker: '处理中',
-      reasoningTitle: '推理摘要',
-      contentTitle: '模型输出',
+      reasoningTitle: '分析过程',
+      contentTitle: '生成内容',
       processingGeneratingQuestionTitle: '正在准备本轮问题',
       processingGeneratingQuestionDescription:
         '系统正在整理上下文并生成问题，请稍候。',
@@ -472,13 +530,13 @@ export const messages = {
       submitErrorTitle: '提交失败',
       conflictBusy: '上一轮提交还在处理中，请等待当前评估或复盘完成。',
       conflictReviewPending:
-        '上一轮回答已经保存，当前只差复盘。请直接使用“重试生成复盘”。',
+        '上一轮回答已保存，仅剩复盘未完成。请直接使用”重试生成复盘”。',
       conflictCompleted: '这轮训练已经完成，页面会跳转到复盘结果。',
       conflictInvalidStatus: '当前状态不能继续提交，请等待页面刷新到最新状态。',
       retryReviewNotRecoverable:
         '这轮训练已经不在可恢复状态，请刷新页面确认最新结果。',
       reviewGenerationRetry:
-        '回答已经保存，但复盘生成失败了。页面会切到可恢复状态，你可以直接重试复盘。',
+        '回答已保存，但复盘生成失败。页面会切换到可恢复状态，你可以直接重试。',
       answerLockedWhileProcessing:
         '系统正在处理中，当前输入区已锁定，避免重复提交。',
       submittedAnswerTitle: '已收到你的回答',
@@ -491,7 +549,7 @@ export const messages = {
       feedbackHeadlineFallback:
         '系统已经完成初步判断，下面是本轮最关键的反馈。',
       scoreBreakdownTitle: '分项得分',
-      reviewPendingTitle: '复盘还没收口',
+      reviewPendingTitle: '复盘尚未完成',
       reviewPendingDescription:
         '上一轮回答已经保存，但复盘生成没有完成。你可以直接重试复盘，不需要重新回答。',
       retryReviewAction: '重试生成复盘',
@@ -499,12 +557,12 @@ export const messages = {
       reviewWrapUpDescription: '系统正在整理复盘卡，马上带你进入总结页面。',
       jobTargetTitle: '本轮参考岗位',
       jobTargetDescription: '这轮问题、评分和复盘都会围绕这份 JD 的要求。',
-      jobTargetEmpty: '本轮未绑定岗位 JD，当前仍按通用训练处理。',
-      streamPending: '模型已经开始返回内容，但还在整理成结构化结果，请稍候。',
-      streamSectionCounter: '过程片段 {index}',
+      jobTargetEmpty: '本轮未关联岗位 JD，当前仍按通用训练处理。',
+      streamPending: '内容生成中，正在整理结果，请稍候。',
+      streamSectionCounter: '步骤 {index}',
       streamKinds: {
         prepare: '正在准备上下文',
-        drafting: '模型生成中',
+        drafting: '生成中',
         finalizing: '正在整理结果',
         processing: '处理中',
         question: '问题草稿',
@@ -514,27 +572,27 @@ export const messages = {
       streamFields: {
         score: '当前得分：{score}',
         scoreBreakdown: '分项得分',
-        followupQuestion: '下一刀追问',
+        followupQuestion: '后续追问',
       },
       streamContexts: {
-        read_question_templates: '已读取基础题模板',
-        read_project_brief: '已读取项目摘要与亮点',
-        read_context_chunks: '已读取源码与文档片段',
-        read_weakness_memory: '已读取历史薄弱点',
-        read_evaluation_context: '已读取当前题目与回答',
-        read_session_summary: '已读取整轮训练摘要',
-        read_turn_history: '已读取历史问答记录',
-        read_repo_overview: '已读取仓库概览',
-        read_repo_chunks: '已读取关键源码片段',
-        read_job_target_source: '已读取岗位 JD 原文',
-        read_job_target_analysis: '已读取岗位要求快照',
+        read_question_templates: '正在参考题库',
+        read_project_brief: '正在参考项目信息',
+        read_context_chunks: '正在参考代码与文档',
+        read_weakness_memory: '正在参考历史记录',
+        read_evaluation_context: '正在分析回答内容',
+        read_session_summary: '正在整理本轮训练',
+        read_turn_history: '正在参考历史问答',
+        read_repo_overview: '正在参考项目结构',
+        read_repo_chunks: '正在参考关键代码',
+        read_job_target_source: '正在参考岗位要求',
+        read_job_target_analysis: '正在参考岗位分析',
       },
     },
     progress: {
       createSession: {
         title: '正在准备训练',
         description: '系统会先读取上下文，再生成当前问题。',
-        steps: ['读取训练上下文', '调用模型生成问题', '整理训练页面'],
+        steps: ['读取训练上下文', '生成问题', '整理训练页面'],
       },
       evaluateMain: {
         title: '正在评估回答',
@@ -558,12 +616,12 @@ export const messages = {
       loadErrorTitle: '复盘加载失败',
       exportErrorTitle: '导出失败',
       emptyTitle: '这轮复盘还没准备好',
-      emptyDescription: '可能还在生成中，或者这轮训练还没有成功收口。',
-      exportAction: '导出 Markdown',
+      emptyDescription: '可能仍在生成中，或本轮训练未成功完成。',
+      exportAction: '导出 {format}',
       exportingAction: '导出中...',
       promptExperimentAction: '查看 Prompt 实验',
       topFixTitle: '最该优先修正',
-      topFixFallbackReason: '先把这个问题修正掉，后面的训练收益会明显更高。',
+      topFixFallbackReason: '先修正这个问题，后续训练效果会明显提升。',
       scoreBreakdown: '分项得分',
       highlights: '回答亮点',
       gaps: '需要补强',
@@ -577,6 +635,15 @@ export const messages = {
       jobTargetDescription: '这轮复盘是按这份岗位 JD 的视角整理的。',
       promptSetTitle: '本轮 Prompt 版本',
       promptSetDescription: '这轮训练绑定的 Prompt 版本状态：{status}。',
+      auditShowAction: '查看评估详情',
+      auditHideAction: '收起评估详情',
+      auditTitle: '评估审计详情',
+      auditDescription:
+        '这里会展开每个 flow 的模型、Prompt 哈希、耗时和原始输出。',
+      auditErrorTitle: '评估详情加载失败',
+      auditMeta: '模型 / Prompt 哈希 / 耗时',
+      auditRawOutput: '原始输出',
+      auditEmpty: '当前没有可展开的评估日志。',
     },
     promptExperiments: {
       hero: {
@@ -672,6 +739,12 @@ export const messages = {
         'No recommendation yet. Finish the first session to generate one.',
       setDeadlineHint:
         'Set your target application date in the profile page to show the countdown here.',
+      exportFormatLabel: 'Export format',
+      exportFormats: {
+        markdown: 'Markdown',
+        json: 'JSON',
+        pdf: 'PDF',
+      },
     },
     enums: {
       mode: {
@@ -815,6 +888,25 @@ export const messages = {
         step1: '1. Profile',
         step2: '2. Projects',
         step3: '3. Train',
+        steps: {
+          profile: {
+            label: 'Profile',
+            hint: 'Set your role, stage, and core tech stack first.',
+          },
+          projects: {
+            label: 'Projects',
+            hint: 'Import a real repo, or skip this step for now.',
+          },
+          train: {
+            label: 'Training',
+            hint: 'Start the first fundamentals or project round.',
+          },
+        },
+        status: {
+          done: 'Done',
+          current: 'Current',
+          next: 'Next',
+        },
       },
       hero: {
         kicker: 'Today',
@@ -828,9 +920,14 @@ export const messages = {
       },
       dueReviews: {
         kicker: 'Due for Review',
-        description: 'You have {count} items due for review. Click to revisit.',
+        description:
+          'You have {count} due items. Start a targeted round directly from here.',
         review: 'Review',
+        startAction: 'Start this fix',
         markDone: 'Done',
+        topicHint: 'Best next round: start with {topic}.',
+        genericHint:
+          'This item is not mapped to a topic yet, so start with a fundamentals round.',
       },
       currentSession: {
         kicker: 'Resume',
@@ -962,12 +1059,26 @@ export const messages = {
         description:
           'Import a repository first, then refine the summary, highlights, challenges, trade-offs, and ownership for later training.',
       },
+      onboarding: {
+        kicker: 'Step 2',
+        title: 'Import a project, or skip it for now',
+        description:
+          'If you do not have a ready repository yet, you can skip this step and still complete the first-run flow.',
+        readyDescription:
+          'Your project material is ready. Move to the last step and start training.',
+        skipAction: 'Skip to training',
+        continueAction: 'Continue to training',
+        backAction: 'Back to profile',
+      },
       importPlaceholder: 'https://github.com/yourname/your-project',
       importAction: 'Import repository',
       importErrorTitle: 'Import failed',
       retryAction: 'Retry import',
       retryErrorTitle: 'Retry failed',
       jobsTitle: 'Background import jobs',
+      onboardingSkipHint:
+        'Project import is optional for first-time setup. You can skip it and start training now.',
+      skipToTrainAction: 'Skip projects and train now',
       jobsEmpty:
         'No import jobs yet. Submit a repository to see progress here.',
       jobRepo: 'Repository',
@@ -1049,6 +1160,12 @@ export const messages = {
         description:
           'Fundamentals mode is for core knowledge. Project mode is for project storytelling. Each session includes multiple follow-up rounds — adjustable below.',
       },
+      onboarding: {
+        kicker: 'Final step',
+        title: 'Start the first session',
+        description:
+          'Do not over-configure the first round. Start one session first so the dashboard and history can begin to accumulate real data.',
+      },
       fields: {
         mode: 'Mode',
         intensity: 'Intensity',
@@ -1075,14 +1192,27 @@ export const messages = {
         kicker: 'History',
         title: 'View all training sessions and score trends.',
       },
+      exportErrorTitle: 'Batch export failed',
       filters: {
         allModes: 'All modes',
         allTopics: 'All topics',
         allStatuses: 'All statuses',
       },
+      batch: {
+        kicker: 'Batch export',
+        description:
+          'Select sessions across pages, then export them together as a {format} archive.',
+        selectedCount: '{count} sessions selected',
+        selectPageAction: 'Select this page ({count})',
+        clearPageAction: 'Clear this page ({count})',
+        clearAllAction: 'Clear all',
+        exportAction: 'Export selected {format} ({count})',
+        exportingAction: 'Packaging export...',
+      },
       empty: 'No training sessions yet.',
       noJobTarget: 'No job target',
       promptSetBadge: 'Prompt: {name}',
+      openAction: 'Open details',
       prev: 'Previous',
       next: 'Next',
     },
@@ -1102,8 +1232,8 @@ export const messages = {
       feedbackEmpty:
         'Answer the current question first. Feedback will appear here.',
       processingKicker: 'Processing',
-      reasoningTitle: 'Reasoning Summary',
-      contentTitle: 'Model Output',
+      reasoningTitle: 'Analysis Process',
+      contentTitle: 'Generated Content',
       processingGeneratingQuestionTitle: 'Preparing the session question',
       processingGeneratingQuestionDescription:
         'The system is reading context and generating the question.',
@@ -1156,8 +1286,8 @@ export const messages = {
       jobTargetEmpty:
         'This round is not bound to a job target JD and is still running in generic mode.',
       streamPending:
-        'The model is already returning content, but the structured result is still being assembled.',
-      streamSectionCounter: 'Stream block {index}',
+        'Content is being generated. The result will appear shortly.',
+      streamSectionCounter: 'Step {index}',
       streamKinds: {
         prepare: 'Preparing context',
         drafting: 'Generating content',
@@ -1173,17 +1303,17 @@ export const messages = {
         followupQuestion: 'Next follow-up',
       },
       streamContexts: {
-        read_question_templates: 'Question templates loaded',
-        read_project_brief: 'Project brief loaded',
-        read_context_chunks: 'Code and docs context loaded',
-        read_weakness_memory: 'Weakness history loaded',
-        read_evaluation_context: 'Current question and answer loaded',
-        read_session_summary: 'Session summary loaded',
-        read_turn_history: 'Turn history loaded',
-        read_repo_overview: 'Repository overview loaded',
-        read_repo_chunks: 'Key source chunks loaded',
-        read_job_target_source: 'Job target JD loaded',
-        read_job_target_analysis: 'Job target requirements loaded',
+        read_question_templates: 'Reviewing question bank',
+        read_project_brief: 'Reviewing project details',
+        read_context_chunks: 'Reviewing code and docs',
+        read_weakness_memory: 'Reviewing past records',
+        read_evaluation_context: 'Analyzing your answer',
+        read_session_summary: 'Summarizing this session',
+        read_turn_history: 'Reviewing past Q&A',
+        read_repo_overview: 'Reviewing project structure',
+        read_repo_chunks: 'Reviewing key code',
+        read_job_target_source: 'Reviewing job requirements',
+        read_job_target_analysis: 'Reviewing job analysis',
       },
     },
     progress: {
@@ -1193,7 +1323,7 @@ export const messages = {
           'The system reads context first and then generates the question.',
         steps: [
           'Read training context',
-          'Call the model',
+          'Generate question',
           'Prepare the session view',
         ],
       },
@@ -1232,7 +1362,7 @@ export const messages = {
       emptyTitle: 'This review is not ready yet',
       emptyDescription:
         'It may still be generating, or the session did not finish successfully.',
-      exportAction: 'Export Markdown',
+      exportAction: 'Export {format}',
       exportingAction: 'Exporting...',
       promptExperimentAction: 'View prompt experiments',
       topFixTitle: 'Top fix',
@@ -1253,6 +1383,15 @@ export const messages = {
       promptSetTitle: 'Prompt set used',
       promptSetDescription:
         'This session is bound to a prompt set with status: {status}.',
+      auditShowAction: 'Show evaluation details',
+      auditHideAction: 'Hide evaluation details',
+      auditTitle: 'Evaluation audit details',
+      auditDescription:
+        'Expand each flow to inspect model, prompt hash, latency, and raw output.',
+      auditErrorTitle: 'Failed to load evaluation details',
+      auditMeta: 'Model / prompt hash / latency',
+      auditRawOutput: 'Raw output',
+      auditEmpty: 'No evaluation logs are available for this review yet.',
     },
     promptExperiments: {
       hero: {
