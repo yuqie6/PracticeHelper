@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import http.client
 import json
+import random
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
@@ -57,17 +60,8 @@ class OpenAICompatibleModelClient:
             method="POST",
         )
 
-        try:
-            with urllib_request.urlopen(
-                request,
-                timeout=self._settings.llm_timeout_seconds,
-            ) as response:
-                raw = response.read().decode("utf-8")
-        except urllib_error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise ModelClientError(f"LLM provider returned HTTP {exc.code}: {detail}") from exc
-        except urllib_error.URLError as exc:
-            raise ModelClientError(f"LLM provider is unreachable: {exc.reason}") from exc
+        with self._call_with_retry(request) as response:
+            raw = response.read().decode("utf-8")
 
         try:
             data = json.loads(raw)
@@ -112,38 +106,29 @@ class OpenAICompatibleModelClient:
             method="POST",
         )
 
-        try:
-            with urllib_request.urlopen(
-                request,
-                timeout=self._settings.llm_timeout_seconds,
-            ) as response:
-                content_type = response.headers.get_content_type()
-                if content_type != "text/event-stream":
-                    raw = response.read().decode("utf-8")
-                    result = self._parse_completion_response(raw)
-                    if result.content:
-                        yield ChatCompletionStreamChunk(content=result.content)
-                    yield ChatCompletionStreamChunk(done=True)
-                    return
+        with self._call_with_retry(request) as response:
+            content_type = response.headers.get_content_type()
+            if content_type != "text/event-stream":
+                raw = response.read().decode("utf-8")
+                result = self._parse_completion_response(raw)
+                if result.content:
+                    yield ChatCompletionStreamChunk(content=result.content)
+                yield ChatCompletionStreamChunk(done=True)
+                return
 
-                event_lines: list[str] = []
-                for raw_line in response:
-                    line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
-                    if not line:
-                        yield from self._parse_stream_event(event_lines)
-                        event_lines = []
-                        continue
-
-                    if line.startswith("data:"):
-                        event_lines.append(line[5:].strip())
-
-                if event_lines:
+            event_lines: list[str] = []
+            for raw_line in response:
+                line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
+                if not line:
                     yield from self._parse_stream_event(event_lines)
-        except urllib_error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise ModelClientError(f"LLM provider returned HTTP {exc.code}: {detail}") from exc
-        except urllib_error.URLError as exc:
-            raise ModelClientError(f"LLM provider is unreachable: {exc.reason}") from exc
+                    event_lines = []
+                    continue
+
+                if line.startswith("data:"):
+                    event_lines.append(line[5:].strip())
+
+            if event_lines:
+                yield from self._parse_stream_event(event_lines)
 
     @property
     def _chat_completions_url(self) -> str:
@@ -242,3 +227,35 @@ class OpenAICompatibleModelClient:
             if normalized:
                 parts.append(normalized)
         return "\n".join(part for part in parts if part).strip()
+
+    def _call_with_retry(
+        self,
+        request: urllib_request.Request,
+        *,
+        max_attempts: int = 3,
+        base_delay: float = 0.5,
+    ) -> http.client.HTTPResponse:
+        for attempt in range(max_attempts):
+            try:
+                return urllib_request.urlopen(
+                    request,
+                    timeout=self._settings.llm_timeout_seconds,
+                )
+            except urllib_error.HTTPError as exc:
+                if not self._is_retryable_http_status(exc.code) or attempt == max_attempts - 1:
+                    detail = exc.read().decode("utf-8", errors="replace")
+                    raise ModelClientError(
+                        f"LLM provider returned HTTP {exc.code}: {detail}"
+                    ) from exc
+                exc.close()
+            except urllib_error.URLError as exc:
+                if attempt == max_attempts - 1:
+                    raise ModelClientError(f"LLM provider is unreachable: {exc.reason}") from exc
+
+            time.sleep(base_delay * (2**attempt) + random.uniform(0, 0.2))
+
+        raise ModelClientError("LLM provider retry budget exhausted")
+
+    @staticmethod
+    def _is_retryable_http_status(status_code: int) -> bool:
+        return status_code in {502, 503, 504}

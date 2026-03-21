@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -108,6 +109,14 @@ class PromptSetSummary(BaseModel):
 class AnalyzeRepoRequest(BaseModel):
     repo_url: str
 
+    @field_validator("repo_url")
+    @classmethod
+    def validate_repo_url(cls, value: str) -> str:
+        parsed = urlparse(value)
+        if parsed.scheme not in ("https", "http") or not parsed.hostname:
+            raise ValueError("repo_url must be a valid HTTP(S) URL")
+        return value
+
 
 class AnalyzeRepoResponse(BaseModel):
     repo_url: str
@@ -146,7 +155,7 @@ class AnalyzeJobTargetEnvelope(BaseModel):
 
 class GenerateQuestionRequest(BaseModel):
     mode: Literal["basics", "project"]
-    topic: str = ""
+    topic: str = Field(default="", max_length=200)
     candidate_topics: list[str] = Field(default_factory=list)
     prompt_set_id: str = ""
     intensity: str = "standard"
@@ -175,10 +184,10 @@ class EvaluateAnswerRequest(BaseModel):
     project: ProjectProfile | None = None
     question: str
     expected_points: list[str] = Field(default_factory=list)
-    answer: str
+    answer: str = Field(max_length=50_000)
     context_chunks: list[RepoChunk] = Field(default_factory=list)
-    turn_index: int = 1
-    max_turns: int = 2
+    turn_index: int = Field(default=1, ge=1, le=10)
+    max_turns: int = Field(default=2, ge=1, le=10)
     score_weights: dict[str, float] = Field(default_factory=dict)
     job_target_analysis: JobTargetAnalysisSnapshot | None = None
     retry_feedback: str = ""

@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from app.config import Settings
+from app.llm_client import ModelClientError
 from app.schemas import AnalyzeRepoRequest, RepoChunk
 
 TEXT_EXTENSIONS = {
@@ -126,12 +127,20 @@ def rerank_repo_chunks(bundle: RepoAnalysisBundle, *, limit: int = 24) -> list[R
 def clone_repo(repo_url: str, temp_root: Path, github_token: str) -> Path:
     repo_dir = temp_root / repo_name_from_url(repo_url)
     auth_url = maybe_apply_github_token(repo_url, github_token)
-    subprocess.run(
-        ["git", "clone", "--depth", "1", auth_url, str(repo_dir)],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        subprocess.run(
+            ["git", "clone", "--depth", "1", auth_url, str(repo_dir)],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise ModelClientError(
+            f"git clone failed: {_sanitize_output(exc.stderr)}"
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ModelClientError(f"git clone timed out after {exc.timeout}s") from exc
     return repo_dir
 
 
@@ -150,12 +159,23 @@ def repo_name_from_url(repo_url: str) -> str:
 
 
 def run_git(repo_dir: Path, *args: str) -> str:
-    result = subprocess.run(
-        ["git", "-C", str(repo_dir), *args],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    command_label = " ".join(args)
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_dir), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise ModelClientError(
+            f"git {command_label} failed: {_sanitize_output(exc.stderr)}"
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ModelClientError(
+            f"git {command_label} timed out after {exc.timeout}s"
+        ) from exc
     return result.stdout.strip()
 
 
@@ -168,7 +188,11 @@ def collect_text_files(repo_dir: Path) -> list[Path]:
             continue
         if path.suffix.lower() not in TEXT_EXTENSIONS and path.name not in TECH_KEYWORDS:
             continue
-        if path.stat().st_size > 256_000:
+        try:
+            stat = path.stat()
+        except (PermissionError, OSError):
+            continue
+        if stat.st_size > 256_000:
             continue
         files.append(path)
     files.sort(key=lambda item: (path_priority(repo_dir, item), str(item)))
@@ -257,6 +281,10 @@ def dedupe(items: list[str]) -> list[str]:
         seen.add(normalized)
         result.append(normalized)
     return result
+
+
+def _sanitize_output(text: str) -> str:
+    return re.sub(r"https://[^@]+@", "https://***@", text or "")
 
 
 def _repo_keywords(bundle: RepoAnalysisBundle) -> list[str]:

@@ -9,101 +9,27 @@ import (
 	"practicehelper/server/internal/domain"
 )
 
+type evaluateFunc func(
+	ctx context.Context,
+	request domain.EvaluateAnswerRequest,
+) (*domain.EvaluationResult, *domain.PromptExecutionMeta, error)
+
+type finalizeFunc func(ctx context.Context, sessionID string) (*domain.TrainingSession, error)
+
 func (s *Service) SubmitAnswer(ctx context.Context, sessionID string, request domain.SubmitAnswerRequest) (*domain.TrainingSession, error) {
-	session, err := s.repo.GetSession(ctx, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	if session == nil {
-		return nil, ErrSessionNotFound
-	}
-	if len(session.Turns) == 0 {
-		return nil, fmt.Errorf("session %s has no turns", sessionID)
-	}
-	if session.Status != domain.StatusWaitingAnswer && session.Status != domain.StatusActive {
-		return nil, classifySubmitAnswerStatus(session.Status)
-	}
-
-	turn := &session.Turns[len(session.Turns)-1]
-	previousStatus := session.Status
-	if err := s.claimSessionForAnswer(ctx, session, previousStatus); err != nil {
-		return nil, err
-	}
-
-	contextChunks, jobTargetAnalysis, scoreWeights, err := s.loadAnswerContext(ctx, session)
-	if err != nil {
-		s.restoreSessionStatus(ctx, session.ID, previousStatus)
-		return nil, err
-	}
-
-	isLastTurn := turn.TurnIndex >= session.MaxTurns
-	evalStart := time.Now()
-	evaluation, promptMeta, err := s.sidecar.EvaluateAnswer(ctx, domain.EvaluateAnswerRequest{
-		Mode:              session.Mode,
-		Topic:             session.Topic,
-		PromptSetID:       session.PromptSetID,
-		Project:           session.Project,
-		Question:          turn.Question,
-		ExpectedPoints:    turn.ExpectedPoints,
-		Answer:            request.Answer,
-		ContextChunks:     contextChunks,
-		TurnIndex:         turn.TurnIndex,
-		MaxTurns:          session.MaxTurns,
-		ScoreWeights:      scoreWeights,
-		JobTargetAnalysis: jobTargetAnalysis,
-	})
-	if err != nil {
-		s.restoreSessionStatus(ctx, session.ID, previousStatus)
-		return nil, err
-	}
-	s.recordEvaluationLog(ctx, session.ID, turn.ID, "evaluate_answer", evalStart, promptMeta)
-
-	turn.Answer = request.Answer
-	turn.Evaluation = evaluation
-	turn.WeaknessHits = mergeWeaknessHits(turn.WeaknessHits, evaluation.WeaknessHits)
-
-	if err := s.repo.SaveTurn(ctx, turn); err != nil {
-		s.restoreSessionStatus(ctx, session.ID, previousStatus)
-		return nil, err
-	}
-	if err := s.repo.UpsertWeaknesses(ctx, session.ID, evaluation.WeaknessHits); err != nil {
-		s.restoreSessionStatus(ctx, session.ID, previousStatus)
-		return nil, err
-	}
-
-	session.TotalScore = s.computeSessionScore(session)
-
-	if evaluation.Score >= 75 {
-		_ = s.coolDownSessionWeakness(ctx, session, turn.Question, evaluation.WeaknessHits)
-	}
-
-	if isLastTurn {
-		session.Status = domain.StatusReviewPending
-		if err := s.repo.SaveSession(ctx, session); err != nil {
-			return nil, err
-		}
-		if _, err := s.finalizeReview(ctx, session.ID); err != nil {
-			return nil, wrapReviewGenerationRetry(err)
-		}
-	} else {
-		nextTurn := &domain.TrainingTurn{
-			ID:             newID("turn"),
-			SessionID:      session.ID,
-			TurnIndex:      turn.TurnIndex + 1,
-			Stage:          "question",
-			Question:       evaluation.FollowupQuestion,
-			ExpectedPoints: evaluation.FollowupPoints,
-		}
-		session.Status = domain.StatusWaitingAnswer
-		if err := s.repo.SaveSession(ctx, session); err != nil {
-			return nil, err
-		}
-		if err := s.repo.InsertTurn(ctx, nextTurn); err != nil {
-			return nil, err
-		}
-	}
-
-	return s.repo.GetSession(ctx, session.ID)
+	return s.submitAnswerCore(
+		ctx,
+		sessionID,
+		request,
+		func(ctx context.Context, request domain.EvaluateAnswerRequest) (*domain.EvaluationResult, *domain.PromptExecutionMeta, error) {
+			return s.sidecar.EvaluateAnswer(ctx, request)
+		},
+		func(ctx context.Context, sessionID string) (*domain.TrainingSession, error) {
+			return s.finalizeReview(ctx, sessionID)
+		},
+		nil,
+		"evaluate_answer",
+	)
 }
 
 func (s *Service) SubmitAnswerStream(
@@ -111,6 +37,30 @@ func (s *Service) SubmitAnswerStream(
 	sessionID string,
 	request domain.SubmitAnswerRequest,
 	emit func(domain.StreamEvent) error,
+) (*domain.TrainingSession, error) {
+	return s.submitAnswerCore(
+		ctx,
+		sessionID,
+		request,
+		func(ctx context.Context, request domain.EvaluateAnswerRequest) (*domain.EvaluationResult, *domain.PromptExecutionMeta, error) {
+			return s.sidecar.EvaluateAnswerStream(ctx, request, emit)
+		},
+		func(ctx context.Context, sessionID string) (*domain.TrainingSession, error) {
+			return s.finalizeReviewStream(ctx, sessionID, emit)
+		},
+		emit,
+		"evaluate_answer_stream",
+	)
+}
+
+func (s *Service) submitAnswerCore(
+	ctx context.Context,
+	sessionID string,
+	request domain.SubmitAnswerRequest,
+	evaluate evaluateFunc,
+	finalize finalizeFunc,
+	emit func(domain.StreamEvent) error,
+	flowName string,
 ) (*domain.TrainingSession, error) {
 	session, err := s.repo.GetSession(ctx, sessionID)
 	if err != nil {
@@ -143,7 +93,7 @@ func (s *Service) SubmitAnswerStream(
 	emitStatus(emit, "evaluation_started")
 
 	evalStart := time.Now()
-	evaluation, promptMeta, err := s.sidecar.EvaluateAnswerStream(ctx, domain.EvaluateAnswerRequest{
+	evaluation, promptMeta, err := evaluate(ctx, domain.EvaluateAnswerRequest{
 		Mode:              session.Mode,
 		Topic:             session.Topic,
 		PromptSetID:       session.PromptSetID,
@@ -156,12 +106,12 @@ func (s *Service) SubmitAnswerStream(
 		MaxTurns:          session.MaxTurns,
 		ScoreWeights:      scoreWeights,
 		JobTargetAnalysis: jobTargetAnalysis,
-	}, emit)
+	})
 	if err != nil {
 		s.restoreSessionStatus(ctx, session.ID, previousStatus)
 		return nil, err
 	}
-	s.recordEvaluationLog(ctx, session.ID, turn.ID, "evaluate_answer_stream", evalStart, promptMeta)
+	s.recordEvaluationLog(ctx, session.ID, turn.ID, flowName, evalStart, promptMeta)
 	emitStatus(emit, "feedback_ready")
 
 	turn.Answer = request.Answer
@@ -190,18 +140,11 @@ func (s *Service) SubmitAnswerStream(
 			return nil, err
 		}
 		emitStatus(emit, "review_started")
-		if _, err := s.finalizeReviewStream(ctx, session.ID, emit); err != nil {
+		if _, err := finalize(ctx, session.ID); err != nil {
 			return nil, wrapReviewGenerationRetry(err)
 		}
 	} else {
-		nextTurn := &domain.TrainingTurn{
-			ID:             newID("turn"),
-			SessionID:      session.ID,
-			TurnIndex:      turn.TurnIndex + 1,
-			Stage:          "question",
-			Question:       evaluation.FollowupQuestion,
-			ExpectedPoints: evaluation.FollowupPoints,
-		}
+		nextTurn := buildFollowupTrainingTurn(session.ID, turn.TurnIndex+1, evaluation)
 		session.Status = domain.StatusWaitingAnswer
 		if err := s.repo.SaveSession(ctx, session); err != nil {
 			return nil, err
@@ -213,6 +156,21 @@ func (s *Service) SubmitAnswerStream(
 	}
 
 	return s.repo.GetSession(ctx, session.ID)
+}
+
+func buildFollowupTrainingTurn(
+	sessionID string,
+	turnIndex int,
+	evaluation *domain.EvaluationResult,
+) *domain.TrainingTurn {
+	return &domain.TrainingTurn{
+		ID:             newID("turn"),
+		SessionID:      sessionID,
+		TurnIndex:      turnIndex,
+		Stage:          "question",
+		Question:       evaluation.FollowupQuestion,
+		ExpectedPoints: evaluation.FollowupPoints,
+	}
 }
 
 func (s *Service) loadAnswerContext(ctx context.Context, session *domain.TrainingSession) (

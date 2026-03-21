@@ -9,104 +9,9 @@ import (
 )
 
 func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessionRequest) (*domain.TrainingSession, error) {
-	if request.Mode != domain.ModeBasics && request.Mode != domain.ModeProject {
-		return nil, ErrInvalidMode
-	}
-
-	maxTurns := request.MaxTurns
-	if maxTurns < 2 {
-		maxTurns = 2
-	}
-	if maxTurns > 5 {
-		maxTurns = 5
-	}
-
-	intensity := request.Intensity
-	if intensity == "auto" {
-		intensity = s.resolveAutoIntensity(ctx)
-	}
-
-	normalizedTopic := normalizeBasicsTopic(request.Topic)
-	if request.Mode == domain.ModeBasics && normalizedTopic == "" {
-		normalizedTopic = domain.BasicsTopicGo
-	}
-
-	startedAt := time.Now().UTC()
-	session := &domain.TrainingSession{
-		ID:         newID("sess"),
-		Mode:       request.Mode,
-		Topic:      normalizedTopic,
-		ProjectID:  request.ProjectID,
-		Intensity:  intensity,
-		Status:     domain.StatusWaitingAnswer,
-		MaxTurns:   maxTurns,
-		TotalScore: 0,
-		StartedAt:  &startedAt,
-	}
-
-	promptSet, err := s.resolvePromptSet(ctx, request.PromptSetID)
+	session, generateRequest, err := s.prepareSession(ctx, request)
 	if err != nil {
 		return nil, err
-	}
-	session.PromptSetID = promptSet.ID
-	session.PromptSet = promptSet
-
-	jobTarget, jobTargetAnalysis, err := s.resolveJobTargetBinding(ctx, request.JobTargetID, request.IgnoreActiveJobTarget)
-	if err != nil {
-		return nil, err
-	}
-	if jobTarget != nil {
-		session.JobTargetID = jobTarget.ID
-		session.JobTargetAnalysisID = jobTargetAnalysis.ID
-		session.JobTarget = &domain.JobTargetRef{
-			ID:          jobTarget.ID,
-			Title:       jobTarget.Title,
-			CompanyName: jobTarget.CompanyName,
-		}
-	}
-
-	weaknesses, err := s.repo.ListWeaknesses(ctx, 5)
-	if err != nil {
-		return nil, err
-	}
-
-	generateRequest := domain.GenerateQuestionRequest{
-		Mode:              request.Mode,
-		Topic:             session.Topic,
-		Intensity:         intensity,
-		PromptSetID:       session.PromptSetID,
-		Weaknesses:        weaknesses,
-		JobTargetAnalysis: buildJobTargetAnalysisSnapshot(jobTargetAnalysis),
-	}
-
-	var project *domain.ProjectProfile
-	switch request.Mode {
-	case domain.ModeBasics:
-		candidateTopics := selectBasicsTopicsForSession(weaknesses, session.Topic)
-		templates, err := s.repo.ListQuestionTemplatesByTopics(ctx, candidateTopics)
-		if err != nil {
-			return nil, err
-		}
-		generateRequest.CandidateTopics = candidateTopics
-		generateRequest.Templates = templates
-	case domain.ModeProject:
-		project, err = s.repo.GetProject(ctx, request.ProjectID)
-		if err != nil {
-			return nil, err
-		}
-		if project == nil {
-			return nil, ErrProjectNotFound
-		}
-		session.Project = project
-		generateRequest.Project = project
-		query := strings.Join(append(project.FollowupPoints, project.Summary), " ")
-		chunks, err := s.repo.SearchProjectChunks(ctx, project.ID, query, 6)
-		if err != nil {
-			return nil, err
-		}
-		generateRequest.ContextChunks = chunks
-	default:
-		return nil, ErrInvalidMode
 	}
 
 	questionStartedAt := time.Now()
@@ -137,8 +42,32 @@ func (s *Service) CreateSessionStream(
 	request domain.CreateSessionRequest,
 	emit func(domain.StreamEvent) error,
 ) (*domain.TrainingSession, error) {
+	session, generateRequest, err := s.prepareSession(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	questionStartedAt := time.Now()
+	question, promptMeta, err := s.sidecar.GenerateQuestionStream(ctx, generateRequest, emit)
+	if err != nil {
+		return nil, err
+	}
+	s.recordEvaluationLog(ctx, session.ID, "", "generate_question_stream", questionStartedAt, promptMeta)
+
+	turn := buildFirstTrainingTurn(session.ID, question)
+	if err := s.repo.CreateSession(ctx, session, turn); err != nil {
+		return nil, err
+	}
+
+	return s.repo.GetSession(ctx, session.ID)
+}
+
+func (s *Service) prepareSession(
+	ctx context.Context,
+	request domain.CreateSessionRequest,
+) (*domain.TrainingSession, domain.GenerateQuestionRequest, error) {
 	if request.Mode != domain.ModeBasics && request.Mode != domain.ModeProject {
-		return nil, ErrInvalidMode
+		return nil, domain.GenerateQuestionRequest{}, ErrInvalidMode
 	}
 
 	maxTurns := request.MaxTurns
@@ -174,14 +103,14 @@ func (s *Service) CreateSessionStream(
 
 	promptSet, err := s.resolvePromptSet(ctx, request.PromptSetID)
 	if err != nil {
-		return nil, err
+		return nil, domain.GenerateQuestionRequest{}, err
 	}
 	session.PromptSetID = promptSet.ID
 	session.PromptSet = promptSet
 
 	jobTarget, jobTargetAnalysis, err := s.resolveJobTargetBinding(ctx, request.JobTargetID, request.IgnoreActiveJobTarget)
 	if err != nil {
-		return nil, err
+		return nil, domain.GenerateQuestionRequest{}, err
 	}
 	if jobTarget != nil {
 		session.JobTargetID = jobTarget.ID
@@ -195,7 +124,7 @@ func (s *Service) CreateSessionStream(
 
 	weaknesses, err := s.repo.ListWeaknesses(ctx, 5)
 	if err != nil {
-		return nil, err
+		return nil, domain.GenerateQuestionRequest{}, err
 	}
 
 	generateRequest := domain.GenerateQuestionRequest{
@@ -212,51 +141,45 @@ func (s *Service) CreateSessionStream(
 		candidateTopics := selectBasicsTopicsForSession(weaknesses, session.Topic)
 		templates, err := s.repo.ListQuestionTemplatesByTopics(ctx, candidateTopics)
 		if err != nil {
-			return nil, err
+			return nil, domain.GenerateQuestionRequest{}, err
 		}
 		generateRequest.CandidateTopics = candidateTopics
 		generateRequest.Templates = templates
 	case domain.ModeProject:
 		project, err := s.repo.GetProject(ctx, request.ProjectID)
 		if err != nil {
-			return nil, err
+			return nil, domain.GenerateQuestionRequest{}, err
 		}
 		if project == nil {
-			return nil, ErrProjectNotFound
+			return nil, domain.GenerateQuestionRequest{}, ErrProjectNotFound
 		}
 		session.Project = project
 		generateRequest.Project = project
 		query := strings.Join(append(project.FollowupPoints, project.Summary), " ")
 		chunks, err := s.repo.SearchProjectChunks(ctx, project.ID, query, 6)
 		if err != nil {
-			return nil, err
+			return nil, domain.GenerateQuestionRequest{}, err
 		}
 		generateRequest.ContextChunks = chunks
 	default:
-		return nil, ErrInvalidMode
+		return nil, domain.GenerateQuestionRequest{}, ErrInvalidMode
 	}
 
-	questionStartedAt := time.Now()
-	question, promptMeta, err := s.sidecar.GenerateQuestionStream(ctx, generateRequest, emit)
-	if err != nil {
-		return nil, err
-	}
-	s.recordEvaluationLog(ctx, session.ID, "", "generate_question_stream", questionStartedAt, promptMeta)
+	return session, generateRequest, nil
+}
 
-	turn := &domain.TrainingTurn{
+func buildFirstTrainingTurn(
+	sessionID string,
+	question *domain.GenerateQuestionResponse,
+) *domain.TrainingTurn {
+	return &domain.TrainingTurn{
 		ID:             newID("turn"),
-		SessionID:      session.ID,
+		SessionID:      sessionID,
 		TurnIndex:      1,
 		Stage:          "question",
 		Question:       question.Question,
 		ExpectedPoints: question.ExpectedPoints,
 	}
-
-	if err := s.repo.CreateSession(ctx, session, turn); err != nil {
-		return nil, err
-	}
-
-	return s.repo.GetSession(ctx, session.ID)
 }
 
 func (s *Service) resolveAutoIntensity(ctx context.Context) string {

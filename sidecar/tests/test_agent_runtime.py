@@ -67,6 +67,38 @@ class FakeStreamModelClient(FakeModelClient):
         )
 
 
+class FakeEvaluateStreamModelClient(FakeModelClient):
+    def __init__(self, responses: list[ChatCompletionResult]) -> None:
+        super().__init__(responses)
+
+    def create_completion_stream(self, *, messages, temperature=0.2):
+        self.calls.append({"messages": messages, "temperature": temperature, "stream": True})
+        yield ChatCompletionStreamChunk(
+            content=(
+                '{"score":86,"score_breakdown":{"准确性":86},"headline":"主线基本清楚",'
+                '"strengths":["回答主线清楚"],"gaps":["例子不够具体"],"suggestion":"补真实案例",'
+                '"weakness_hits":[]}'
+            )
+        )
+
+
+class FakeReviewStreamModelClient(FakeModelClient):
+    def __init__(self, responses: list[ChatCompletionResult]) -> None:
+        super().__init__(responses)
+
+    def create_completion_stream(self, *, messages, temperature=0.2):
+        self.calls.append({"messages": messages, "temperature": temperature, "stream": True})
+        yield ChatCompletionStreamChunk(
+            content=(
+                '{"overall":"总结","top_fix":"先补关键缺口","top_fix_reason":"这是最大短板",'
+                '"highlights":["主线清楚"],"gaps":["案例不够具体"],'
+                '"suggested_topics":["redis"],"next_training_focus":["补细节"],'
+                '"recommended_next":{"mode":"basics","topic":"redis","reason":"补短板"},'
+                '"score_breakdown":{"准确性":72}}'
+            )
+        )
+
+
 class FakeQuestionGraphRuntime:
     def __init__(self) -> None:
         self.requests: list[GenerateQuestionRequest] = []
@@ -675,6 +707,71 @@ def test_stream_generate_question_result_event_wraps_raw_output() -> None:
     assert result_event["type"] == "result"
     assert result_event["data"]["result"]["question"] == "请讲讲 Redis 一致性。"
     assert '"question":"请讲讲 Redis 一致性。"' in result_event["data"]["raw_output"]
+
+
+def test_stream_evaluate_answer_result_event_wraps_raw_output() -> None:
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=FakeEvaluateStreamModelClient([]),
+    )
+
+    events = list(
+        runtime.stream_evaluate_answer(
+            EvaluateAnswerRequest(
+                mode="basics",
+                topic="redis",
+                question="Redis 为什么快？",
+                expected_points=["内存访问", "事件循环"],
+                answer="因为它在内存里。",
+                turn_index=1,
+                max_turns=1,
+            )
+        )
+    )
+
+    result_event = events[-1]
+    assert result_event["type"] == "result"
+    assert result_event["data"]["result"]["score"] == 86
+    assert '"score":86' in result_event["data"]["raw_output"]
+
+
+def test_stream_generate_review_result_event_wraps_raw_output() -> None:
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=FakeReviewStreamModelClient([]),
+    )
+
+    events = list(
+        runtime.stream_generate_review(
+            GenerateReviewRequest(
+                session=TrainingSession(id="sess_1", mode="basics", topic="redis"),
+                turns=[
+                    TrainingTurn(
+                        question="Redis 为什么快？",
+                        expected_points=["内存访问", "事件循环"],
+                        answer="因为它在内存里。",
+                    )
+                ],
+            )
+        )
+    )
+
+    result_event = events[-1]
+    assert result_event["type"] == "result"
+    assert result_event["data"]["result"]["top_fix"] == "先补关键缺口"
+    assert '"top_fix":"先补关键缺口"' in result_event["data"]["raw_output"]
 
 
 def test_runtime_raises_when_llm_is_disabled() -> None:

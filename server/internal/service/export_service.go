@@ -376,7 +376,10 @@ func encodePDFText(text string) string {
 	}
 
 	encodedRunes := utf16.Encode([]rune(text))
-	bytes := make([]byte, 0, len(encodedRunes)*2)
+	bytes := make([]byte, 0, 2+len(encodedRunes)*2)
+	// 部分 PDF 查看器对 CJK 预定义 CMap 的 UTF-16BE 文本流比较挑剔，
+	// 显式补 FEFF 能显著降低“文件能打开但中文显示乱码”的概率。
+	bytes = append(bytes, 0xFE, 0xFF)
 	for _, value := range encodedRunes {
 		bytes = append(bytes, byte(value>>8), byte(value))
 	}

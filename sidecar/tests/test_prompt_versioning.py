@@ -12,7 +12,18 @@ from app.prompt_loader import (
     load_prompt_with_meta,
     render_prompt_with_meta,
 )
-from app.schemas import GenerateQuestionEnvelope, GenerateQuestionRequest, GenerateQuestionResponse
+from app.schemas import (
+    EvaluateAnswerEnvelope,
+    EvaluateAnswerRequest,
+    EvaluationResult,
+    GenerateQuestionEnvelope,
+    GenerateQuestionRequest,
+    GenerateQuestionResponse,
+    GenerateReviewEnvelope,
+    GenerateReviewRequest,
+    ReviewCard,
+    TrainingSession,
+)
 
 
 def test_prompt_registry_exposes_default_and_candidate_sets() -> None:
@@ -83,6 +94,87 @@ def test_generate_question_endpoint_sets_prompt_headers(monkeypatch) -> None:
 
     assert result.result.question == "candidate-v1-question"
     assert result.raw_output == '{"question":"candidate-v1-question"}'
+    assert response.headers[main.PROMPT_SET_HEADER] == "candidate-v1"
+    assert response.headers[main.PROMPT_HASH_HEADER]
+    assert response.headers[main.MODEL_NAME_HEADER] == main.settings.model
+
+
+def test_evaluate_answer_endpoint_sets_prompt_headers_and_returns_raw_output(monkeypatch) -> None:
+    class FakeFlow:
+        def invoke(self, payload):
+            return {
+                "result": EvaluateAnswerEnvelope(
+                    result=EvaluationResult(
+                        score=84,
+                        score_breakdown={"准确性": 84},
+                        strengths=["主线清楚"],
+                        gaps=["例子不够具体"],
+                    ),
+                    raw_output=(
+                        '{"score":84,"score_breakdown":{"准确性":84},'
+                        '"strengths":["主线清楚"],"gaps":["例子不够具体"]}'
+                    ),
+                )
+            }
+
+    monkeypatch.setitem(main.flows, "evaluate_answer", FakeFlow())
+
+    response = Response()
+    result = main.evaluate_answer_endpoint(
+        EvaluateAnswerRequest(
+            mode="basics",
+            topic="go",
+            question="Go channel 有什么风险？",
+            expected_points=["阻塞", "关闭语义"],
+            answer="容易阻塞。",
+            turn_index=1,
+            max_turns=1,
+            prompt_set_id="candidate-v1",
+        ),
+        response,
+    )
+
+    assert result.result.score == 84
+    assert '"score":84' in result.raw_output
+    assert response.headers[main.PROMPT_SET_HEADER] == "candidate-v1"
+    assert response.headers[main.PROMPT_HASH_HEADER]
+    assert response.headers[main.MODEL_NAME_HEADER] == main.settings.model
+
+
+def test_generate_review_endpoint_sets_prompt_headers_and_returns_raw_output(monkeypatch) -> None:
+    class FakeFlow:
+        def invoke(self, payload):
+            request = payload["request"]
+            return {
+                "result": GenerateReviewEnvelope(
+                    result=ReviewCard(
+                        overall="总结",
+                        top_fix="先补关键缺口",
+                        top_fix_reason="这是当前最大短板",
+                        score_breakdown={"准确性": 75},
+                        recommended_next={
+                            "mode": request.session.mode,
+                            "topic": request.session.topic,
+                            "reason": "继续补短板",
+                        },
+                    ),
+                    raw_output='{"overall":"总结","top_fix":"先补关键缺口"}',
+                )
+            }
+
+    monkeypatch.setitem(main.flows, "generate_review", FakeFlow())
+
+    response = Response()
+    result = main.generate_review_endpoint(
+        GenerateReviewRequest(
+            session=TrainingSession(id="sess_1", mode="basics", topic="redis"),
+            prompt_set_id="candidate-v1",
+        ),
+        response,
+    )
+
+    assert result.result.top_fix == "先补关键缺口"
+    assert result.raw_output == '{"overall":"总结","top_fix":"先补关键缺口"}'
     assert response.headers[main.PROMPT_SET_HEADER] == "candidate-v1"
     assert response.headers[main.PROMPT_HASH_HEADER]
     assert response.headers[main.MODEL_NAME_HEADER] == main.settings.model

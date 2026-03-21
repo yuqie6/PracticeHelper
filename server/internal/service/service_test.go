@@ -182,6 +182,255 @@ func TestSubmitAnswerRejectsReviewPendingSession(t *testing.T) {
 	}
 }
 
+func TestSubmitAnswerEvaluatesAndCreatesFollowupTurn(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := &domain.TrainingSession{
+		ID:        "sess_submit_followup",
+		Mode:      domain.ModeBasics,
+		Topic:     domain.BasicsTopicRedis,
+		Intensity: "standard",
+		MaxTurns:  2,
+		Status:    domain.StatusWaitingAnswer,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_submit_followup",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Redis 为什么快？",
+		ExpectedPoints: []string{"内存访问", "事件循环"},
+	}
+	if err := store.CreateSession(context.Background(), session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/evaluate_answer" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(domain.EvaluationResult{
+			Score:            84,
+			ScoreBreakdown:   map[string]float64{"准确性": 84},
+			Strengths:        []string{"主线清楚"},
+			Gaps:             []string{"例子不够具体"},
+			FollowupQuestion: "如果线上出现缓存击穿，你第一步怎么处理？",
+			FollowupPoints:   []string{"先止血", "再定位根因"},
+			WeaknessHits:     []domain.WeaknessHit{{Kind: "detail", Label: "缓存击穿处理", Severity: 0.8}},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	updated, err := svc.SubmitAnswer(context.Background(), session.ID, domain.SubmitAnswerRequest{
+		Answer: "Redis 快主要因为数据在内存里，单线程事件循环减少上下文切换。",
+	})
+	if err != nil {
+		t.Fatalf("SubmitAnswer() error = %v", err)
+	}
+
+	if updated.Status != domain.StatusWaitingAnswer {
+		t.Fatalf("expected waiting_answer status, got %s", updated.Status)
+	}
+	if len(updated.Turns) != 2 {
+		t.Fatalf("expected 2 turns, got %d", len(updated.Turns))
+	}
+	if updated.TotalScore != 84 {
+		t.Fatalf("expected total score 84, got %.1f", updated.TotalScore)
+	}
+	if updated.Turns[0].Answer == "" || updated.Turns[0].Evaluation == nil {
+		t.Fatalf("expected first turn answer and evaluation to be saved, got %+v", updated.Turns[0])
+	}
+	if updated.Turns[1].Question != "如果线上出现缓存击穿，你第一步怎么处理？" {
+		t.Fatalf("unexpected followup question: %q", updated.Turns[1].Question)
+	}
+	if !slices.Equal(updated.Turns[1].ExpectedPoints, []string{"先止血", "再定位根因"}) {
+		t.Fatalf("unexpected followup points: %v", updated.Turns[1].ExpectedPoints)
+	}
+
+	tags, err := store.ListWeaknesses(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("ListWeaknesses() error = %v", err)
+	}
+	if len(tags) == 0 || tags[0].Label != "缓存击穿处理" {
+		t.Fatalf("expected weakness tag to be saved, got %+v", tags)
+	}
+}
+
+func TestSubmitAnswerFinalTurnTriggersReview(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := &domain.TrainingSession{
+		ID:        "sess_submit_final",
+		Mode:      domain.ModeBasics,
+		Topic:     domain.BasicsTopicGo,
+		Intensity: "standard",
+		MaxTurns:  1,
+		Status:    domain.StatusWaitingAnswer,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_submit_final",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Go 的 channel 和 mutex 什么时候各用什么？",
+		ExpectedPoints: []string{"共享状态", "所有权转移"},
+	}
+	if err := store.CreateSession(context.Background(), session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/internal/evaluate_answer":
+			if err := json.NewEncoder(w).Encode(domain.EvaluationResult{
+				Score:          88,
+				ScoreBreakdown: map[string]float64{"准确性": 88},
+				Strengths:      []string{"取舍讲清楚了"},
+				Gaps:           []string{"可以补真实线上例子"},
+			}); err != nil {
+				t.Fatalf("encode evaluation response: %v", err)
+			}
+		case "/internal/generate_review":
+			if err := json.NewEncoder(w).Encode(domain.ReviewCard{
+				Overall:           "整体过线，但还可以补更真实的线上例子。",
+				Highlights:        []string{"主线完整"},
+				Gaps:              []string{"例子不够落地"},
+				SuggestedTopics:   []string{domain.BasicsTopicGo},
+				NextTrainingFocus: []string{"补并发场景例子"},
+				ScoreBreakdown:    map[string]float64{"准确性": 86},
+			}); err != nil {
+				t.Fatalf("encode review response: %v", err)
+			}
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	updated, err := svc.SubmitAnswer(context.Background(), session.ID, domain.SubmitAnswerRequest{
+		Answer: "共享状态简单时优先 mutex，消息和所有权转移更适合 channel。",
+	})
+	if err != nil {
+		t.Fatalf("SubmitAnswer() error = %v", err)
+	}
+
+	if updated.Status != domain.StatusCompleted {
+		t.Fatalf("expected completed status, got %s", updated.Status)
+	}
+	if updated.ReviewID == "" {
+		t.Fatal("expected review id to be saved")
+	}
+	review, err := store.GetReview(context.Background(), updated.ReviewID)
+	if err != nil {
+		t.Fatalf("GetReview() error = %v", err)
+	}
+	if review == nil || review.Overall == "" {
+		t.Fatalf("expected persisted review, got %+v", review)
+	}
+}
+
+func TestSubmitAnswerRestoresStatusOnSidecarFailure(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := &domain.TrainingSession{
+		ID:        "sess_submit_restore",
+		Mode:      domain.ModeBasics,
+		Topic:     domain.BasicsTopicRedis,
+		Intensity: "standard",
+		MaxTurns:  2,
+		Status:    domain.StatusWaitingAnswer,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_submit_restore",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Redis 为什么快？",
+		ExpectedPoints: []string{"内存访问"},
+	}
+	if err := store.CreateSession(context.Background(), session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "temporary upstream failure", http.StatusServiceUnavailable)
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	_, err = svc.SubmitAnswer(context.Background(), session.ID, domain.SubmitAnswerRequest{
+		Answer: "因为主要访问内存。",
+	})
+	if err == nil {
+		t.Fatal("expected SubmitAnswer() to fail")
+	}
+
+	saved, err := store.GetSession(context.Background(), session.ID)
+	if err != nil {
+		t.Fatalf("GetSession() error = %v", err)
+	}
+	if saved == nil {
+		t.Fatal("expected saved session")
+	}
+	if saved.Status != domain.StatusWaitingAnswer {
+		t.Fatalf("expected session status to be restored, got %s", saved.Status)
+	}
+}
+
+func TestSubmitAnswerRejectsCompletedSession(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := &domain.TrainingSession{
+		ID:        "sess_submit_completed",
+		Mode:      domain.ModeBasics,
+		Topic:     domain.BasicsTopicGo,
+		Intensity: "standard",
+		Status:    domain.StatusCompleted,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_submit_completed",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Go 的 goroutine 为什么轻量？",
+		ExpectedPoints: []string{"调度", "栈"},
+	}
+	if err := store.CreateSession(context.Background(), session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	svc := New(store, nil)
+	_, err = svc.SubmitAnswer(context.Background(), session.ID, domain.SubmitAnswerRequest{Answer: "answer"})
+	if err == nil {
+		t.Fatal("expected SubmitAnswer() to fail")
+	}
+	if err != ErrSessionCompleted {
+		t.Fatalf("expected ErrSessionCompleted, got %v", err)
+	}
+}
+
 func TestCreateSessionPassesBoundJobTargetAnalysisToSidecar(t *testing.T) {
 	store, err := openTestStore(t)
 	if err != nil {
@@ -974,6 +1223,60 @@ func TestBuildReviewScheduleItemsUsesWeaknessLevelTopics(t *testing.T) {
 	}
 }
 
+func TestBuildReviewScheduleItemsDeduplicatesAndSortsBySeverity(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	if err := store.UpsertWeaknesses(ctx, "sess_schedule_dedupe", []domain.WeaknessHit{
+		{Kind: "detail", Label: "缓存一致性", Severity: 1.2},
+		{Kind: "topic", Label: "Kafka", Severity: 0.7},
+	}); err != nil {
+		t.Fatalf("UpsertWeaknesses() error = %v", err)
+	}
+
+	svc := New(store, nil)
+	items := svc.buildReviewScheduleItems(ctx, &domain.TrainingSession{
+		ID:    "sess_schedule_dedupe",
+		Mode:  domain.ModeBasics,
+		Topic: domain.BasicsTopicMixed,
+		Turns: []domain.TrainingTurn{
+			{
+				ID:        "turn_schedule_dedupe_1",
+				SessionID: "sess_schedule_dedupe",
+				TurnIndex: 1,
+				WeaknessHits: []domain.WeaknessHit{
+					{Kind: "detail", Label: "缓存一致性", Severity: 0.6},
+					{Kind: "topic", Label: "Kafka", Severity: 0.7},
+				},
+			},
+			{
+				ID:        "turn_schedule_dedupe_2",
+				SessionID: "sess_schedule_dedupe",
+				TurnIndex: 2,
+				WeaknessHits: []domain.WeaknessHit{
+					{Kind: "detail", Label: "缓存一致性", Severity: 1.2},
+				},
+			},
+		},
+	}, &domain.ReviewCard{
+		ID: "review_schedule_dedupe",
+	}, time.Date(2026, 3, 25, 9, 0, 0, 0, time.UTC))
+
+	if len(items) != 2 {
+		t.Fatalf("expected 2 deduplicated items, got %d", len(items))
+	}
+	if items[0].WeaknessLabel != "缓存一致性" {
+		t.Fatalf("expected highest-severity weakness first, got %+v", items)
+	}
+	if items[1].WeaknessLabel != "Kafka" {
+		t.Fatalf("expected kafka weakness second, got %+v", items)
+	}
+}
+
 func TestRetrySessionReviewRejectsBusySession(t *testing.T) {
 	store, err := openTestStore(t)
 	if err != nil {
@@ -1055,6 +1358,56 @@ func TestRetrySessionReviewKeepsReviewPendingWhenGenerationFails(t *testing.T) {
 	}
 	if saved.Status != domain.StatusReviewPending {
 		t.Fatalf("expected session to stay review_pending, got %s", saved.Status)
+	}
+}
+
+func TestRetrySessionReviewRejectsCompleted(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := &domain.TrainingSession{
+		ID:        "sess_retry_completed",
+		Mode:      domain.ModeBasics,
+		Topic:     domain.BasicsTopicGo,
+		Intensity: "standard",
+		Status:    domain.StatusCompleted,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_retry_completed",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Go 的 goroutine 为什么轻量？",
+		ExpectedPoints: []string{"调度", "栈"},
+	}
+	if err := store.CreateSession(context.Background(), session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	svc := New(store, nil)
+	_, err = svc.RetrySessionReview(context.Background(), session.ID)
+	if err == nil {
+		t.Fatal("expected RetrySessionReview() to fail")
+	}
+	if err != ErrSessionCompleted {
+		t.Fatalf("expected ErrSessionCompleted, got %v", err)
+	}
+}
+
+func TestCompleteDueReviewReturnsNotFoundForMissingID(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	svc := New(store, nil)
+	err = svc.CompleteDueReview(context.Background(), 999999)
+	if !errors.Is(err, ErrReviewScheduleNotFound) {
+		t.Fatalf("expected ErrReviewScheduleNotFound, got %v", err)
 	}
 }
 
@@ -1564,6 +1917,9 @@ func TestExportSessionPDFReturnsPDFBytes(t *testing.T) {
 	if !bytes.Contains(content, []byte("STSong-Light")) {
 		t.Fatalf("expected pdf font definition, got %q", content[:120])
 	}
+	if !bytes.Contains(content, []byte("<FEFF")) {
+		t.Fatalf("expected utf-16 bom-prefixed text stream, got %q", content[:240])
+	}
 }
 
 func TestExportSessionsZipIncludesSelectedMarkdownFiles(t *testing.T) {
@@ -1676,6 +2032,22 @@ func TestExportSessionsRejectsEmptySelection(t *testing.T) {
 	_, _, err = svc.ExportSessions(context.Background(), nil, "markdown")
 	if !errors.Is(err, ErrEmptyExportSelection) {
 		t.Fatalf("expected ErrEmptyExportSelection, got %v", err)
+	}
+}
+
+func TestExportSessionRejectsUnsupportedFormat(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := seedSessionForExport(t, store, "sess_export_invalid_format", true)
+	svc := New(store, nil)
+
+	_, _, err = svc.ExportSession(context.Background(), session.ID, "csv")
+	if !errors.Is(err, ErrUnsupportedExportFormat) {
+		t.Fatalf("expected ErrUnsupportedExportFormat, got %v", err)
 	}
 }
 

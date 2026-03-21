@@ -5,9 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -25,6 +28,14 @@ const (
 	promptSetHeader  = "X-PracticeHelper-Prompt-Set"
 	promptHashHeader = "X-PracticeHelper-Prompt-Hash"
 	modelNameHeader  = "X-PracticeHelper-Model-Name"
+)
+
+var (
+	sidecarRetryBackoffs = []time.Duration{
+		500 * time.Millisecond,
+		1500 * time.Millisecond,
+	}
+	sidecarRetryJitter = 200 * time.Millisecond
 )
 
 type streamEvent struct {
@@ -216,7 +227,7 @@ func (c *Client) postJSON(
 	}
 
 	startedAt := time.Now()
-	response, err := c.httpClient.Do(request)
+	response, err := c.doWithRetry(request, body)
 	if err != nil {
 		slog.ErrorContext(ctx, "sidecar request failed", "path", path, "duration_ms", time.Since(startedAt).Milliseconds(), "error", err)
 		return nil, "", fmt.Errorf("call sidecar: %w", err)
@@ -266,7 +277,7 @@ func (c *Client) postJSONStream(
 	}
 
 	startedAt := time.Now()
-	response, err := c.httpClient.Do(request)
+	response, err := c.doWithRetry(request, body)
 	if err != nil {
 		slog.ErrorContext(ctx, "sidecar stream request failed", "path", path, "duration_ms", time.Since(startedAt).Milliseconds(), "error", err)
 		return nil, "", fmt.Errorf("call sidecar stream: %w", err)
@@ -325,6 +336,72 @@ func (c *Client) postJSONStream(
 
 	slog.InfoContext(ctx, "sidecar stream completed", "path", path, "status", response.StatusCode, "duration_ms", time.Since(startedAt).Milliseconds())
 	return headers, rawOutput, nil
+}
+
+func (c *Client) doWithRetry(req *http.Request, body []byte) (*http.Response, error) {
+	const maxAttempts = 3
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		attemptRequest := req.Clone(req.Context())
+		attemptRequest.Body = io.NopCloser(bytes.NewReader(body))
+		attemptRequest.ContentLength = int64(len(body))
+
+		response, err := c.httpClient.Do(attemptRequest)
+		if err == nil {
+			if !isRetryableStatus(response.StatusCode) || attempt == maxAttempts-1 {
+				return response, nil
+			}
+			_ = response.Body.Close()
+		} else {
+			if !isRetryableError(err) || attempt == maxAttempts-1 {
+				return nil, err
+			}
+		}
+
+		if attempt >= len(sidecarRetryBackoffs) {
+			continue
+		}
+
+		wait := sidecarRetryBackoffs[attempt] + retryJitter()
+		if wait < 0 {
+			wait = 0
+		}
+		timer := time.NewTimer(wait)
+		select {
+		case <-req.Context().Done():
+			timer.Stop()
+			return nil, req.Context().Err()
+		case <-timer.C:
+		}
+	}
+
+	return nil, fmt.Errorf("sidecar request failed after retries")
+}
+
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+func isRetryableStatus(status int) bool {
+	return status == http.StatusBadGateway ||
+		status == http.StatusServiceUnavailable ||
+		status == http.StatusGatewayTimeout
+}
+
+func retryJitter() time.Duration {
+	if sidecarRetryJitter <= 0 {
+		return 0
+	}
+	maxJitterMs := int(sidecarRetryJitter / time.Millisecond)
+	return time.Duration(rand.Intn(maxJitterMs*2+1)-maxJitterMs) * time.Millisecond
 }
 
 func decodeResultPayload(payload []byte, target any) (string, error) {

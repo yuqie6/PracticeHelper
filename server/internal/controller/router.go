@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -139,7 +140,11 @@ func (h *Handler) createJobTarget(c *gin.Context) {
 }
 
 func (h *Handler) getJobTarget(c *gin.Context) {
-	data, err := h.service.GetJobTarget(c.Request.Context(), c.Param("id"))
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
+	data, err := h.service.GetJobTarget(c.Request.Context(), id)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrJobTargetNotFound):
@@ -153,13 +158,17 @@ func (h *Handler) getJobTarget(c *gin.Context) {
 }
 
 func (h *Handler) updateJobTarget(c *gin.Context) {
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
 	var request domain.JobTargetInput
 	if err := c.ShouldBindJSON(&request); err != nil {
 		writeError(c, http.StatusBadRequest, err)
 		return
 	}
 
-	data, err := h.service.UpdateJobTarget(c.Request.Context(), c.Param("id"), request)
+	data, err := h.service.UpdateJobTarget(c.Request.Context(), id, request)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrJobTargetNotFound):
@@ -173,7 +182,11 @@ func (h *Handler) updateJobTarget(c *gin.Context) {
 }
 
 func (h *Handler) analyzeJobTarget(c *gin.Context) {
-	data, err := h.service.AnalyzeJobTarget(c.Request.Context(), c.Param("id"))
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
+	data, err := h.service.AnalyzeJobTarget(c.Request.Context(), id)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrJobTargetNotFound):
@@ -187,7 +200,11 @@ func (h *Handler) analyzeJobTarget(c *gin.Context) {
 }
 
 func (h *Handler) activateJobTarget(c *gin.Context) {
-	data, err := h.service.ActivateJobTarget(c.Request.Context(), c.Param("id"))
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
+	data, err := h.service.ActivateJobTarget(c.Request.Context(), id)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrJobTargetNotFound):
@@ -210,7 +227,11 @@ func (h *Handler) clearActiveJobTarget(c *gin.Context) {
 }
 
 func (h *Handler) listJobTargetAnalysisRuns(c *gin.Context) {
-	data, err := h.service.ListJobTargetAnalysisRuns(c.Request.Context(), c.Param("id"))
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
+	data, err := h.service.ListJobTargetAnalysisRuns(c.Request.Context(), id)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrJobTargetNotFound):
@@ -224,7 +245,11 @@ func (h *Handler) listJobTargetAnalysisRuns(c *gin.Context) {
 }
 
 func (h *Handler) getJobTargetAnalysisRun(c *gin.Context) {
-	data, err := h.service.GetJobTargetAnalysisRun(c.Request.Context(), c.Param("id"))
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
+	data, err := h.service.GetJobTargetAnalysisRun(c.Request.Context(), id)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrJobTargetAnalysisNotFound):
@@ -267,7 +292,11 @@ func (h *Handler) listProjects(c *gin.Context) {
 }
 
 func (h *Handler) getProject(c *gin.Context) {
-	data, err := h.service.GetProject(c.Request.Context(), c.Param("id"))
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
+	data, err := h.service.GetProject(c.Request.Context(), id)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, err)
 		return
@@ -280,13 +309,17 @@ func (h *Handler) getProject(c *gin.Context) {
 }
 
 func (h *Handler) updateProject(c *gin.Context) {
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
 	var request domain.ProjectProfileInput
 	if err := c.ShouldBindJSON(&request); err != nil {
 		writeError(c, http.StatusBadRequest, err)
 		return
 	}
 
-	data, err := h.service.UpdateProject(c.Request.Context(), c.Param("id"), request)
+	data, err := h.service.UpdateProject(c.Request.Context(), id, request)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, err)
 		return
@@ -304,7 +337,11 @@ func (h *Handler) listImportJobs(c *gin.Context) {
 }
 
 func (h *Handler) getImportJob(c *gin.Context) {
-	data, err := h.service.GetProjectImportJob(c.Request.Context(), c.Param("id"))
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
+	data, err := h.service.GetProjectImportJob(c.Request.Context(), id)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, err)
 		return
@@ -317,7 +354,11 @@ func (h *Handler) getImportJob(c *gin.Context) {
 }
 
 func (h *Handler) retryImportJob(c *gin.Context) {
-	data, err := h.service.RetryProjectImportJob(c.Request.Context(), c.Param("id"))
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
+	data, err := h.service.RetryProjectImportJob(c.Request.Context(), id)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrImportJobNotFound):
@@ -424,7 +465,11 @@ func (h *Handler) listSessions(c *gin.Context) {
 }
 
 func (h *Handler) getSession(c *gin.Context) {
-	data, err := h.service.GetSession(c.Request.Context(), c.Param("id"))
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
+	data, err := h.service.GetSession(c.Request.Context(), id)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrSessionNotFound):
@@ -438,7 +483,11 @@ func (h *Handler) getSession(c *gin.Context) {
 }
 
 func (h *Handler) listSessionEvaluationLogs(c *gin.Context) {
-	data, err := h.service.ListSessionEvaluationLogs(c.Request.Context(), c.Param("id"))
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
+	data, err := h.service.ListSessionEvaluationLogs(c.Request.Context(), id)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrSessionNotFound):
@@ -452,10 +501,14 @@ func (h *Handler) listSessionEvaluationLogs(c *gin.Context) {
 }
 
 func (h *Handler) exportSession(c *gin.Context) {
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
 	format := c.Query("format")
 	filename, content, err := h.service.ExportSession(
 		c.Request.Context(),
-		c.Param("id"),
+		id,
 		format,
 	)
 	if err != nil {
@@ -506,13 +559,17 @@ func (h *Handler) exportSessions(c *gin.Context) {
 }
 
 func (h *Handler) submitAnswer(c *gin.Context) {
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
 	var request domain.SubmitAnswerRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		writeError(c, http.StatusBadRequest, err)
 		return
 	}
 
-	data, err := h.service.SubmitAnswer(c.Request.Context(), c.Param("id"), request)
+	data, err := h.service.SubmitAnswer(c.Request.Context(), id, request)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrSessionNotFound):
@@ -533,6 +590,10 @@ func (h *Handler) submitAnswer(c *gin.Context) {
 }
 
 func (h *Handler) submitAnswerStream(c *gin.Context) {
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
 	var request domain.SubmitAnswerRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		writeError(c, http.StatusBadRequest, err)
@@ -540,12 +601,16 @@ func (h *Handler) submitAnswerStream(c *gin.Context) {
 	}
 
 	streamJSON(c, http.StatusOK, func(emit func(domain.StreamEvent) error) (any, error) {
-		return h.service.SubmitAnswerStream(c.Request.Context(), c.Param("id"), request, emit)
+		return h.service.SubmitAnswerStream(c.Request.Context(), id, request, emit)
 	})
 }
 
 func (h *Handler) retrySessionReview(c *gin.Context) {
-	data, err := h.service.RetrySessionReview(c.Request.Context(), c.Param("id"))
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
+	data, err := h.service.RetrySessionReview(c.Request.Context(), id)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrSessionNotFound):
@@ -566,7 +631,11 @@ func (h *Handler) retrySessionReview(c *gin.Context) {
 }
 
 func (h *Handler) getReview(c *gin.Context) {
-	data, err := h.service.GetReview(c.Request.Context(), c.Param("id"))
+	id, ok := requireStringID(c)
+	if !ok {
+		return
+	}
+	data, err := h.service.GetReview(c.Request.Context(), id)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, err)
 		return
@@ -622,6 +691,15 @@ func (h *Handler) completeDueReview(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": "ok"})
+}
+
+func requireStringID(c *gin.Context) (string, bool) {
+	id := c.Param("id")
+	if id == "" || len(id) > 64 || strings.ContainsAny(id, "/.\\") {
+		writeError(c, http.StatusBadRequest, fmt.Errorf("invalid id: %s", id))
+		return "", false
+	}
+	return id, true
 }
 
 func requestLogger() gin.HandlerFunc {
