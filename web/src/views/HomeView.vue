@@ -41,13 +41,13 @@
       </ol>
     </div>
 
-    <div class="neo-grid xl:grid-cols-[1.3fr_0.7fr]">
-      <div class="neo-panel-hero bg-[var(--neo-yellow)]">
+    <div class="neo-grid xl:grid-cols-[1fr_1fr]">
+      <div class="neo-panel-hero flex flex-col bg-[var(--neo-yellow)] xl:p-10">
         <p class="neo-kicker bg-white">{{ t('home.hero.kicker') }}</p>
-        <p class="text-lg font-bold leading-7">
+        <p class="text-lg font-bold leading-7 xl:text-xl">
           {{ dashboard?.today_focus ?? t('common.firstTrainingHint') }}
         </p>
-        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <div class="mt-auto flex flex-col gap-3 pt-4 sm:flex-row sm:flex-wrap">
           <RouterLink to="/train" class="neo-button-red w-full sm:w-auto">
             {{ t('home.hero.actionPrimary') }}
           </RouterLink>
