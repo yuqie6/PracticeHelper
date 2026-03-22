@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator
@@ -61,10 +62,33 @@ class RuntimeTraceEntry(BaseModel):
     message: str = ""
     attempt: int = 0
     tool_name: str = ""
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class RuntimeTrace(BaseModel):
     entries: list[RuntimeTraceEntry] = Field(default_factory=list)
+
+
+class AgentCommandEnvelope(BaseModel):
+    command_id: str
+    command_type: Literal[
+        "transition_session",
+        "upsert_review_path",
+        "enqueue_long_job",
+    ]
+    session_id: str = ""
+    idempotency_key: str
+    reason: str = ""
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentCommandResult(BaseModel):
+    command_id: str
+    status: Literal["accepted", "rejected", "applied", "deferred"]
+    applied: bool = False
+    data: dict[str, Any] = Field(default_factory=dict)
+    error_code: str = ""
+    error_message: str = ""
 
 
 class AnalyzeRepoEnvelope(BaseModel):
@@ -106,6 +130,7 @@ class GenerateQuestionEnvelope(BaseModel):
 
 
 class EvaluateAnswerRequest(BaseModel):
+    session_id: str = ""
     mode: str
     topic: str = ""
     prompt_set_id: str = ""
@@ -144,6 +169,7 @@ class EvaluateAnswerSideEffects(BaseModel):
 class EvaluateAnswerEnvelope(BaseModel):
     result: EvaluationResult
     side_effects: EvaluateAnswerSideEffects = Field(default_factory=EvaluateAnswerSideEffects)
+    command_results: list[AgentCommandResult] = Field(default_factory=list)
     raw_output: str = ""
     trace: RuntimeTrace | None = None
 
@@ -222,5 +248,6 @@ class GenerateReviewSideEffects(BaseModel):
 class GenerateReviewEnvelope(BaseModel):
     result: ReviewCard
     side_effects: GenerateReviewSideEffects | None = None
+    command_results: list[AgentCommandResult] = Field(default_factory=list)
     raw_output: str = ""
     trace: RuntimeTrace | None = None

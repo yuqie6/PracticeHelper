@@ -6,7 +6,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.agent_runtime import AgentRuntime, TaskExecutionResult
-from app.agent_tools import build_generate_review_agent_tools
+from app.agent_tools import (
+    build_evaluate_answer_agent_tools,
+    build_generate_review_agent_tools,
+    prepare_generate_review_agent_tooling,
+)
 from app.config import Settings
 from app.langgraph_flows import (
     _build_analyze_repo_graph,
@@ -22,6 +26,8 @@ from app.runtime_prompts import (
     review_prompt_bundle,
 )
 from app.schemas import (
+    AgentCommandEnvelope,
+    AgentCommandResult,
     AgentSessionDetail,
     AnalyzeJobTargetRequest,
     AnalyzeRepoEnvelope,
@@ -132,6 +138,8 @@ class FakeBackendClient:
         self.enabled = True
         self.search_queries: list[tuple[str, str, int]] = []
         self.session_ids: list[str] = []
+        self.commands: list[AgentCommandEnvelope] = []
+        self.command_results: dict[str, AgentCommandResult] = {}
 
     def search_repo_chunks(self, project_id: str, query: str, limit: int = 6) -> list[RepoChunk]:
         self.search_queries.append((project_id, query, limit))
@@ -151,6 +159,13 @@ class FakeBackendClient:
             session=TrainingSession(id=session_id, mode="basics", topic="redis", turns=[]),
             review=None,
         )
+
+    def run_agent_command(self, command: AgentCommandEnvelope) -> AgentCommandResult:
+        self.commands.append(command)
+        result = self.command_results.get(command.command_type)
+        if result is None:
+            raise AssertionError(f"missing fake command result for {command.command_type}")
+        return result
 
 
 class FakeAnalyzeRepoGraphRuntime:
@@ -828,6 +843,131 @@ def test_evaluate_answer_task_accepts_extend_signal_with_followup_on_last_turn()
     assert "如果线上抖动" in result.result.followup_question
 
 
+def test_evaluate_answer_task_accepts_transition_session_command_result() -> None:
+    backend_client = FakeBackendClient()
+    backend_client.command_results["transition_session"] = AgentCommandResult(
+        command_id="cmd_transition_session_turn_1_skip_followup",
+        status="deferred",
+        data={
+            "resolved_depth_signal": "skip_followup",
+            "resolved_max_turns": 2,
+        },
+    )
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=FakeModelClient(
+            [
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_ctx",
+                            "function": {
+                                "name": "recall_training_context",
+                                "arguments": "{}",
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_transition",
+                            "function": {
+                                "name": "transition_session",
+                                "arguments": (
+                                    '{"decision":"skip_followup","reason":"本轮已经看清主线"}'
+                                ),
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content=(
+                        '{"score":90,"score_breakdown":{"准确性":90},"headline":"可以直接收口",'
+                        '"strengths":["主线清楚"],"gaps":["还可以补更多案例"],"suggestion":"继续保持",'
+                        '"followup_question":"","followup_expected_points":[],"weakness_hits":[]}'
+                    ),
+                    tool_calls=[],
+                ),
+            ]
+        ),
+        go_client=backend_client,
+    )
+
+    result = runtime.evaluate_answer_task(
+        EvaluateAnswerRequest(
+            session_id="sess_cmd_eval",
+            mode="basics",
+            topic="redis",
+            question="Redis 为什么快？",
+            expected_points=["内存访问", "事件循环"],
+            answer="因为主要在内存里，事件循环模型也简单。",
+            turn_index=1,
+            max_turns=2,
+        )
+    )
+
+    assert result.command_results[0]["status"] == "deferred"
+    assert result.result.followup_question == ""
+    assert backend_client.commands[0].session_id == "sess_cmd_eval"
+    assert any(entry.phase == "command" for entry in result.trace.entries)
+
+
+def test_transition_session_tool_dedupes_same_command_within_single_run() -> None:
+    backend_client = FakeBackendClient()
+    backend_client.command_results["transition_session"] = AgentCommandResult(
+        command_id="cmd_transition_session_turn_1_extend",
+        status="deferred",
+        data={
+            "resolved_depth_signal": "extend",
+            "resolved_max_turns": 3,
+        },
+    )
+    tool = build_evaluate_answer_agent_tools(
+        EvaluateAnswerRequest(
+            session_id="sess_cmd_dedupe",
+            mode="basics",
+            topic="redis",
+            question="Redis 为什么快？",
+            expected_points=["内存访问"],
+            answer="因为在内存里。",
+            turn_index=1,
+            max_turns=2,
+        ),
+        {},
+        backend_client=backend_client,
+    )
+    by_name = {item.name: item for item in tool}
+    state = type(
+        "State",
+        (),
+        {
+            "side_effects": {},
+            "command_results": [],
+            "command_cache": {},
+            "command_counts": {},
+            "command_budget": {"transition_session": 1, "upsert_review_path": 1},
+        },
+    )()
+
+    bound = by_name["transition_session"].runtime_bind(state)
+    first = bound.handler({"decision": "extend", "reason": "还得再追一刀"})
+    second = bound.handler({"decision": "extend", "reason": "还得再追一刀"})
+
+    assert first["status"] == "deferred"
+    assert second["deduped"] is True
+    assert len(backend_client.commands) == 1
+    assert len(state.command_results) == 1
+
+
 def test_evaluate_answer_task_raises_after_agent_loop_validation_budget_is_exhausted() -> None:
     runtime = AgentRuntime(
         Settings(
@@ -1242,6 +1382,210 @@ def test_generate_review_tools_include_session_detail_callback_when_backend_enab
     assert backend_client.session_ids == ["sess_1"]
 
 
+def test_stream_generate_review_emits_command_status_and_command_results() -> None:
+    backend_client = FakeBackendClient()
+    backend_client.command_results["upsert_review_path"] = AgentCommandResult(
+        command_id="cmd_upsert_review_path",
+        status="applied",
+        applied=True,
+        data={
+            "recommended_next": {
+                "mode": "basics",
+                "topic": "redis",
+                "reason": "先补缓存一致性取舍",
+            },
+            "suggested_topics": ["redis"],
+            "next_training_focus": ["补缓存一致性表达"],
+        },
+    )
+    runtime = AgentRuntime(
+        Settings(
+            github_token="",
+            model="test-model",
+            openai_base_url="http://example.com/v1",
+            openai_api_key="test-key",
+            llm_timeout_seconds=10,
+        ),
+        model_client=FakeModelClient(
+            [
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_ctx",
+                            "function": {
+                                "name": "recall_training_context",
+                                "arguments": "{}",
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_path",
+                            "function": {
+                                "name": "upsert_review_path",
+                                "arguments": (
+                                    '{"recommended_next":{"mode":"basics","topic":"redis"},'
+                                    '"suggested_topics":["redis"],'
+                                    '"next_training_focus":["补缓存一致性表达"],'
+                                    '"gaps":["缺缓存一致性取舍"],'
+                                    '"top_fix":"补缓存一致性取舍",'
+                                    '"top_fix_reason":"这是最影响训练效果的短板"}'
+                                ),
+                            },
+                        }
+                    ],
+                ),
+                ChatCompletionResult(
+                    content=(
+                        '{"overall":"总结","top_fix":"补缓存一致性取舍",'
+                        '"top_fix_reason":"这是最影响训练效果的短板",'
+                        '"highlights":["主线清楚"],"gaps":["缺缓存一致性取舍"],'
+                        '"suggested_topics":["redis"],'
+                        '"next_training_focus":["补缓存一致性表达"],'
+                        '"recommended_next":{"mode":"basics","topic":"redis","reason":"先补缓存一致性取舍"},'
+                        '"score_breakdown":{"准确性":72}}'
+                    ),
+                    tool_calls=[],
+                ),
+            ]
+        ),
+        go_client=backend_client,
+    )
+
+    events = list(
+        runtime.stream_generate_review(
+            GenerateReviewRequest(
+                session=TrainingSession(id="sess_stream_review", mode="basics", topic="redis"),
+                turns=[],
+            )
+        )
+    )
+
+    status_names = [event["name"] for event in events if event["type"] == "status"]
+    assert "command_requested" in status_names
+    assert "command_applied" in status_names
+
+    result_event = next(event for event in events if event["type"] == "result")
+    assert result_event["data"]["command_results"][0]["status"] == "applied"
+    assert (
+        result_event["data"]["command_results"][0]["data"]["recommended_next"]["topic"] == "redis"
+    )
+    assert any(event["type"] == "trace" and event["data"]["phase"] == "command" for event in events)
+
+
+def test_prepare_generate_review_agent_tooling_compacts_turns_and_memory_context() -> None:
+    request = GenerateReviewRequest(
+        session=TrainingSession(
+            id="sess_compact",
+            mode="basics",
+            topic="redis",
+            status="review_pending",
+            max_turns=2,
+            total_score=81,
+        ),
+        turns=[
+            TrainingTurn(
+                turn_index=1,
+                question="Redis 为什么快？",
+                answer="A" * 320,
+                evaluation=EvaluationResult(
+                    score=81,
+                    score_breakdown={"准确性": 81},
+                    headline="主线基本完整，但案例深度还不够。",
+                    strengths=["主线清楚", "先讲结论", "能对上场景"],
+                    gaps=["案例不够具体", "trade-off 不够展开", "监控闭环没说"],
+                    weakness_hits=[],
+                ),
+            )
+        ],
+        agent_context={
+            "knowledge_subgraph": {
+                "nodes": [
+                    {
+                        "id": "node_1",
+                        "label": "redis",
+                        "node_type": "topic",
+                        "proficiency": 3.0,
+                        "confidence": 0.8,
+                        "scope_type": "global",
+                        "scope_id": "",
+                        "parent_id": "",
+                    }
+                ],
+                "edges": [
+                    {
+                        "source_id": "node_1",
+                        "target_id": "node_2",
+                        "edge_type": "related",
+                    }
+                ],
+            },
+            "observations": [
+                {
+                    "id": "obs_1",
+                    "category": "pattern",
+                    "content": "B" * 260,
+                    "tags": ["redis", "tradeoff", "ops", "detail", "extra"],
+                    "topic": "redis",
+                    "scope_type": "global",
+                    "scope_id": "",
+                    "relevance": 0.9,
+                }
+            ],
+            "session_summaries": [
+                {
+                    "id": "sum_1",
+                    "session_id": "sess_prev",
+                    "mode": "basics",
+                    "topic": "redis",
+                    "summary": "C" * 320,
+                    "strengths": ["主线清楚", "会讲场景", "表达稳定"],
+                    "gaps": ["细节不足", "闭环不够", "观测面弱"],
+                    "recommended_focus": ["缓存一致性", "热点 key", "监控"],
+                    "salience": 0.7,
+                }
+            ],
+            "weakness_profile": [
+                {
+                    "id": "weak_1",
+                    "kind": "topic",
+                    "label": "缓存一致性",
+                    "severity": 0.9,
+                    "frequency": 3,
+                    "last_seen_at": "",
+                    "evidence_session_id": "sess_prev",
+                }
+            ],
+        },
+    )
+
+    prepared = prepare_generate_review_agent_tooling(request)
+
+    turn = prepared.training_context_payload["turns"][0]
+    assert "answer" not in turn
+    assert len(turn["answer_excerpt"]) <= 240
+    assert len(turn["top_strengths"]) == 2
+    assert len(turn["top_gaps"]) == 2
+
+    observation = prepared.observations_payload["observations"][0]
+    assert "created_at" not in observation
+    assert len(observation["content"]) <= 180
+    assert len(observation["tags"]) == 4
+
+    summary = prepared.session_summaries_payload["session_summaries"][0]
+    assert len(summary["summary"]) <= 240
+    assert len(summary["strengths"]) == 2
+    assert len(summary["gaps"]) == 2
+    assert len(summary["recommended_focus"]) == 2
+
+    sections = {detail["section"] for detail in prepared.trace_details}
+    assert {"turns", "knowledge_subgraph", "observations", "session_summaries"} <= sections
+
+
 def test_review_prompt_bundle_includes_job_target_analysis_context() -> None:
     _, user_prompt, tools = review_prompt_bundle(
         GenerateReviewRequest(
@@ -1401,6 +1745,20 @@ def test_stream_evaluate_answer_uses_agent_loop_and_emits_side_effects() -> None
                 answer="因为它主要在内存里。",
                 turn_index=1,
                 max_turns=2,
+                agent_context={
+                    "observations": [
+                        {
+                            "id": "obs_trace_1",
+                            "category": "pattern",
+                            "content": "用户主线清楚，但 trade-off 不够展开。" * 8,
+                            "tags": ["redis", "tradeoff", "detail", "ops", "extra"],
+                            "topic": "redis",
+                            "scope_type": "global",
+                            "scope_id": "",
+                            "relevance": 0.8,
+                        }
+                    ]
+                },
             )
         )
     )
@@ -1412,11 +1770,19 @@ def test_stream_evaluate_answer_uses_agent_loop_and_emits_side_effects() -> None
     assert "record_observation" in context_names
     assert "set_depth_signal" in context_names
     assert "runtime_started" in trace_codes
+    assert "context_compacted" in trace_codes
     assert "runtime_completed" in trace_codes
     assert result_event["type"] == "result"
     assert result_event["data"]["result"]["score"] == 88
     assert result_event["data"]["side_effects"]["depth_signal"] == "skip_followup"
     assert len(result_event["data"]["side_effects"]["observations"]) == 1
+    compacted = next(
+        event["data"]
+        for event in events
+        if event["type"] == "trace" and event["data"]["code"] == "context_compacted"
+    )
+    assert compacted["details"]["section"] == "observations"
+    assert compacted["details"]["after_chars"] < compacted["details"]["before_chars"]
     assert result_event["data"]["trace"]["entries"][-1]["code"] == "runtime_completed"
 
 

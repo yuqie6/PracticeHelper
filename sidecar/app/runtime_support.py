@@ -21,6 +21,7 @@ class RuntimeTool:
     description: str
     handler: Callable[[dict[str, Any]], dict[str, Any]]
     parameters: dict[str, Any] = field(default_factory=_empty_parameters)
+    runtime_bind: Callable[[Any], RuntimeTool] | None = None
 
     def spec(self) -> dict[str, Any]:
         return {
@@ -48,6 +49,53 @@ def compact_chunks(
             }
         )
     return compact
+
+
+def trim_text(value: str, max_chars: int) -> str:
+    if max_chars <= 0:
+        return ""
+    stripped = value.strip()
+    if len(stripped) <= max_chars:
+        return stripped
+    return stripped[: max_chars - 1].rstrip() + "…"
+
+
+def compact_string_list(items: list[str], *, limit: int, max_chars: int | None = None) -> list[str]:
+    compacted: list[str] = []
+    for item in items[:limit]:
+        value = item.strip()
+        if not value:
+            continue
+        if max_chars is not None:
+            value = trim_text(value, max_chars)
+        compacted.append(value)
+    return compacted
+
+
+def estimate_payload_chars(value: Any) -> int:
+    try:
+        return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+    except TypeError:
+        return len(str(value))
+
+
+def build_compaction_details(
+    *,
+    section: str,
+    before_count: int,
+    after_count: int,
+    before_value: Any,
+    after_value: Any,
+    budget: str,
+) -> dict[str, Any]:
+    return {
+        "section": section,
+        "before_count": before_count,
+        "after_count": after_count,
+        "before_chars": estimate_payload_chars(before_value),
+        "after_chars": estimate_payload_chars(after_value),
+        "budget": budget,
+    }
 
 
 def repo_overview_payload(bundle: RepoAnalysisBundle) -> dict[str, Any]:
@@ -119,6 +167,8 @@ def tool_summary(tool_name: str) -> str:
         "update_knowledge": "已准备知识图谱更新，后续会由 Go 统一写回。",
         "suggest_next_session": "已准备下一轮训练建议，后续会由 Go 统一处理。",
         "set_depth_signal": "已设置追问深度信号，后续会交给 Go 状态机决定是否跳过或加深。",
+        "transition_session": "已向 Go 状态机申请关键轮次决策，正在等待结构化结果回流。",
+        "upsert_review_path": "已向 Go 请求规范化学习路径，正在等待统一后的推荐结果。",
         "read_question_templates": "已读取基础题模板，正在挑选更适合当前训练目标的问题。",
         "read_project_brief": "已读取项目摘要与亮点，正在组织更贴近真实项目的问题。",
         "read_context_chunks": "已读取源码与文档片段，正在结合具体上下文生成内容。",

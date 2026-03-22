@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"practicehelper/server/internal/domain"
 	"practicehelper/server/internal/service"
 )
 
@@ -16,6 +17,7 @@ const internalTokenHeader = "X-PracticeHelper-Internal-Token"
 func registerInternalRoutes(internal *gin.RouterGroup, handler *Handler) {
 	internal.GET("/search-chunks", handler.searchChunksInternal)
 	internal.GET("/session-detail/:id", handler.getSessionDetailInternal)
+	internal.POST("/agent-commands", handler.executeAgentCommandInternal)
 }
 
 func (h *Handler) searchChunksInternal(c *gin.Context) {
@@ -52,6 +54,29 @@ func (h *Handler) getSessionDetailInternal(c *gin.Context) {
 	data, err := h.service.GetAgentSessionDetail(c.Request.Context(), id)
 	if err != nil {
 		switch {
+		case errors.Is(err, service.ErrSessionNotFound):
+			writeError(c, http.StatusNotFound, err)
+		default:
+			writeError(c, http.StatusInternalServerError, err)
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func (h *Handler) executeAgentCommandInternal(c *gin.Context) {
+	var request domain.AgentCommandEnvelope
+	if err := c.ShouldBindJSON(&request); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	data, err := h.service.ExecuteAgentCommand(c.Request.Context(), request)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrInvalidAgentCommand),
+			errors.Is(err, service.ErrUnsupportedAgentCommand):
+			writeError(c, http.StatusBadRequest, err)
 		case errors.Is(err, service.ErrSessionNotFound):
 			writeError(c, http.StatusNotFound, err)
 		default:

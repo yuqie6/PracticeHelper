@@ -33,6 +33,16 @@ func TestEvaluateAnswerSupportsEnvelopedResultPayload(t *testing.T) {
 			"side_effects": map[string]any{
 				"depth_signal": "extend",
 			},
+			"command_results": []map[string]any{
+				{
+					"command_id": "cmd_transition_session_turn_1_extend",
+					"status":     "deferred",
+					"data": map[string]any{
+						"resolved_depth_signal": "extend",
+						"resolved_max_turns":    3,
+					},
+				},
+			},
 			"raw_output": `{"score":82}`,
 			"trace": map[string]any{
 				"entries": []map[string]any{
@@ -52,7 +62,7 @@ func TestEvaluateAnswerSupportsEnvelopedResultPayload(t *testing.T) {
 	defer server.Close()
 
 	client := New(server.URL, time.Second)
-	result, sideEffects, meta, err := client.EvaluateAnswer(context.Background(), domain.EvaluateAnswerRequest{
+	result, sideEffects, commandResults, meta, err := client.EvaluateAnswer(context.Background(), domain.EvaluateAnswerRequest{
 		Mode:      domain.ModeBasics,
 		Topic:     domain.BasicsTopicRedis,
 		Question:  "Redis 为什么快？",
@@ -87,6 +97,9 @@ func TestEvaluateAnswerSupportsEnvelopedResultPayload(t *testing.T) {
 	}
 	if sideEffects == nil || sideEffects.DepthSignal != domain.DepthSignalExtend {
 		t.Fatalf("expected depth signal extend, got %+v", sideEffects)
+	}
+	if len(commandResults) != 1 || commandResults[0].Status != domain.AgentCommandStatusDeferred {
+		t.Fatalf("expected deferred command result, got %+v", commandResults)
 	}
 }
 
@@ -223,7 +236,7 @@ func TestGenerateReviewStreamReadsRawOutputFromResultEventEnvelope(t *testing.T)
 
 	client := New(server.URL, time.Second)
 	var phases []string
-	result, sideEffects, meta, err := client.GenerateReviewStream(
+	result, sideEffects, _, meta, err := client.GenerateReviewStream(
 		context.Background(),
 		domain.GenerateReviewRequest{
 			Session: &domain.TrainingSession{
@@ -322,7 +335,7 @@ func TestEvaluateAnswerStreamReadsSideEffectsFromResultEventEnvelope(t *testing.
 	defer server.Close()
 
 	client := New(server.URL, time.Second)
-	result, sideEffects, meta, err := client.EvaluateAnswerStream(
+	result, sideEffects, _, meta, err := client.EvaluateAnswerStream(
 		context.Background(),
 		domain.EvaluateAnswerRequest{
 			Mode:      domain.ModeBasics,
@@ -378,7 +391,7 @@ func TestEvaluateAnswerRetriesOnRetryableStatus(t *testing.T) {
 	defer server.Close()
 
 	client := New(server.URL, time.Second)
-	result, _, _, err := client.EvaluateAnswer(context.Background(), domain.EvaluateAnswerRequest{
+	result, _, _, _, err := client.EvaluateAnswer(context.Background(), domain.EvaluateAnswerRequest{
 		Mode:      domain.ModeBasics,
 		Topic:     domain.BasicsTopicRedis,
 		Question:  "Redis 为什么快？",
@@ -437,7 +450,7 @@ func TestGenerateReviewStreamRetriesBeforeConsumingBody(t *testing.T) {
 	defer server.Close()
 
 	client := New(server.URL, time.Second)
-	result, _, meta, err := client.GenerateReviewStream(
+	result, _, _, meta, err := client.GenerateReviewStream(
 		context.Background(),
 		domain.GenerateReviewRequest{
 			Session: &domain.TrainingSession{

@@ -2,8 +2,11 @@ package repo
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
+	"sort"
 	"strings"
 
 	"practicehelper/server/internal/domain"
@@ -11,25 +14,42 @@ import (
 
 const maxActiveObservations = 200
 
+type ObservationPersistStats struct {
+	Applied int
+	Skipped int
+	Deduped int
+}
+
 func (s *Store) CreateObservations(
 	ctx context.Context,
 	sessionID string,
 	observations []domain.AgentObservation,
 ) error {
+	_, err := s.CreateObservationsWithStats(ctx, sessionID, observations)
+	return err
+}
+
+func (s *Store) CreateObservationsWithStats(
+	ctx context.Context,
+	sessionID string,
+	observations []domain.AgentObservation,
+) (ObservationPersistStats, error) {
 	if len(observations) == 0 {
-		return nil
+		return ObservationPersistStats{}, nil
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin create observations: %w", err)
+		return ObservationPersistStats{}, fmt.Errorf("begin create observations: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	stats := ObservationPersistStats{}
 	indexEntries := make([]domain.MemoryIndexEntry, 0, len(observations))
 	for index := range observations {
 		observation := &observations[index]
 		if observation.Content == "" || observation.Category == "" {
+			stats.Skipped++
 			continue
 		}
 		if observation.ID == "" {
@@ -46,14 +66,16 @@ func (s *Store) CreateObservations(
 		}
 
 		now := nowUTC()
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO agent_observations (
-				id, session_id, scope_type, scope_id, topic, category, content,
+		fingerprint := observationFingerprint(*observation)
+		result, err := tx.ExecContext(ctx, `
+			INSERT OR IGNORE INTO agent_observations (
+				id, session_id, fingerprint, scope_type, scope_id, topic, category, content,
 				tags_json, relevance, created_at, archived_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
 			observation.ID,
 			observation.SessionID,
+			fingerprint,
 			normalizeMemoryScope(observation.ScopeType),
 			observation.ScopeID,
 			normalizeTopicLabel(observation.Topic),
@@ -63,9 +85,20 @@ func (s *Store) CreateObservations(
 			observation.Relevance,
 			now,
 			"",
-		); err != nil {
-			return fmt.Errorf("insert observation %s: %w", observation.ID, err)
+		)
+		if err != nil {
+			return ObservationPersistStats{}, fmt.Errorf("insert observation %s: %w", observation.ID, err)
 		}
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return ObservationPersistStats{}, fmt.Errorf("observation rows affected %s: %w", observation.ID, err)
+		}
+		if rowsAffected == 0 {
+			stats.Skipped++
+			stats.Deduped++
+			continue
+		}
+		stats.Applied++
 
 		indexEntries = append(indexEntries, domain.MemoryIndexEntry{
 			MemoryType: domain.MemoryTypeObservation,
@@ -84,13 +117,13 @@ func (s *Store) CreateObservations(
 	}
 
 	if err := s.archiveExcessObservationsTx(ctx, tx); err != nil {
-		return err
+		return ObservationPersistStats{}, err
 	}
 	if err := s.upsertMemoryIndexEntries(ctx, tx, indexEntries); err != nil {
-		return err
+		return ObservationPersistStats{}, err
 	}
 
-	return tx.Commit()
+	return stats, tx.Commit()
 }
 
 func (s *Store) ListRelevantObservations(
@@ -155,6 +188,29 @@ func (s *Store) ListRelevantObservations(
 	}
 
 	return items, nil
+}
+
+func observationFingerprint(observation domain.AgentObservation) string {
+	tags := make([]string, 0, len(observation.Tags))
+	for _, tag := range observation.Tags {
+		value := strings.ToLower(strings.TrimSpace(tag))
+		if value == "" {
+			continue
+		}
+		tags = append(tags, value)
+	}
+	sort.Strings(tags)
+
+	parts := []string{
+		normalizeMemoryScope(observation.ScopeType),
+		strings.TrimSpace(observation.ScopeID),
+		normalizeTopicLabel(observation.Topic),
+		strings.ToLower(strings.TrimSpace(observation.Category)),
+		strings.Join(strings.Fields(strings.ToLower(observation.Content)), " "),
+		strings.Join(tags, ","),
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "|")))
+	return hex.EncodeToString(sum[:])
 }
 
 func (s *Store) GetObservationsByIDs(

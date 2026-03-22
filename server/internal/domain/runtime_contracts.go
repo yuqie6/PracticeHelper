@@ -37,6 +37,7 @@ type GenerateQuestionResponse struct {
 }
 
 type EvaluateAnswerRequest struct {
+	SessionID         string                    `json:"session_id,omitempty"`
 	Mode              string                    `json:"mode"`
 	Topic             string                    `json:"topic,omitempty"`
 	PromptSetID       string                    `json:"prompt_set_id,omitempty"`

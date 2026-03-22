@@ -12,7 +12,13 @@ import (
 type evaluateFunc func(
 	ctx context.Context,
 	request domain.EvaluateAnswerRequest,
-) (*domain.EvaluationResult, *domain.EvaluateAnswerSideEffects, *domain.PromptExecutionMeta, error)
+) (
+	*domain.EvaluationResult,
+	*domain.EvaluateAnswerSideEffects,
+	[]domain.AgentCommandResult,
+	*domain.PromptExecutionMeta,
+	error,
+)
 
 type finalizeFunc func(ctx context.Context, sessionID string) (*domain.TrainingSession, error)
 
@@ -21,7 +27,13 @@ func (s *Service) SubmitAnswer(ctx context.Context, sessionID string, request do
 		ctx,
 		sessionID,
 		request,
-		func(ctx context.Context, request domain.EvaluateAnswerRequest) (*domain.EvaluationResult, *domain.EvaluateAnswerSideEffects, *domain.PromptExecutionMeta, error) {
+		func(ctx context.Context, request domain.EvaluateAnswerRequest) (
+			*domain.EvaluationResult,
+			*domain.EvaluateAnswerSideEffects,
+			[]domain.AgentCommandResult,
+			*domain.PromptExecutionMeta,
+			error,
+		) {
 			return s.sidecar.EvaluateAnswer(ctx, request)
 		},
 		func(ctx context.Context, sessionID string) (*domain.TrainingSession, error) {
@@ -42,7 +54,13 @@ func (s *Service) SubmitAnswerStream(
 		ctx,
 		sessionID,
 		request,
-		func(ctx context.Context, request domain.EvaluateAnswerRequest) (*domain.EvaluationResult, *domain.EvaluateAnswerSideEffects, *domain.PromptExecutionMeta, error) {
+		func(ctx context.Context, request domain.EvaluateAnswerRequest) (
+			*domain.EvaluationResult,
+			*domain.EvaluateAnswerSideEffects,
+			[]domain.AgentCommandResult,
+			*domain.PromptExecutionMeta,
+			error,
+		) {
 			return s.sidecar.EvaluateAnswerStream(ctx, request, emit)
 		},
 		func(ctx context.Context, sessionID string) (*domain.TrainingSession, error) {
@@ -107,7 +125,8 @@ func (s *Service) submitAnswerCore(
 	emitStatus(emit, "evaluation_started")
 
 	evalStart := time.Now()
-	evaluation, sideEffects, promptMeta, err := evaluate(ctx, domain.EvaluateAnswerRequest{
+	evaluationRequest := domain.EvaluateAnswerRequest{
+		SessionID:         session.ID,
 		Mode:              session.Mode,
 		Topic:             session.Topic,
 		PromptSetID:       session.PromptSetID,
@@ -121,12 +140,27 @@ func (s *Service) submitAnswerCore(
 		ScoreWeights:      scoreWeights,
 		JobTargetAnalysis: jobTargetAnalysis,
 		AgentContext:      agentContext,
-	})
+	}
+	evaluation, sideEffects, commandResults, promptMeta, err := evaluate(ctx, evaluationRequest)
 	if err != nil {
 		s.restoreSessionStatus(ctx, session.ID, previousStatus)
 		return nil, err
 	}
-	s.recordEvaluationLog(ctx, session.ID, turn.ID, flowName, evalStart, promptMeta)
+	if sideEffects == nil {
+		sideEffects = &domain.EvaluateAnswerSideEffects{}
+	}
+	evalLatencyMs := latencyMsSince(evalStart)
+	defer s.recordEvaluationLog(ctx, session.ID, turn.ID, flowName, evalLatencyMs, promptMeta)
+	appendPromptTrace(
+		promptMeta,
+		emit,
+		flowName,
+		"persist",
+		"info",
+		"persist_started",
+		"Go 开始持久化评估结果和副作用。",
+		map[string]any{"section": "evaluate_answer"},
+	)
 	emitStatus(emit, "feedback_ready")
 
 	turn.Answer = request.Answer
@@ -134,15 +168,17 @@ func (s *Service) submitAnswerCore(
 	turn.WeaknessHits = mergeWeaknessHits(turn.WeaknessHits, evaluation.WeaknessHits)
 
 	if err := s.repo.SaveTurn(ctx, turn); err != nil {
+		appendPersistFailureTrace(promptMeta, emit, flowName, "turn", err)
 		s.restoreSessionStatus(ctx, session.ID, previousStatus)
 		return nil, err
 	}
 	emitStatus(emit, "answer_saved")
 	if err := s.repo.UpsertWeaknesses(ctx, session.ID, evaluation.WeaknessHits); err != nil {
+		appendPersistFailureTrace(promptMeta, emit, flowName, "weaknesses", err)
 		s.restoreSessionStatus(ctx, session.ID, previousStatus)
 		return nil, err
 	}
-	if err := s.applyEvaluateAnswerSideEffects(ctx, session, sideEffects); err != nil {
+	if err := s.applyEvaluateAnswerSideEffects(ctx, session, sideEffects, promptMeta, emit, flowName); err != nil {
 		s.restoreSessionStatus(ctx, session.ID, previousStatus)
 		return nil, err
 	}
@@ -153,11 +189,20 @@ func (s *Service) submitAnswerCore(
 		_ = s.coolDownSessionWeakness(ctx, session, turn.Question, evaluation.WeaknessHits)
 	}
 
-	switch sideEffects.DepthSignal {
+	depthSignal, resolvedMaxTurns := resolveEvaluateAnswerCommandDecision(
+		commandResults,
+		sideEffects,
+		session.MaxTurns,
+	)
+
+	switch depthSignal {
 	case domain.DepthSignalSkipFollowup:
 		isLastTurn = true
 	case domain.DepthSignalExtend:
-		if turn.TurnIndex >= session.MaxTurns && session.MaxTurns < 6 {
+		if resolvedMaxTurns > session.MaxTurns {
+			session.MaxTurns = resolvedMaxTurns
+			isLastTurn = false
+		} else if turn.TurnIndex >= session.MaxTurns && session.MaxTurns < 6 {
 			session.MaxTurns++
 			isLastTurn = false
 		}
@@ -166,6 +211,7 @@ func (s *Service) submitAnswerCore(
 	if isLastTurn {
 		session.Status = domain.StatusReviewPending
 		if err := s.repo.SaveSession(ctx, session); err != nil {
+			appendPersistFailureTrace(promptMeta, emit, flowName, "session", err)
 			return nil, err
 		}
 		emitStatus(emit, "review_started")
@@ -176,9 +222,11 @@ func (s *Service) submitAnswerCore(
 		nextTurn := buildFollowupTrainingTurn(session.ID, turn.TurnIndex+1, evaluation)
 		session.Status = domain.StatusWaitingAnswer
 		if err := s.repo.SaveSession(ctx, session); err != nil {
+			appendPersistFailureTrace(promptMeta, emit, flowName, "session", err)
 			return nil, err
 		}
 		if err := s.repo.InsertTurn(ctx, nextTurn); err != nil {
+			appendPersistFailureTrace(promptMeta, emit, flowName, "followup_turn", err)
 			return nil, err
 		}
 		emitStatus(emit, "followup_ready")
@@ -191,24 +239,72 @@ func (s *Service) applyEvaluateAnswerSideEffects(
 	ctx context.Context,
 	session *domain.TrainingSession,
 	sideEffects *domain.EvaluateAnswerSideEffects,
+	promptMeta *domain.PromptExecutionMeta,
+	emit func(domain.StreamEvent) error,
+	flowName string,
 ) error {
 	if sideEffects == nil {
 		return nil
 	}
 	if len(sideEffects.Observations) > 0 {
-		if err := s.repo.CreateObservations(ctx, session.ID, sideEffects.Observations); err != nil {
+		stats, err := s.repo.CreateObservationsWithStats(ctx, session.ID, sideEffects.Observations)
+		if err != nil {
+			appendPersistFailureTrace(promptMeta, emit, flowName, "observations", err)
 			return fmt.Errorf("create observations: %w", err)
 		}
+		appendPromptTrace(
+			promptMeta,
+			emit,
+			flowName,
+			"persist",
+			"success",
+			"persist_observations",
+			"观察记录已写入长期记忆。",
+			map[string]any{
+				"section": "observations",
+				"applied": stats.Applied,
+				"skipped": stats.Skipped,
+				"deduped": stats.Deduped,
+			},
+		)
 		s.syncOrQueueMemoryEmbeddings(ctx, collectObservationMemoryRefs(sideEffects.Observations))
 	}
 	if len(sideEffects.KnowledgeUpdates) > 0 {
-		if err := s.repo.UpsertKnowledgeNodes(ctx, session.ID, sideEffects.KnowledgeUpdates); err != nil {
+		applied, err := s.repo.UpsertKnowledgeNodesWithCount(ctx, session.ID, sideEffects.KnowledgeUpdates)
+		if err != nil {
+			appendPersistFailureTrace(promptMeta, emit, flowName, "knowledge_updates", err)
 			return fmt.Errorf("upsert knowledge updates: %w", err)
 		}
+		appendPromptTrace(
+			promptMeta,
+			emit,
+			flowName,
+			"persist",
+			"success",
+			"persist_knowledge_updates",
+			"知识图谱更新已回写。",
+			map[string]any{
+				"section": "knowledge_updates",
+				"applied": applied,
+			},
+		)
 	}
 	if sideEffects.DepthSignal == "" {
 		sideEffects.DepthSignal = domain.DepthSignalNormal
 	}
+	appendPromptTrace(
+		promptMeta,
+		emit,
+		flowName,
+		"persist",
+		"success",
+		"persist_depth_signal",
+		fmt.Sprintf("深度信号已交给 Go 状态机：%s。", sideEffects.DepthSignal),
+		map[string]any{
+			"section": "depth_signal",
+			"applied": 1,
+		},
+	)
 	return nil
 }
 

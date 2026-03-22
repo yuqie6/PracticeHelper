@@ -144,13 +144,22 @@ func (s *Store) UpsertKnowledgeNodes(
 	sessionID string,
 	updates []domain.KnowledgeUpdate,
 ) error {
+	_, err := s.UpsertKnowledgeNodesWithCount(ctx, sessionID, updates)
+	return err
+}
+
+func (s *Store) UpsertKnowledgeNodesWithCount(
+	ctx context.Context,
+	sessionID string,
+	updates []domain.KnowledgeUpdate,
+) (int, error) {
 	if len(updates) == 0 {
-		return nil
+		return 0, nil
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin upsert knowledge nodes: %w", err)
+		return 0, fmt.Errorf("begin upsert knowledge nodes: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -158,7 +167,7 @@ func (s *Store) UpsertKnowledgeNodes(
 	for _, update := range updates {
 		nodeID, node, err := s.upsertKnowledgeUpdateTx(ctx, tx, sessionID, update)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if node == nil {
 			continue
@@ -171,12 +180,12 @@ func (s *Store) UpsertKnowledgeNodes(
 				nodeID,
 				domain.KnowledgeEdgeContains,
 			); err != nil {
-				return err
+				return 0, err
 			}
 		}
 		topic, err := s.resolveRootTopicTx(ctx, tx, node)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		indexEntries = append(indexEntries, domain.MemoryIndexEntry{
 			MemoryType: "knowledge_node",
@@ -194,10 +203,10 @@ func (s *Store) UpsertKnowledgeNodes(
 	}
 
 	if err := s.upsertMemoryIndexEntries(ctx, tx, indexEntries); err != nil {
-		return err
+		return 0, err
 	}
 
-	return tx.Commit()
+	return len(indexEntries), tx.Commit()
 }
 
 func (s *Store) EnsureKnowledgePrerequisiteEdge(

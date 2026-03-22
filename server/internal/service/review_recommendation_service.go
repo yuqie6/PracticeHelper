@@ -14,8 +14,24 @@ func (s *Service) normalizeRecommendedNext(
 	review *domain.ReviewCard,
 	sideEffects *domain.GenerateReviewSideEffects,
 ) error {
-	if session == nil || review == nil {
+	prerequisiteTopic, err := s.resolveReviewPath(ctx, session, review, sideEffects)
+	if err != nil {
+		return err
+	}
+	if prerequisiteTopic == "" {
 		return nil
+	}
+	return s.repo.EnsureKnowledgePrerequisiteEdge(ctx, prerequisiteTopic, normalizeBasicsTopic(session.Topic))
+}
+
+func (s *Service) resolveReviewPath(
+	ctx context.Context,
+	session *domain.TrainingSession,
+	review *domain.ReviewCard,
+	sideEffects *domain.GenerateReviewSideEffects,
+) (string, error) {
+	if session == nil || review == nil {
+		return "", nil
 	}
 
 	suggestion := cloneRecommendedNext(review.RecommendedNext)
@@ -35,7 +51,7 @@ func (s *Service) normalizeRecommendedNext(
 			suggestion.Reason = buildProjectRecommendedReason(review)
 		}
 		review.RecommendedNext = suggestion
-		return nil
+		return "", nil
 	}
 
 	suggestion.Mode = domain.ModeBasics
@@ -44,10 +60,7 @@ func (s *Service) normalizeRecommendedNext(
 	suggestion.Reason = s.buildBasicsRecommendedReason(ctx, session, review, suggestion.Topic)
 	review.RecommendedNext = suggestion
 	s.normalizeReviewLearningPath(ctx, session, review, suggestion.Topic)
-	if err := s.inferReviewPrerequisiteEdge(ctx, session, suggestion.Topic); err != nil {
-		return err
-	}
-	return nil
+	return resolveReviewPrerequisiteTopic(session, suggestion.Topic), nil
 }
 
 func (s *Service) inferReviewPrerequisiteEdge(
@@ -55,23 +68,34 @@ func (s *Service) inferReviewPrerequisiteEdge(
 	session *domain.TrainingSession,
 	recommendedTopic string,
 ) error {
-	if session == nil || session.Mode != domain.ModeBasics {
+	prerequisiteTopic := resolveReviewPrerequisiteTopic(session, recommendedTopic)
+	if prerequisiteTopic == "" {
 		return nil
+	}
+	return s.repo.EnsureKnowledgePrerequisiteEdge(ctx, prerequisiteTopic, normalizeBasicsTopic(session.Topic))
+}
+
+func resolveReviewPrerequisiteTopic(
+	session *domain.TrainingSession,
+	recommendedTopic string,
+) string {
+	if session == nil || session.Mode != domain.ModeBasics {
+		return ""
 	}
 
 	currentTopic := normalizeBasicsTopic(session.Topic)
 	recommendedTopic = normalizeBasicsTopic(recommendedTopic)
 	if currentTopic == "" || recommendedTopic == "" {
-		return nil
+		return ""
 	}
 	if currentTopic == domain.BasicsTopicMixed || recommendedTopic == domain.BasicsTopicMixed {
-		return nil
+		return ""
 	}
 	if currentTopic == recommendedTopic {
-		return nil
+		return ""
 	}
 
-	return s.repo.EnsureKnowledgePrerequisiteEdge(ctx, recommendedTopic, currentTopic)
+	return recommendedTopic
 }
 
 func (s *Service) normalizeReviewLearningPath(

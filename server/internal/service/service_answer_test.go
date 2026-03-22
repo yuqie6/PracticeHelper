@@ -710,6 +710,98 @@ func TestSubmitAnswerStreamAppliesDepthSignalFromStreamSideEffects(t *testing.T)
 	}
 }
 
+func TestSubmitAnswerStreamPrefersTransitionCommandOverDepthSignalSideEffects(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := &domain.TrainingSession{
+		ID:        "sess_stream_command_extend",
+		Mode:      domain.ModeBasics,
+		Topic:     "redis",
+		Intensity: "standard",
+		MaxTurns:  1,
+		Status:    domain.StatusWaitingAnswer,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_stream_command_extend_1",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Redis 为什么快？",
+		ExpectedPoints: []string{"内存访问", "事件循环"},
+	}
+	if err := store.CreateSession(context.Background(), session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/evaluate_answer/stream" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		encoder := json.NewEncoder(w)
+		if err := encoder.Encode(domain.StreamEvent{Type: "phase", Phase: "call_model"}); err != nil {
+			t.Fatalf("encode phase event: %v", err)
+		}
+		if err := encoder.Encode(domain.StreamEvent{
+			Type: "result",
+			Data: map[string]any{
+				"result": map[string]any{
+					"score":                    82,
+					"score_breakdown":          map[string]float64{"准确性": 82},
+					"strengths":                []string{"主线完整"},
+					"gaps":                     []string{"案例不够具体"},
+					"followup_question":        "如果线上抖动，你先看什么？",
+					"followup_expected_points": []string{"先止血", "再定位"},
+					"weakness_hits":            []map[string]any{},
+				},
+				"side_effects": map[string]any{
+					"depth_signal": "skip_followup",
+				},
+				"command_results": []map[string]any{
+					{
+						"command_id": "cmd_transition_session_turn_1_extend",
+						"status":     "deferred",
+						"data": map[string]any{
+							"resolved_depth_signal": "extend",
+							"resolved_max_turns":    2,
+						},
+					},
+				},
+				"raw_output": `{"score":82}`,
+			},
+		}); err != nil {
+			t.Fatalf("encode result event: %v", err)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	updated, err := svc.SubmitAnswerStream(
+		context.Background(),
+		session.ID,
+		domain.SubmitAnswerRequest{Answer: "因为它主要在内存里，单线程也减少了锁竞争。"},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("SubmitAnswerStream() error = %v", err)
+	}
+
+	if updated.Status != domain.StatusWaitingAnswer {
+		t.Fatalf("expected waiting_answer status after command extend, got %s", updated.Status)
+	}
+	if updated.MaxTurns != 2 {
+		t.Fatalf("expected max turns to extend to 2, got %d", updated.MaxTurns)
+	}
+	if len(updated.Turns) != 2 {
+		t.Fatalf("expected a followup turn after command extend, got %d turns", len(updated.Turns))
+	}
+}
+
 func TestSubmitAnswerStreamPersistsReviewSideEffects(t *testing.T) {
 	store, err := openTestStore(t)
 	if err != nil {
@@ -805,11 +897,15 @@ func TestSubmitAnswerStreamPersistsReviewSideEffects(t *testing.T) {
 	defer sidecarServer.Close()
 
 	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	var events []domain.StreamEvent
 	updated, err := svc.SubmitAnswerStream(
 		context.Background(),
 		session.ID,
 		domain.SubmitAnswerRequest{Answer: "因为 Redis 主要走内存访问，事件循环也减少了线程切换。"},
-		nil,
+		func(event domain.StreamEvent) error {
+			events = append(events, event)
+			return nil
+		},
 	)
 	if err != nil {
 		t.Fatalf("SubmitAnswerStream() error = %v", err)
@@ -842,5 +938,127 @@ func TestSubmitAnswerStreamPersistsReviewSideEffects(t *testing.T) {
 	}
 	if observations[0].Content != "用户主线能站住，但 trade-off 细节还不够具体。" {
 		t.Fatalf("unexpected observation content: %#v", observations[0])
+	}
+
+	traceCodes := make([]string, 0)
+	for _, event := range events {
+		if event.Type != "trace" {
+			continue
+		}
+		switch entry := event.Data.(type) {
+		case domain.RuntimeTraceEntry:
+			traceCodes = append(traceCodes, entry.Code)
+		case map[string]any:
+			code, _ := entry["code"].(string)
+			traceCodes = append(traceCodes, code)
+		}
+	}
+	if !slices.Contains(traceCodes, "persist_started") {
+		t.Fatalf("expected persist_started trace event, got %v", traceCodes)
+	}
+	if !slices.Contains(traceCodes, "persist_observations") {
+		t.Fatalf("expected persist_observations trace event, got %v", traceCodes)
+	}
+	if !slices.Contains(traceCodes, "persist_recommended_next") {
+		t.Fatalf("expected persist_recommended_next trace event, got %v", traceCodes)
+	}
+	if !slices.Contains(traceCodes, "persist_review") {
+		t.Fatalf("expected persist_review trace event, got %v", traceCodes)
+	}
+}
+
+func TestSubmitAnswerRecordsPersistFailureTraceWhenKnowledgeWriteFails(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := &domain.TrainingSession{
+		ID:        "sess_persist_failure",
+		Mode:      domain.ModeBasics,
+		Topic:     "redis",
+		Intensity: "standard",
+		MaxTurns:  2,
+		Status:    domain.StatusWaitingAnswer,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_persist_failure_1",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Redis 为什么快？",
+		ExpectedPoints: []string{"内存访问", "事件循环"},
+	}
+	if err := store.CreateSession(context.Background(), session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/evaluate_answer" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"result": map[string]any{
+				"score":                    82,
+				"score_breakdown":          map[string]float64{"准确性": 82},
+				"headline":                 "主线基本清楚",
+				"strengths":                []string{"主线完整"},
+				"gaps":                     []string{"例子不够具体"},
+				"followup_question":        "如果线上抖动，你先看什么？",
+				"followup_expected_points": []string{"先止血", "再定位"},
+				"weakness_hits":            []map[string]any{},
+			},
+			"side_effects": map[string]any{
+				"knowledge_updates": []map[string]any{
+					{
+						"label":       "cache_consistency",
+						"node_type":   "bad_node_type",
+						"scope_type":  "global",
+						"proficiency": 0.8,
+						"confidence":  0.7,
+					},
+				},
+			},
+			"raw_output": `{"score":82}`,
+		}); err != nil {
+			t.Fatalf("encode evaluate answer response: %v", err)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	if _, err := svc.SubmitAnswer(
+		context.Background(),
+		session.ID,
+		domain.SubmitAnswerRequest{Answer: "因为 Redis 主要在内存里，事件循环也减少了锁竞争。"},
+	); err == nil {
+		t.Fatal("expected SubmitAnswer() to fail on invalid knowledge update")
+	}
+
+	logs, err := store.ListEvaluationLogsBySession(context.Background(), session.ID)
+	if err != nil {
+		t.Fatalf("ListEvaluationLogsBySession() error = %v", err)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 evaluation log after persist failure, got %d", len(logs))
+	}
+	if logs[0].RuntimeTrace == nil {
+		t.Fatal("expected runtime trace to be persisted on failure")
+	}
+
+	var found bool
+	for _, entry := range logs[0].RuntimeTrace.Entries {
+		if entry.Code != "persist_failed" {
+			continue
+		}
+		if entry.Details["section"] == "knowledge_updates" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected persist_failed trace for knowledge_updates, got %+v", logs[0].RuntimeTrace.Entries)
 	}
 }

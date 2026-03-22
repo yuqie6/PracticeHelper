@@ -6,7 +6,7 @@ from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
 from app.config import Settings
-from app.schemas import AgentSessionDetail, RepoChunk
+from app.schemas import AgentCommandEnvelope, AgentCommandResult, AgentSessionDetail, RepoChunk
 
 
 class GoBackendClientError(RuntimeError):
@@ -32,7 +32,24 @@ class GoBackendClient:
         payload = self._get_json(f"/internal/session-detail/{session_id}")
         return AgentSessionDetail.model_validate(payload["data"])
 
+    def run_agent_command(self, command: AgentCommandEnvelope) -> AgentCommandResult:
+        payload = self._post_json("/internal/agent-commands", command.model_dump(mode="json"))
+        return AgentCommandResult.model_validate(payload["data"])
+
     def _get_json(self, path: str, query: dict[str, str] | None = None) -> dict:
+        return self._request_json("GET", path, query=query)
+
+    def _post_json(self, path: str, payload: dict[str, object]) -> dict:
+        return self._request_json("POST", path, payload=payload)
+
+    def _request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        query: dict[str, str] | None = None,
+        payload: dict[str, object] | None = None,
+    ) -> dict:
         if not self.enabled:
             raise GoBackendClientError(
                 "Go backend callback is not configured. "
@@ -43,10 +60,17 @@ class GoBackendClient:
         if query:
             url = f"{url}?{urllib_parse.urlencode(query)}"
 
+        raw_payload: bytes | None = None
+        headers = {self._internal_token_header: self._settings.internal_token}
+        if payload is not None:
+            raw_payload = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+
         request = urllib_request.Request(
             url,
-            headers={self._internal_token_header: self._settings.internal_token},
-            method="GET",
+            data=raw_payload,
+            headers=headers,
+            method=method,
         )
         try:
             with urllib_request.urlopen(

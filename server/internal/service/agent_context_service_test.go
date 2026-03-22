@@ -130,6 +130,10 @@ func TestPersistReviewStoresSessionMemorySummary(t *testing.T) {
 		session,
 		review,
 		&domain.GenerateReviewSideEffects{},
+		nil,
+		nil,
+		nil,
+		"generate_review",
 	); err != nil {
 		t.Fatalf("persistReview() error = %v", err)
 	}
@@ -466,7 +470,16 @@ func TestPersistReviewBuildsKnowledgeGraphBackedRecommendedNext(t *testing.T) {
 		SuggestedTopics:   []string{domain.BasicsTopicRedis},
 		NextTrainingFocus: []string{"缓存一致性取舍"},
 	}
-	if _, err := svc.persistReview(ctx, session, review, &domain.GenerateReviewSideEffects{}); err != nil {
+	if _, err := svc.persistReview(
+		ctx,
+		session,
+		review,
+		&domain.GenerateReviewSideEffects{},
+		nil,
+		nil,
+		nil,
+		"generate_review",
+	); err != nil {
 		t.Fatalf("persistReview() error = %v", err)
 	}
 
@@ -562,7 +575,16 @@ func TestPersistReviewBackfillsLearningPathFromKnowledgeGraphWhenReviewIsSparse(
 		Highlights:   []string{"主线清楚"},
 		Gaps:         []string{"缓存一致性 trade-off 不够具体"},
 	}
-	if _, err := svc.persistReview(ctx, session, review, &domain.GenerateReviewSideEffects{}); err != nil {
+	if _, err := svc.persistReview(
+		ctx,
+		session,
+		review,
+		&domain.GenerateReviewSideEffects{},
+		nil,
+		nil,
+		nil,
+		"generate_review",
+	); err != nil {
 		t.Fatalf("persistReview() error = %v", err)
 	}
 
@@ -631,7 +653,16 @@ func TestPersistReviewInfersPrerequisiteEdgeFromRecommendedNextTopic(t *testing.
 			Reason: "先把网络基础补上。",
 		},
 	}
-	if _, err := svc.persistReview(ctx, session, review, &domain.GenerateReviewSideEffects{}); err != nil {
+	if _, err := svc.persistReview(
+		ctx,
+		session,
+		review,
+		&domain.GenerateReviewSideEffects{},
+		nil,
+		nil,
+		nil,
+		"generate_review",
+	); err != nil {
 		t.Fatalf("persistReview() error = %v", err)
 	}
 

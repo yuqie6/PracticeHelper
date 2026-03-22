@@ -156,6 +156,8 @@ def _to_envelope(task_result: TaskExecutionResult, envelope_cls):
     }
     if task_result.side_effects:
         payload["side_effects"] = task_result.side_effects
+    if task_result.command_results:
+        payload["command_results"] = task_result.command_results
     if task_result.trace.entries:
         payload["trace"] = task_result.trace.model_dump(mode="json")
     return envelope_cls.model_validate(payload)

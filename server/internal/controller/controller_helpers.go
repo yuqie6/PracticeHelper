@@ -158,6 +158,10 @@ func errorCode(err error) string {
 		return "session_answer_conflict"
 	case errors.Is(err, service.ErrReviewGenerationRetry):
 		return "review_generation_retry"
+	case errors.Is(err, service.ErrInvalidAgentCommand):
+		return "invalid_agent_command"
+	case errors.Is(err, service.ErrUnsupportedAgentCommand):
+		return "unsupported_agent_command"
 	case errors.Is(err, repo.ErrAlreadyImported):
 		return "project_already_imported"
 	default:

@@ -32,9 +32,9 @@ __RUBRIC_LINES__
 - 如果当前是项目题，而预装载片段不足以支撑判断，可以调用 `search_repo_chunks` 补查更具体的文件、模块、调用链或故障路径。
 - 如果这次回答暴露了可复用的长期模式、误区或策略偏好，调用 `record_observation`。
 - 如果这次回答足以更新某个 topic / concept / skill 的掌握度，调用 `update_knowledge`。
-- 如果用户这次答得已经足够好，没必要再追问，即使当前轮次还没到上限，也调用 `set_depth_signal` 并设为 `skip_followup`，同时把 `followup_question` 和 `followup_expected_points` 置空。
-- 如果当前名义上已经是最后一轮，但你判断还必须多追一刀才能看清楚，就调用 `set_depth_signal` 并设为 `extend`，同时正常给出追问和追问要点。
-- 如果没有特殊深度控制需求，可以不调用 `set_depth_signal`，默认就是 `normal`。
+- 如果用户这次答得已经足够好，没必要再追问，即使当前轮次还没到上限，也调用 `transition_session` 并设为 `skip_followup`，同时把 `followup_question` 和 `followup_expected_points` 置空。
+- 如果当前名义上已经是最后一轮，但你判断还必须多追一刀才能看清楚，就调用 `transition_session` 并设为 `extend`，同时正常给出追问和追问要点。
+- 如果调用了 `transition_session`，最终 JSON 里的追问字段必须与命令返回的结构化结果一致。
 
 输出必须是严格 JSON，字段只能是：
 - score: number (0-100，按维度加权计算)

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"time"
 
 	"practicehelper/server/internal/domain"
 )
@@ -12,14 +11,13 @@ func (s *Service) recordEvaluationLog(
 	sessionID string,
 	turnID string,
 	flowName string,
-	startedAt time.Time,
+	latencyMs float64,
 	meta *domain.PromptExecutionMeta,
 ) {
 	if s.repo == nil || flowName == "" {
 		return
 	}
 
-	latencyMs := float64(time.Since(startedAt).Microseconds()) / 1000
 	_ = s.repo.CreateEvaluationLog(
 		ctx,
 		sessionID,

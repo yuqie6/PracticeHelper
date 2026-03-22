@@ -36,21 +36,47 @@ func (s *Service) finalizeReview(ctx context.Context, sessionID string) (*domain
 	}
 
 	startedAt := time.Now()
-	review, sideEffects, promptMeta, err := s.sidecar.GenerateReview(ctx, domain.GenerateReviewRequest{
-		Session:           updatedSession,
-		Project:           updatedSession.Project,
-		Turns:             updatedSession.Turns,
-		PromptSetID:       updatedSession.PromptSetID,
-		JobTargetAnalysis: jobTargetAnalysis,
-		AgentContext:      agentContext,
-	})
+	review, sideEffects, commandResults, promptMeta, err := s.sidecar.GenerateReview(
+		ctx,
+		domain.GenerateReviewRequest{
+			Session:           updatedSession,
+			Project:           updatedSession.Project,
+			Turns:             updatedSession.Turns,
+			PromptSetID:       updatedSession.PromptSetID,
+			JobTargetAnalysis: jobTargetAnalysis,
+			AgentContext:      agentContext,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
+	if sideEffects == nil {
+		sideEffects = &domain.GenerateReviewSideEffects{}
+	}
 	review.RetrievalTrace = retrievalTrace
-	s.recordEvaluationLog(ctx, updatedSession.ID, "", "generate_review", startedAt, promptMeta)
+	reviewLatencyMs := latencyMsSince(startedAt)
+	defer s.recordEvaluationLog(ctx, updatedSession.ID, "", "generate_review", reviewLatencyMs, promptMeta)
+	appendPromptTrace(
+		promptMeta,
+		nil,
+		"generate_review",
+		"persist",
+		"info",
+		"persist_started",
+		"Go 开始持久化 review 和相关副作用。",
+		map[string]any{"section": "generate_review"},
+	)
 
-	return s.persistReview(ctx, updatedSession, review, sideEffects)
+	return s.persistReview(
+		ctx,
+		updatedSession,
+		review,
+		sideEffects,
+		commandResults,
+		promptMeta,
+		nil,
+		"generate_review",
+	)
 }
 
 func (s *Service) finalizeReviewStream(
@@ -84,21 +110,55 @@ func (s *Service) finalizeReviewStream(
 	}
 
 	startedAt := time.Now()
-	review, sideEffects, promptMeta, err := s.sidecar.GenerateReviewStream(ctx, domain.GenerateReviewRequest{
-		Session:           updatedSession,
-		Project:           updatedSession.Project,
-		Turns:             updatedSession.Turns,
-		PromptSetID:       updatedSession.PromptSetID,
-		JobTargetAnalysis: jobTargetAnalysis,
-		AgentContext:      agentContext,
-	}, emit)
+	review, sideEffects, commandResults, promptMeta, err := s.sidecar.GenerateReviewStream(
+		ctx,
+		domain.GenerateReviewRequest{
+			Session:           updatedSession,
+			Project:           updatedSession.Project,
+			Turns:             updatedSession.Turns,
+			PromptSetID:       updatedSession.PromptSetID,
+			JobTargetAnalysis: jobTargetAnalysis,
+			AgentContext:      agentContext,
+		},
+		emit,
+	)
 	if err != nil {
 		return nil, err
 	}
+	if sideEffects == nil {
+		sideEffects = &domain.GenerateReviewSideEffects{}
+	}
 	review.RetrievalTrace = retrievalTrace
-	s.recordEvaluationLog(ctx, updatedSession.ID, "", "generate_review_stream", startedAt, promptMeta)
+	reviewLatencyMs := latencyMsSince(startedAt)
+	defer s.recordEvaluationLog(
+		ctx,
+		updatedSession.ID,
+		"",
+		"generate_review_stream",
+		reviewLatencyMs,
+		promptMeta,
+	)
+	appendPromptTrace(
+		promptMeta,
+		emit,
+		"generate_review_stream",
+		"persist",
+		"info",
+		"persist_started",
+		"Go 开始持久化 review 和相关副作用。",
+		map[string]any{"section": "generate_review"},
+	)
 
-	savedSession, err := s.persistReview(ctx, updatedSession, review, sideEffects)
+	savedSession, err := s.persistReview(
+		ctx,
+		updatedSession,
+		review,
+		sideEffects,
+		commandResults,
+		promptMeta,
+		emit,
+		"generate_review_stream",
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -112,30 +172,66 @@ func (s *Service) persistReview(
 	session *domain.TrainingSession,
 	review *domain.ReviewCard,
 	sideEffects *domain.GenerateReviewSideEffects,
+	commandResults []domain.AgentCommandResult,
+	promptMeta *domain.PromptExecutionMeta,
+	emit func(domain.StreamEvent) error,
+	flowName string,
 ) (*domain.TrainingSession, error) {
 	if sideEffects != nil && review.RecommendedNext == nil && sideEffects.RecommendedNext != nil {
 		review.RecommendedNext = sideEffects.RecommendedNext
 	}
-	if err := s.normalizeRecommendedNext(ctx, session, review, sideEffects); err != nil {
+	if err := s.applyReviewPathDecision(ctx, session, review, sideEffects, commandResults); err != nil {
+		appendPersistFailureTrace(promptMeta, emit, flowName, "recommended_next", err)
 		return nil, fmt.Errorf("normalize recommended next: %w", err)
+	}
+	if review.RecommendedNext != nil {
+		appendPromptTrace(
+			promptMeta,
+			emit,
+			flowName,
+			"persist",
+			"success",
+			"persist_recommended_next",
+			"下一轮训练建议已归一化并准备落库。",
+			map[string]any{
+				"section": "recommended_next",
+				"applied": 1,
+			},
+		)
 	}
 	review.ID = newID("review")
 	review.SessionID = session.ID
 	review.PromptSetID = session.PromptSetID
 	review.PromptSet = session.PromptSet
 	if err := s.repo.CreateReview(ctx, review); err != nil {
+		appendPersistFailureTrace(promptMeta, emit, flowName, "review", err)
 		return nil, fmt.Errorf("create review: %w", err)
 	}
+	appendPromptTrace(
+		promptMeta,
+		emit,
+		flowName,
+		"persist",
+		"success",
+		"persist_review",
+		"review 已落库。",
+		map[string]any{
+			"section": "review",
+			"applied": 1,
+		},
+	)
 
 	endedAt := time.Now().UTC()
 	session.ReviewID = review.ID
 	session.Status = domain.StatusCompleted
 	session.EndedAt = &endedAt
 	if err := s.repo.SaveSession(ctx, session); err != nil {
+		appendPersistFailureTrace(promptMeta, emit, flowName, "session", err)
 		return nil, err
 	}
 	summary := buildSessionMemorySummary(session, review)
 	if err := s.repo.UpsertSessionMemorySummary(ctx, summary); err != nil {
+		appendPersistFailureTrace(promptMeta, emit, flowName, "session_memory_summary", err)
 		return nil, fmt.Errorf("save session memory summary: %w", err)
 	}
 	if summary != nil && summary.ID != "" {
@@ -144,7 +240,14 @@ func (s *Service) persistReview(
 			RefID:    summary.ID,
 		}})
 	}
-	if err := s.applyGenerateReviewSideEffects(ctx, session, sideEffects); err != nil {
+	if err := s.applyGenerateReviewSideEffects(
+		ctx,
+		session,
+		sideEffects,
+		promptMeta,
+		emit,
+		flowName,
+	); err != nil {
 		return nil, err
 	}
 
@@ -157,20 +260,55 @@ func (s *Service) applyGenerateReviewSideEffects(
 	ctx context.Context,
 	session *domain.TrainingSession,
 	sideEffects *domain.GenerateReviewSideEffects,
+	promptMeta *domain.PromptExecutionMeta,
+	emit func(domain.StreamEvent) error,
+	flowName string,
 ) error {
 	if sideEffects == nil {
 		return nil
 	}
 	if len(sideEffects.Observations) > 0 {
-		if err := s.repo.CreateObservations(ctx, session.ID, sideEffects.Observations); err != nil {
+		stats, err := s.repo.CreateObservationsWithStats(ctx, session.ID, sideEffects.Observations)
+		if err != nil {
+			appendPersistFailureTrace(promptMeta, emit, flowName, "observations", err)
 			return fmt.Errorf("create review observations: %w", err)
 		}
+		appendPromptTrace(
+			promptMeta,
+			emit,
+			flowName,
+			"persist",
+			"success",
+			"persist_observations",
+			"review 观察记录已写入长期记忆。",
+			map[string]any{
+				"section": "observations",
+				"applied": stats.Applied,
+				"skipped": stats.Skipped,
+				"deduped": stats.Deduped,
+			},
+		)
 		s.syncOrQueueMemoryEmbeddings(ctx, collectObservationMemoryRefs(sideEffects.Observations))
 	}
 	if len(sideEffects.KnowledgeUpdates) > 0 {
-		if err := s.repo.UpsertKnowledgeNodes(ctx, session.ID, sideEffects.KnowledgeUpdates); err != nil {
+		applied, err := s.repo.UpsertKnowledgeNodesWithCount(ctx, session.ID, sideEffects.KnowledgeUpdates)
+		if err != nil {
+			appendPersistFailureTrace(promptMeta, emit, flowName, "knowledge_updates", err)
 			return fmt.Errorf("upsert review knowledge updates: %w", err)
 		}
+		appendPromptTrace(
+			promptMeta,
+			emit,
+			flowName,
+			"persist",
+			"success",
+			"persist_knowledge_updates",
+			"review 的知识图谱更新已回写。",
+			map[string]any{
+				"section": "knowledge_updates",
+				"applied": applied,
+			},
+		)
 	}
 	return nil
 }

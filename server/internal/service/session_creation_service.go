@@ -19,7 +19,14 @@ func (s *Service) CreateSession(ctx context.Context, request domain.CreateSessio
 	if err != nil {
 		return nil, err
 	}
-	s.recordEvaluationLog(ctx, session.ID, "", "generate_question", questionStartedAt, promptMeta)
+	s.recordEvaluationLog(
+		ctx,
+		session.ID,
+		"",
+		"generate_question",
+		latencyMsSince(questionStartedAt),
+		promptMeta,
+	)
 
 	turn := &domain.TrainingTurn{
 		ID:             newID("turn"),
@@ -52,7 +59,14 @@ func (s *Service) CreateSessionStream(
 	if err != nil {
 		return nil, err
 	}
-	s.recordEvaluationLog(ctx, session.ID, "", "generate_question_stream", questionStartedAt, promptMeta)
+	s.recordEvaluationLog(
+		ctx,
+		session.ID,
+		"",
+		"generate_question_stream",
+		latencyMsSince(questionStartedAt),
+		promptMeta,
+	)
 
 	turn := buildFirstTrainingTurn(session.ID, question)
 	if err := s.repo.CreateSession(ctx, session, turn); err != nil {

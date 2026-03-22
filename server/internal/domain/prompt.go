@@ -30,13 +30,14 @@ type PromptExecutionMeta struct {
 }
 
 type RuntimeTraceEntry struct {
-	Flow     string `json:"flow"`
-	Phase    string `json:"phase"`
-	Status   string `json:"status"`
-	Code     string `json:"code,omitempty"`
-	Message  string `json:"message,omitempty"`
-	Attempt  int    `json:"attempt,omitempty"`
-	ToolName string `json:"tool_name,omitempty"`
+	Flow     string         `json:"flow"`
+	Phase    string         `json:"phase"`
+	Status   string         `json:"status"`
+	Code     string         `json:"code,omitempty"`
+	Message  string         `json:"message,omitempty"`
+	Attempt  int            `json:"attempt,omitempty"`
+	ToolName string         `json:"tool_name,omitempty"`
+	Details  map[string]any `json:"details,omitempty"`
 }
 
 type RuntimeTrace struct {

@@ -304,6 +304,105 @@ func TestRetrySessionReviewKeepsReviewPendingWhenGenerationFails(t *testing.T) {
 	}
 }
 
+func TestRetrySessionReviewPrefersAppliedReviewPathCommandResult(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	session := &domain.TrainingSession{
+		ID:        "sess_review_command_path",
+		Mode:      domain.ModeBasics,
+		Topic:     domain.BasicsTopicGo,
+		Intensity: "standard",
+		Status:    domain.StatusReviewPending,
+	}
+	turn := &domain.TrainingTurn{
+		ID:             "turn_review_command_path",
+		SessionID:      session.ID,
+		TurnIndex:      1,
+		Stage:          "question",
+		Question:       "Go 的 map 为什么并发不安全？",
+		ExpectedPoints: []string{"hash map 扩容", "竞态写入"},
+		Answer:         "因为内部没有加锁。",
+	}
+	if err := store.CreateSession(context.Background(), session, turn); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/generate_review" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"result": map[string]any{
+				"overall":             "整体过线，但下一轮建议还不够收敛。",
+				"top_fix":             "先补缓存一致性取舍",
+				"top_fix_reason":      "这是目前最影响说服力的短板",
+				"highlights":          []string{"主线完整"},
+				"gaps":                []string{"缺缓存一致性取舍"},
+				"suggested_topics":    []string{"go"},
+				"next_training_focus": []string{"补 map 并发语义"},
+				"recommended_next": map[string]any{
+					"mode":   "basics",
+					"topic":  "go",
+					"reason": "先补 Go map 并发语义",
+				},
+				"score_breakdown": map[string]float64{"准确性": 80},
+			},
+			"side_effects": map[string]any{
+				"recommended_next": map[string]any{
+					"mode":   "basics",
+					"topic":  "go",
+					"reason": "旧 side effect 建议",
+				},
+			},
+			"command_results": []map[string]any{
+				{
+					"command_id": "cmd_upsert_review_path",
+					"status":     "applied",
+					"applied":    true,
+					"data": map[string]any{
+						"recommended_next": map[string]any{
+							"mode":   "basics",
+							"topic":  "redis",
+							"reason": "先补缓存一致性取舍",
+						},
+						"suggested_topics":    []string{"redis"},
+						"next_training_focus": []string{"补缓存一致性表达"},
+					},
+				},
+			},
+			"raw_output": `{"overall":"整体过线，但下一轮建议还不够收敛。"}`,
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	updated, err := svc.RetrySessionReview(context.Background(), session.ID)
+	if err != nil {
+		t.Fatalf("RetrySessionReview() error = %v", err)
+	}
+
+	review, err := store.GetReview(context.Background(), updated.ReviewID)
+	if err != nil {
+		t.Fatalf("GetReview() error = %v", err)
+	}
+	if review == nil || review.RecommendedNext == nil {
+		t.Fatalf("expected persisted review path, got %#v", review)
+	}
+	if review.RecommendedNext.Topic != domain.BasicsTopicRedis {
+		t.Fatalf("expected command result topic redis, got %#v", review.RecommendedNext)
+	}
+	if !slices.Equal(review.NextTrainingFocus, []string{"补缓存一致性表达"}) {
+		t.Fatalf("expected command result focus to win, got %+v", review.NextTrainingFocus)
+	}
+}
+
 func TestRetrySessionReviewRejectsCompleted(t *testing.T) {
 	store, err := openTestStore(t)
 	if err != nil {

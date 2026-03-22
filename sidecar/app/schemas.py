@@ -29,6 +29,8 @@ from app.schema_memory import (
     SessionMemorySummary,
 )
 from app.schema_runtime import (
+    AgentCommandEnvelope,
+    AgentCommandResult,
     AgentSessionDetail,
     AnalyzeJobTargetEnvelope,
     AnalyzeJobTargetRequest,
@@ -56,6 +58,8 @@ from app.schema_runtime import (
 
 __all__ = [
     "AgentContext",
+    "AgentCommandEnvelope",
+    "AgentCommandResult",
     "AgentObservation",
     "AgentSessionDetail",
     "AnalyzeJobTargetEnvelope",

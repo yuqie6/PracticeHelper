@@ -1422,6 +1422,57 @@ func TestSearchMemoryIndexEntriesPrioritizesProjectAndFiltersUnrelatedGlobal(t *
 	}
 }
 
+func TestCreateObservationsWithStatsDedupesSameSessionPayload(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	stats, err := store.CreateObservationsWithStats(ctx, "sess_obs_dedupe", []domain.AgentObservation{
+		{
+			ScopeType: domain.MemoryScopeGlobal,
+			Topic:     "redis",
+			Category:  "pattern",
+			Content:   "用户主线能站住，但缓存一致性 trade-off 还不够具体。",
+			Tags:      []string{"redis", "tradeoff"},
+			Relevance: 0.9,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateObservationsWithStats() first error = %v", err)
+	}
+	if stats.Applied != 1 || stats.Skipped != 0 || stats.Deduped != 0 {
+		t.Fatalf("unexpected first observation stats: %+v", stats)
+	}
+
+	stats, err = store.CreateObservationsWithStats(ctx, "sess_obs_dedupe", []domain.AgentObservation{
+		{
+			ScopeType: domain.MemoryScopeGlobal,
+			Topic:     "redis",
+			Category:  "pattern",
+			Content:   "用户主线能站住，但缓存一致性 trade-off 还不够具体。",
+			Tags:      []string{"tradeoff", "redis"},
+			Relevance: 0.7,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateObservationsWithStats() second error = %v", err)
+	}
+	if stats.Applied != 0 || stats.Skipped != 1 || stats.Deduped != 1 {
+		t.Fatalf("unexpected duplicate observation stats: %+v", stats)
+	}
+
+	items, err := store.ListRelevantObservations(ctx, "sess_obs_dedupe", "", "", "redis", 5)
+	if err != nil {
+		t.Fatalf("ListRelevantObservations() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 deduplicated observation, got %d", len(items))
+	}
+}
+
 func TestUpsertKnowledgeNodesCreatesContainsEdgeAndIndexesByRootTopic(t *testing.T) {
 	store, err := openTestStore(t)
 	if err != nil {

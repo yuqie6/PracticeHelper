@@ -246,6 +246,7 @@ func migrate(db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS agent_observations (
 			id TEXT PRIMARY KEY,
 			session_id TEXT NOT NULL DEFAULT '',
+			fingerprint TEXT NOT NULL DEFAULT '',
 			scope_type TEXT NOT NULL DEFAULT 'global' CHECK(scope_type IN ('global','project','session','job_target')),
 			scope_id TEXT NOT NULL DEFAULT '',
 			topic TEXT NOT NULL DEFAULT '',
@@ -395,11 +396,21 @@ func migrate(db *sql.DB) error {
 	if err := ensureColumn(db, "evaluation_logs", "runtime_trace_json", "TEXT NOT NULL DEFAULT 'null'"); err != nil {
 		return err
 	}
+	if err := ensureColumn(db, "agent_observations", "fingerprint", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
 	if err := ensureColumn(db, "project_import_jobs", "claim_token", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 	if err := ensureColumn(db, "project_import_jobs", "claim_expires_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
+	}
+	if _, err := db.Exec(`
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_observations_session_fingerprint
+		ON agent_observations(session_id, fingerprint)
+		WHERE fingerprint <> ''
+	`); err != nil {
+		return fmt.Errorf("create agent observation fingerprint index: %w", err)
 	}
 
 	return nil

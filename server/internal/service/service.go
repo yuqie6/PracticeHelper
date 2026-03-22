@@ -28,6 +28,8 @@ var (
 	ErrSessionCompleted          = errors.New("session is already completed")
 	ErrSessionAnswerConflict     = errors.New("session cannot accept answers in its current status")
 	ErrReviewGenerationRetry     = errors.New("review generation failed but the session can be recovered by retrying review")
+	ErrInvalidAgentCommand       = errors.New("invalid agent command")
+	ErrUnsupportedAgentCommand   = errors.New("unsupported agent command")
 )
 
 type Service struct {

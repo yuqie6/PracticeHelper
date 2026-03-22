@@ -31,4 +31,4 @@
 - 先参考 `recall_session_summaries` 识别长期模式；如果这些摘要还不够，再调用 `get_session_detail` 补更完整的历史证据。
 - 如果这轮暴露了可复用的长期模式、误区、成长信号或追问策略，调用 `record_observation`。
 - 如果这轮足以更新 topic / concept / skill 的掌握度，调用 `update_knowledge`。
-- 给出下一轮训练建议时，调用 `suggest_next_session`；如果 JSON 里也填了 `recommended_next`，两者语义必须一致。
+- 给出下一轮训练建议时，调用 `upsert_review_path`；如果 JSON 里也填了 `recommended_next / suggested_topics / next_training_focus`，这些字段必须与命令返回的结构化结果一致。

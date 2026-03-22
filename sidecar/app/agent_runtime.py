@@ -10,6 +10,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.agent_tools import (
+    CommandBudgetExceededError,
     build_evaluate_answer_agent_tools,
     build_generate_question_agent_tools,
     build_generate_review_agent_tools,
@@ -18,6 +19,9 @@ from app.agent_tools import (
     make_set_depth_signal_tool,
     make_suggest_next_session_tool,
     make_update_knowledge_tool,
+    prepare_evaluate_answer_agent_tooling,
+    prepare_generate_question_agent_tooling,
+    prepare_generate_review_agent_tooling,
 )
 from app.config import Settings
 from app.go_client import GoBackendClient
@@ -48,6 +52,7 @@ from app.schemas import (
     GenerateQuestionRequest,
     GenerateQuestionResponse,
     GenerateReviewRequest,
+    NextSession,
     ReviewCard,
     RuntimeTrace,
     RuntimeTraceEntry,
@@ -61,7 +66,22 @@ class TaskExecutionResult[ResultModelT: BaseModel]:
     result: ResultModelT
     raw_output: str = ""
     side_effects: dict[str, Any] = field(default_factory=dict)
+    command_results: list[dict[str, Any]] = field(default_factory=list)
     trace: RuntimeTrace = field(default_factory=RuntimeTrace)
+
+
+@dataclass
+class ToolRuntimeState:
+    side_effects: dict[str, Any] = field(default_factory=dict)
+    command_results: list[dict[str, Any]] = field(default_factory=list)
+    command_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
+    command_counts: dict[str, int] = field(default_factory=dict)
+    command_budget: dict[str, int] = field(
+        default_factory=lambda: {
+            "transition_session": 1,
+            "upsert_review_path": 1,
+        }
+    )
 
 
 class AgentRuntime:
@@ -168,8 +188,11 @@ class AgentRuntime:
         started_at = time.perf_counter()
         logger.info("generate_question started mode=%s topic=%s", request.mode, request.topic)
         system_prompt, user_prompt, prompt_tools = question_prompt_bundle(request)
+        prepared = prepare_generate_question_agent_tooling(request)
         tools = prompt_tools + build_generate_question_agent_tools(
-            request, backend_client=self._go_client
+            request,
+            backend_client=self._go_client,
+            prepared=prepared,
         )
         response = self._run_task(
             task_name="generate_question",
@@ -178,6 +201,7 @@ class AgentRuntime:
             user_prompt=user_prompt,
             tools=tools,
             fallback_tools=_read_only_tools(tools),
+            context_trace_details=prepared.trace_details,
         )
         logger.info(
             "generate_question completed mode=%s topic=%s duration_ms=%.2f",
@@ -194,8 +218,11 @@ class AgentRuntime:
         self, request: GenerateQuestionRequest
     ) -> Iterator[dict[str, Any]]:
         system_prompt, user_prompt, prompt_tools = question_prompt_bundle(request)
+        prepared = prepare_generate_question_agent_tooling(request)
         tools = prompt_tools + build_generate_question_agent_tools(
-            request, backend_client=self._go_client
+            request,
+            backend_client=self._go_client,
+            prepared=prepared,
         )
         yield from self._stream_task(
             task_name="generate_question",
@@ -204,6 +231,7 @@ class AgentRuntime:
             user_prompt=user_prompt,
             tools=tools,
             fallback_tools=_read_only_tools(tools),
+            context_trace_details=prepared.trace_details,
         )
 
     def evaluate_answer_task(
@@ -219,8 +247,12 @@ class AgentRuntime:
             request.max_turns,
         )
         system_prompt, user_prompt, prompt_tools = evaluate_prompt_bundle(request)
+        prepared = prepare_evaluate_answer_agent_tooling(request)
         tools = prompt_tools + build_evaluate_answer_agent_tools(
-            request, {}, backend_client=self._go_client
+            request,
+            {},
+            backend_client=self._go_client,
+            prepared=prepared,
         )
         response = self._run_task(
             task_name="evaluate_answer",
@@ -229,9 +261,15 @@ class AgentRuntime:
             user_prompt=user_prompt,
             tools=tools,
             fallback_tools=_read_only_tools(tools),
-            result_validator=lambda result, side_effects: _validate_evaluation_result(
-                request, result, side_effects
+            result_validator=lambda result, side_effects, command_results: (
+                _validate_evaluation_result(
+                    request,
+                    result,
+                    side_effects,
+                    command_results,
+                )
             ),
+            context_trace_details=prepared.trace_details,
         )
         logger.info(
             "evaluate_answer completed mode=%s topic=%s turn=%d/%d duration_ms=%.2f",
@@ -248,8 +286,12 @@ class AgentRuntime:
 
     def stream_evaluate_answer(self, request: EvaluateAnswerRequest) -> Iterator[dict[str, Any]]:
         system_prompt, user_prompt, prompt_tools = evaluate_prompt_bundle(request)
+        prepared = prepare_evaluate_answer_agent_tooling(request)
         tools = prompt_tools + build_evaluate_answer_agent_tools(
-            request, {}, backend_client=self._go_client
+            request,
+            {},
+            backend_client=self._go_client,
+            prepared=prepared,
         )
         yield from self._stream_task(
             task_name="evaluate_answer",
@@ -258,9 +300,15 @@ class AgentRuntime:
             user_prompt=user_prompt,
             tools=tools,
             fallback_tools=_read_only_tools(tools),
-            result_validator=lambda result, side_effects: _validate_evaluation_result(
-                request, result, side_effects
+            result_validator=lambda result, side_effects, command_results: (
+                _validate_evaluation_result(
+                    request,
+                    result,
+                    side_effects,
+                    command_results,
+                )
             ),
+            context_trace_details=prepared.trace_details,
         )
 
     def generate_review_task(
@@ -270,8 +318,12 @@ class AgentRuntime:
         started_at = time.perf_counter()
         logger.info("generate_review started session_id=%s", request.session.id)
         system_prompt, user_prompt, prompt_tools = review_prompt_bundle(request)
+        prepared = prepare_generate_review_agent_tooling(request)
         tools = prompt_tools + build_generate_review_agent_tools(
-            request, {}, backend_client=self._go_client
+            request,
+            {},
+            backend_client=self._go_client,
+            prepared=prepared,
         )
         response = self._run_task(
             task_name="generate_review",
@@ -281,6 +333,7 @@ class AgentRuntime:
             tools=tools,
             fallback_tools=_read_only_tools(tools),
             result_validator=_validate_review_result,
+            context_trace_details=prepared.trace_details,
         )
         logger.info(
             "generate_review completed session_id=%s duration_ms=%.2f",
@@ -294,8 +347,12 @@ class AgentRuntime:
 
     def stream_generate_review(self, request: GenerateReviewRequest) -> Iterator[dict[str, Any]]:
         system_prompt, user_prompt, prompt_tools = review_prompt_bundle(request)
+        prepared = prepare_generate_review_agent_tooling(request)
         tools = prompt_tools + build_generate_review_agent_tools(
-            request, {}, backend_client=self._go_client
+            request,
+            {},
+            backend_client=self._go_client,
+            prepared=prepared,
         )
         yield from self._stream_task(
             task_name="generate_review",
@@ -305,6 +362,7 @@ class AgentRuntime:
             tools=tools,
             fallback_tools=_read_only_tools(tools),
             result_validator=_validate_review_result,
+            context_trace_details=prepared.trace_details,
         )
 
     def _run_task(
@@ -317,6 +375,7 @@ class AgentRuntime:
         tools: list[RuntimeTool],
         fallback_tools: list[RuntimeTool] | None = None,
         result_validator: Any = None,
+        context_trace_details: list[dict[str, Any]] | None = None,
     ) -> TaskExecutionResult[BaseModel]:
         self._require_model_client()
         fallback_tools = fallback_tools or _read_only_tools(tools)
@@ -332,6 +391,7 @@ class AgentRuntime:
                 tools=tools,
                 result_validator=result_validator,
                 trace=trace,
+                context_trace_details=context_trace_details,
             )
         except (ModelClientError, ValueError, json.JSONDecodeError) as exc:
             logger.warning("agent tool loop failed, retrying single-shot: %s", exc)
@@ -376,6 +436,7 @@ class AgentRuntime:
         tools: list[RuntimeTool],
         fallback_tools: list[RuntimeTool] | None = None,
         result_validator: Any = None,
+        context_trace_details: list[dict[str, Any]] | None = None,
     ) -> Iterator[dict[str, Any]]:
         self._require_model_client()
         fallback_tools = fallback_tools or _read_only_tools(tools)
@@ -390,6 +451,7 @@ class AgentRuntime:
                 tools=tools,
                 result_validator=result_validator,
                 trace=trace,
+                context_trace_details=context_trace_details,
             )
             return
         except (ModelClientError, ValueError, json.JSONDecodeError) as exc:
@@ -441,6 +503,7 @@ class AgentRuntime:
         tools: list[RuntimeTool],
         result_validator: Any = None,
         trace: RuntimeTrace,
+        context_trace_details: list[dict[str, Any]] | None = None,
     ) -> TaskExecutionResult[BaseModel]:
         model_client = self._require_model_client()
 
@@ -450,7 +513,7 @@ class AgentRuntime:
         ]
         tool_map = {tool.name: tool for tool in tools}
         used_any_tool = False
-        side_effects: dict[str, Any] = {}
+        runtime_state = ToolRuntimeState()
         validation_attempts = 0
         _append_trace(
             trace,
@@ -460,6 +523,16 @@ class AgentRuntime:
             code="runtime_started",
             message="开始执行 agent runtime。",
         )
+        for detail in context_trace_details or []:
+            _append_trace(
+                trace,
+                flow=task_name,
+                phase="prepare_context",
+                status="info",
+                code="context_compacted",
+                message=_context_compaction_message(detail),
+                details=detail,
+            )
 
         # 轮数上限用于兜住 prompt/tool 契约失配，避免 sidecar 卡在无限工具往返里。
         for _ in range(8):
@@ -493,41 +566,58 @@ class AgentRuntime:
                         raise ModelClientError(error_entry.message, code=error_entry.code)
                     if is_action_tool(tool_name):
                         arguments = dict(arguments)
-                    if tool_name in {
-                        "record_observation",
-                        "update_knowledge",
-                        "suggest_next_session",
-                        "set_depth_signal",
-                    }:
-                        # 行动工具通过闭包把副作用暂存在 side_effects，不直接写 DB。
-                        tool = _rebind_action_tool(tool, side_effects)
+                    tool = _bind_runtime_tool(tool, runtime_state)
+                    request_entry = None
+                    if _is_command_tool(tool_name):
+                        request_entry = _append_trace(
+                            trace,
+                            flow=task_name,
+                            phase="command",
+                            status="info",
+                            code="command_requested",
+                            message=f"命令 {tool_name} 已发起请求。",
+                            tool_name=tool_name,
+                            details=_command_trace_details(tool_name, arguments),
+                        )
                     try:
                         tool_result = tool.handler(arguments)
                     except Exception as exc:  # noqa: BLE001
-                        code = (
-                            "backend_callback_failed"
-                            if tool_name in {"search_repo_chunks", "get_session_detail"}
-                            else "tool_call_failed"
-                        )
+                        code = _tool_failure_code(tool_name, exc)
                         error_entry = _append_trace(
                             trace,
                             flow=task_name,
-                            phase="tool_call",
+                            phase="command" if _is_command_tool(tool_name) else "tool_call",
                             status="error",
                             code=code,
                             message=f"工具 {tool_name} 执行失败：{exc}",
                             tool_name=tool_name,
                         )
                         raise ModelClientError(error_entry.message, code=error_entry.code) from exc
-                    _append_trace(
-                        trace,
-                        flow=task_name,
-                        phase="tool_call",
-                        status="success",
-                        code="tool_call_succeeded",
-                        message=f"工具 {tool_name} 调用成功。",
-                        tool_name=tool_name,
-                    )
+                    if _is_command_tool(tool_name):
+                        if request_entry is not None:
+                            request_entry.details.update(
+                                _command_trace_details(tool_name, tool_result)
+                            )
+                        _append_trace(
+                            trace,
+                            flow=task_name,
+                            phase="command",
+                            status=_command_trace_status(tool_result),
+                            code=_command_trace_code(tool_result),
+                            message=_command_trace_message(tool_name, tool_result),
+                            tool_name=tool_name,
+                            details=_command_trace_details(tool_name, tool_result),
+                        )
+                    else:
+                        _append_trace(
+                            trace,
+                            flow=task_name,
+                            phase="tool_call",
+                            status="success",
+                            code="tool_call_succeeded",
+                            message=f"工具 {tool_name} 调用成功。",
+                            tool_name=tool_name,
+                        )
                     messages.append(
                         {
                             "role": "tool",
@@ -562,7 +652,11 @@ class AgentRuntime:
                     validation_code = "json_parse_failed"
                 else:
                     if result_validator is not None:
-                        validation_error = result_validator(result_model, side_effects)
+                        validation_error = result_validator(
+                            result_model,
+                            runtime_state.side_effects,
+                            runtime_state.command_results,
+                        )
                         if validation_error:
                             validation_code = "semantic_validation_failed"
 
@@ -606,7 +700,8 @@ class AgentRuntime:
                 return TaskExecutionResult(
                     result=result_model,
                     raw_output=raw_output,
-                    side_effects=side_effects,
+                    side_effects=runtime_state.side_effects,
+                    command_results=runtime_state.command_results,
                     trace=trace,
                 )
 
@@ -640,6 +735,7 @@ class AgentRuntime:
         tools: list[RuntimeTool],
         result_validator: Any = None,
         trace: RuntimeTrace,
+        context_trace_details: list[dict[str, Any]] | None = None,
     ) -> Iterator[dict[str, Any]]:
         model_client = self._require_model_client()
 
@@ -649,7 +745,7 @@ class AgentRuntime:
         ]
         tool_map = {tool.name: tool for tool in tools}
         used_any_tool = False
-        side_effects: dict[str, Any] = {}
+        runtime_state = ToolRuntimeState()
         validation_attempts = 0
 
         yield {"type": "phase", "phase": "prepare_context"}
@@ -662,6 +758,17 @@ class AgentRuntime:
             message="开始执行 agent runtime。",
         )
         yield {"type": "trace", "data": entry.model_dump(mode="json")}
+        for detail in context_trace_details or []:
+            detail_entry = _append_trace(
+                trace,
+                flow=task_name,
+                phase="prepare_context",
+                status="info",
+                code="context_compacted",
+                message=_context_compaction_message(detail),
+                details=detail,
+            )
+            yield {"type": "trace", "data": detail_entry.model_dump(mode="json")}
 
         for _ in range(8):
             yield {"type": "phase", "phase": "call_model"}
@@ -696,25 +803,27 @@ class AgentRuntime:
                         raise ModelClientError(error_entry.message, code=error_entry.code)
                     if is_action_tool(tool_name):
                         arguments = dict(arguments)
-                    if tool_name in {
-                        "record_observation",
-                        "update_knowledge",
-                        "suggest_next_session",
-                        "set_depth_signal",
-                    }:
-                        tool = _rebind_action_tool(tool, side_effects)
+                    tool = _bind_runtime_tool(tool, runtime_state)
+                    request_entry = None
+                    if _is_command_tool(tool_name):
+                        request_entry = _append_trace(
+                            trace,
+                            flow=task_name,
+                            phase="command",
+                            status="info",
+                            code="command_requested",
+                            message=f"命令 {tool_name} 已发起请求。",
+                            tool_name=tool_name,
+                            details=_command_trace_details(tool_name, arguments),
+                        )
                     try:
                         tool_result = tool.handler(arguments)
                     except Exception as exc:  # noqa: BLE001
-                        code = (
-                            "backend_callback_failed"
-                            if tool_name in {"search_repo_chunks", "get_session_detail"}
-                            else "tool_call_failed"
-                        )
+                        code = _tool_failure_code(tool_name, exc)
                         error_entry = _append_trace(
                             trace,
                             flow=task_name,
-                            phase="tool_call",
+                            phase="command" if _is_command_tool(tool_name) else "tool_call",
                             status="error",
                             code=code,
                             message=f"工具 {tool_name} 执行失败：{exc}",
@@ -722,15 +831,37 @@ class AgentRuntime:
                         )
                         yield {"type": "trace", "data": error_entry.model_dump(mode="json")}
                         raise ModelClientError(error_entry.message, code=error_entry.code) from exc
-                    trace_entry = _append_trace(
-                        trace,
-                        flow=task_name,
-                        phase="tool_call",
-                        status="success",
-                        code="tool_call_succeeded",
-                        message=f"工具 {tool_name} 调用成功。",
-                        tool_name=tool_name,
-                    )
+                    if _is_command_tool(tool_name):
+                        if request_entry is not None:
+                            request_entry.details.update(
+                                _command_trace_details(tool_name, tool_result)
+                            )
+                            yield {"type": "trace", "data": request_entry.model_dump(mode="json")}
+                            yield {
+                                "type": "status",
+                                "name": "command_requested",
+                                "data": request_entry.details,
+                            }
+                        trace_entry = _append_trace(
+                            trace,
+                            flow=task_name,
+                            phase="command",
+                            status=_command_trace_status(tool_result),
+                            code=_command_trace_code(tool_result),
+                            message=_command_trace_message(tool_name, tool_result),
+                            tool_name=tool_name,
+                            details=_command_trace_details(tool_name, tool_result),
+                        )
+                    else:
+                        trace_entry = _append_trace(
+                            trace,
+                            flow=task_name,
+                            phase="tool_call",
+                            status="success",
+                            code="tool_call_succeeded",
+                            message=f"工具 {tool_name} 调用成功。",
+                            tool_name=tool_name,
+                        )
                     messages.append(
                         {
                             "role": "tool",
@@ -742,6 +873,12 @@ class AgentRuntime:
                     used_any_tool = True
                     yield {"type": "context", "name": tool_name}
                     yield {"type": "trace", "data": trace_entry.model_dump(mode="json")}
+                    if _is_command_tool(tool_name):
+                        yield {
+                            "type": "status",
+                            "name": _command_status_event_name(tool_result),
+                            "data": trace_entry.details,
+                        }
                     summary = tool_summary(tool_name)
                     if summary:
                         yield {"type": "reasoning", "text": summary}
@@ -772,7 +909,11 @@ class AgentRuntime:
                     validation_code = "json_parse_failed"
                 else:
                     if result_validator is not None:
-                        validation_error = result_validator(result_model, side_effects)
+                        validation_error = result_validator(
+                            result_model,
+                            runtime_state.side_effects,
+                            runtime_state.command_results,
+                        )
                         if validation_error:
                             validation_code = "semantic_validation_failed"
 
@@ -825,8 +966,10 @@ class AgentRuntime:
                     "raw_output": raw_output,
                     "trace": trace.model_dump(mode="json"),
                 }
-                if side_effects:
-                    payload["side_effects"] = side_effects
+                if runtime_state.side_effects:
+                    payload["side_effects"] = runtime_state.side_effects
+                if runtime_state.command_results:
+                    payload["command_results"] = runtime_state.command_results
                 yield {"type": "result", "data": payload}
                 return
 
@@ -888,7 +1031,7 @@ class AgentRuntime:
         except (ValueError, json.JSONDecodeError) as exc:
             raise ModelClientError(str(exc), code="json_parse_failed") from exc
         if result_validator is not None:
-            validation_error = result_validator(result_model, {})
+            validation_error = result_validator(result_model, {}, [])
             if validation_error:
                 _append_trace(
                     trace,
@@ -995,7 +1138,7 @@ class AgentRuntime:
             yield {"type": "trace", "data": error_entry.model_dump(mode="json")}
             raise ModelClientError(str(exc), code="json_parse_failed") from exc
         if result_validator is not None:
-            validation_error = result_validator(result_model, {})
+            validation_error = result_validator(result_model, {}, [])
             if validation_error:
                 error_entry = _append_trace(
                     trace,
@@ -1042,6 +1185,12 @@ def _read_only_tools(tools: list[RuntimeTool]) -> list[RuntimeTool]:
     return [tool for tool in tools if not is_action_tool(tool.name)]
 
 
+def _bind_runtime_tool(tool: RuntimeTool, runtime_state: ToolRuntimeState) -> RuntimeTool:
+    if tool.runtime_bind is not None:
+        return tool.runtime_bind(runtime_state)
+    return _rebind_action_tool(tool, runtime_state.side_effects)
+
+
 def _rebind_action_tool(tool: RuntimeTool, side_effects: dict[str, Any]) -> RuntimeTool:
     if tool.name == "record_observation":
         rebound = make_record_observation_tool(side_effects)
@@ -1060,6 +1209,7 @@ def _validate_evaluation_result(
     request: EvaluateAnswerRequest,
     result: EvaluationResult,
     side_effects: dict[str, Any],
+    command_results: list[dict[str, Any]],
 ) -> str:
     score_keys = list(result.score_breakdown.keys())
     if not score_keys:
@@ -1067,13 +1217,15 @@ def _validate_evaluation_result(
     if not result.strengths and not result.gaps:
         return "missing strengths/gaps"
 
-    depth_signal = side_effects.get("depth_signal", "normal")
+    transition_result = _latest_command_result(command_results)
+    depth_signal = _resolved_depth_signal(transition_result, side_effects)
     if depth_signal == "skip_followup":
         if result.followup_question or result.followup_expected_points:
             return "skip_followup must not include followup output"
         return ""
 
-    is_last_turn = request.turn_index >= request.max_turns and depth_signal != "extend"
+    max_turns = _resolved_max_turns(transition_result, request.max_turns)
+    is_last_turn = request.turn_index >= max_turns and depth_signal != "extend"
     if is_last_turn:
         if result.followup_question or result.followup_expected_points:
             return "last turn must not include followup output"
@@ -1086,7 +1238,11 @@ def _validate_evaluation_result(
     return ""
 
 
-def _validate_review_result(result: ReviewCard, side_effects: dict[str, Any]) -> str:
+def _validate_review_result(
+    result: ReviewCard,
+    side_effects: dict[str, Any],
+    command_results: list[dict[str, Any]],
+) -> str:
     if not result.overall:
         return "missing overall"
     if not result.top_fix:
@@ -1095,6 +1251,25 @@ def _validate_review_result(result: ReviewCard, side_effects: dict[str, Any]) ->
         return "missing top_fix_reason"
     if not result.score_breakdown:
         return "missing score_breakdown"
+
+    review_path_result = _latest_command_result(command_results)
+    if _command_result_status(review_path_result) == "applied":
+        payload = _command_result_data(review_path_result)
+        if payload:
+            expected_next = payload.get("recommended_next")
+            if expected_next and result.recommended_next is not None:
+                expected_model = NextSession.model_validate(expected_next)
+                if result.recommended_next.model_dump(mode="json") != expected_model.model_dump(
+                    mode="json"
+                ):
+                    return "recommended_next must match upsert_review_path result"
+            expected_topics = payload.get("suggested_topics")
+            if isinstance(expected_topics, list) and result.suggested_topics != expected_topics:
+                return "suggested_topics must match upsert_review_path result"
+            expected_focus = payload.get("next_training_focus")
+            if isinstance(expected_focus, list) and result.next_training_focus != expected_focus:
+                return "next_training_focus must match upsert_review_path result"
+
     if result.recommended_next is None and not side_effects.get("recommended_next"):
         return "missing recommended_next"
     return ""
@@ -1110,6 +1285,7 @@ def _append_trace(
     message: str = "",
     attempt: int = 0,
     tool_name: str = "",
+    details: dict[str, Any] | None = None,
 ) -> RuntimeTraceEntry:
     entry = RuntimeTraceEntry(
         flow=flow,
@@ -1119,9 +1295,17 @@ def _append_trace(
         message=message,
         attempt=attempt,
         tool_name=tool_name,
+        details=details or {},
     )
     trace.entries.append(entry)
     return entry
+
+
+def _context_compaction_message(details: dict[str, Any]) -> str:
+    section = str(details.get("section", "")).replace("_", " ").strip()
+    if not section:
+        return "上下文已按预算压缩。"
+    return f"上下文 {section} 已按预算压缩。"
 
 
 def _runtime_error_code(exc: Exception, *, fallback: str) -> str:
@@ -1135,6 +1319,8 @@ def _runtime_error_code(exc: Exception, *, fallback: str) -> str:
         return "semantic_validation_failed"
     if "json" in message:
         return "json_parse_failed"
+    if "command budget exhausted" in message:
+        return "command_budget_exhausted"
     if "go backend" in message:
         return "backend_callback_failed"
     if "timeout" in message or "timed out" in message:
@@ -1142,3 +1328,123 @@ def _runtime_error_code(exc: Exception, *, fallback: str) -> str:
     if "tool loop" in message:
         return "tool_loop_exhausted"
     return fallback
+
+
+def _is_command_tool(tool_name: str) -> bool:
+    return tool_name in {"transition_session", "upsert_review_path", "enqueue_long_job"}
+
+
+def _tool_failure_code(tool_name: str, exc: Exception) -> str:
+    if isinstance(exc, CommandBudgetExceededError):
+        return "command_budget_exhausted"
+    if tool_name in {"search_repo_chunks", "get_session_detail"}:
+        return "backend_callback_failed"
+    if _is_command_tool(tool_name) and "go backend" in str(exc).lower():
+        return "backend_callback_failed"
+    return "tool_call_failed"
+
+
+def _command_trace_code(tool_result: dict[str, Any]) -> str:
+    if tool_result.get("deduped"):
+        return "command_deduped"
+    status = str(tool_result.get("status", "")).strip().lower()
+    return {
+        "applied": "command_applied",
+        "deferred": "command_deferred",
+        "rejected": "command_rejected",
+        "accepted": "command_applied",
+    }.get(status, "command_applied")
+
+
+def _command_trace_status(tool_result: dict[str, Any]) -> str:
+    if tool_result.get("deduped"):
+        return "info"
+    status = str(tool_result.get("status", "")).strip().lower()
+    if status == "rejected":
+        return "error"
+    return "success"
+
+
+def _command_trace_message(tool_name: str, tool_result: dict[str, Any]) -> str:
+    status = str(tool_result.get("status", "")).strip().lower()
+    if tool_result.get("deduped"):
+        return f"命令 {tool_name} 命中本轮幂等缓存，复用已有结果。"
+    if status == "rejected":
+        error_message = str(tool_result.get("error_message", "")).strip()
+        if error_message:
+            return f"命令 {tool_name} 被 Go 拒绝：{error_message}"
+        return f"命令 {tool_name} 被 Go 拒绝。"
+    if status == "deferred":
+        return f"命令 {tool_name} 已由 Go 裁决，将在主请求收口阶段统一应用。"
+    return f"命令 {tool_name} 已返回结构化结果。"
+
+
+def _command_trace_details(tool_name: str, source: dict[str, Any]) -> dict[str, Any]:
+    details = {
+        "command_type": tool_name,
+    }
+    for key in ("command_id", "idempotency_key", "status", "error_code"):
+        value = source.get(key)
+        if isinstance(value, str) and value.strip():
+            details[key] = value.strip()
+    if isinstance(source.get("deduped"), bool):
+        details["deduped"] = source["deduped"]
+    return details
+
+
+def _command_status_event_name(tool_result: dict[str, Any]) -> str:
+    status = str(tool_result.get("status", "")).strip().lower()
+    return {
+        "applied": "command_applied",
+        "deferred": "command_deferred",
+        "rejected": "command_rejected",
+        "accepted": "command_applied",
+    }.get(status, "command_applied")
+
+
+def _latest_command_result(command_results: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not command_results:
+        return None
+    candidate = command_results[-1]
+    if not isinstance(candidate, dict):
+        return None
+    return candidate
+
+
+def _command_result_status(command_result: dict[str, Any] | None) -> str:
+    if not command_result:
+        return ""
+    status = command_result.get("status", "")
+    if not isinstance(status, str):
+        return ""
+    return status.strip().lower()
+
+
+def _command_result_data(command_result: dict[str, Any] | None) -> dict[str, Any]:
+    if not command_result:
+        return {}
+    payload = command_result.get("data")
+    if not isinstance(payload, dict):
+        return {}
+    return payload
+
+
+def _resolved_depth_signal(
+    command_result: dict[str, Any] | None,
+    side_effects: dict[str, Any],
+) -> str:
+    if _command_result_status(command_result) == "deferred":
+        resolved = _command_result_data(command_result).get("resolved_depth_signal")
+        if isinstance(resolved, str) and resolved.strip():
+            return resolved.strip()
+    return str(side_effects.get("depth_signal", "normal")).strip() or "normal"
+
+
+def _resolved_max_turns(command_result: dict[str, Any] | None, default: int) -> int:
+    if _command_result_status(command_result) == "deferred":
+        resolved = _command_result_data(command_result).get("resolved_max_turns")
+        if isinstance(resolved, int):
+            return resolved
+        if isinstance(resolved, float):
+            return int(resolved)
+    return default

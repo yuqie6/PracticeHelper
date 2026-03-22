@@ -66,7 +66,7 @@ def test_evaluate_answer_prompts_require_depth_and_repo_tools_for_all_sets() -> 
         assert "search_repo_chunks" in prompt.content
         assert "record_observation" in prompt.content
         assert "update_knowledge" in prompt.content
-        assert "set_depth_signal" in prompt.content
+        assert "transition_session" in prompt.content
         assert "skip_followup" in prompt.content
         assert "extend" in prompt.content
 
@@ -80,7 +80,7 @@ def test_generate_review_prompts_require_history_and_next_session_tools_for_all_
         assert "get_session_detail" in prompt.content
         assert "record_observation" in prompt.content
         assert "update_knowledge" in prompt.content
-        assert "suggest_next_session" in prompt.content
+        assert "upsert_review_path" in prompt.content
 
 
 def test_generate_question_prompts_require_context_and_project_search_for_all_sets() -> None:
