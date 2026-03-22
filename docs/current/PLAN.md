@@ -2,9 +2,9 @@
 
 本文档是当前阶段的执行计划。产品方向和阶段划分见 [VISION.md](./VISION.md)。
 
-如果后续要把 sidecar 从“当前这套已具备 agent loop、行动工具、长期记忆装载和 Go 侧副作用回写的受约束 agent runtime”继续升级为“训练域里的成熟 agent runtime”，当前仓库已经有一份按源码审校过的独立方案，见 [AGENT_DEEP_REDESIGN_PLAN.md](./AGENT_DEEP_REDESIGN_PLAN.md)。
+如果后续要把 sidecar 从“当前这套已具备 agent loop、长期记忆装载、结构化 trace 和受控动作执行的受约束 agent runtime”继续升级为“训练域里的成熟 agent runtime”，当前仓库已经有一份按源码审校过的独立方案，见 [AGENT_DEEP_REDESIGN_PLAN.md](../plans/AGENT_DEEP_REDESIGN_PLAN.md)。
 
-当前这轮工程收口则走独立执行计划，见 [ARCHITECTURE_CONVERGENCE_PLAN.md](./ARCHITECTURE_CONVERGENCE_PLAN.md)。
+当前这轮工程收口则走独立执行计划，见 [ARCHITECTURE_CONVERGENCE_PLAN.md](../plans/ARCHITECTURE_CONVERGENCE_PLAN.md)。它回答拆分、卫生和文档同步，不替代这里的产品主线。
 
 ## 已完成
 
@@ -41,7 +41,7 @@
 
 目标：把训练体感从"能用"升级到"用户知道发生了什么、为什么这么判、下一步该怎么做"。
 
-详见 [ANSWER_FEEDBACK_UX_V2.md](./ANSWER_FEEDBACK_UX_V2.md)。
+详见 [ANSWER_FEEDBACK_UX_V2.md](../records/ANSWER_FEEDBACK_UX_V2.md)。
 
 ### 本阶段已完成
 
@@ -85,7 +85,7 @@
 
 目标：让训练从“泛泛练”变成“围绕目标岗位练”，让问题、评分和复盘都能明确回答“这是不是岗位真正看重的内容”。
 
-详见 [JD_TRAINING_STAGE_B.md](./JD_TRAINING_STAGE_B.md)。
+详见 [JD_TRAINING_STAGE_B.md](../records/JD_TRAINING_STAGE_B.md)。
 
 ### 本阶段已经落地
 
@@ -109,7 +109,7 @@
 
 目标：把产品从“能练、能记住、能带岗位视角”继续升级成“训练更深、回看更清楚、复习更持续、可审计性更强”的 AI 面试教练。
 
-详见 [PRODUCT_UPGRADE_PLAN.md](./PRODUCT_UPGRADE_PLAN.md)。
+详见 [PRODUCT_UPGRADE_PLAN.md](../plans/PRODUCT_UPGRADE_PLAN.md)。
 
 ### 当前代码已经具备的基础
 
@@ -118,8 +118,10 @@
 - 题库已经外置到 seed 文件，并扩到 10 个 topic；`mixed` 会按 weakness 选择候选 topic
 - `intensity=auto` 已稳定可用；`review_schedule` 也已打通 review 生成 -> 到期展示 -> 完成推进 的基础链路
 - `evaluation_logs` 已覆盖 `generate_question` / `evaluate_answer` / `generate_review` 及其 stream 变体，并且 Review 审计面板与 Prompt 实验页都已有前端承接
+- `runtime_trace` 已贯通 sidecar runtime、Go 持久化阶段和前端展示；当前不再是“只有 prompt 元信息，没有统一 trace”
 - LangGraph 当前已经收成“`analyze_repo` 多节点 + `generate_question` 策略节点 + `evaluate_answer / generate_review` 薄壳图”的结构；输出校验、重试预算和 `side_effects` 收口都在 `agent_runtime.py`
 - 默认 JD、`recommendation_scope` 和 generic fallback 语义已经收口，岗位模式不再是阶段 C 之前的阻塞项
+- 关键动作已经进入“`side_effects` + 少量 typed command”双轨：`transition_session` 和 `upsert_review_path` 已有第一版 command path，但 Go 仍保留最终状态机和持久化边界
 
 ### 当前 agent 主线定位
 
@@ -127,6 +129,7 @@
 - 这条 agent 主线是阶段 C 的技术底座，不替代“训练深度与留存升级”这条产品主线
 - 近期仍然是单 agent 主路径；多 agent 只写成后续高价值长任务的演进方向，不进入当前训练热路径
 - Go 继续保留产品边界、状态机、持久化、审计和恢复入口；sidecar 继续负责上下文理解、规划、工具使用、输出校验和结构化意图生成
+- 动作模型已经不是“只有 side effects”：当前主路径是 cheap/local 动作继续走 `side_effects`，关键状态决策开始走受控 typed command，但不放权到 sidecar 直写数据库
 - 近期优先补的是检索、memory 利用、失败恢复和可观测性，而不是直接铺复杂多 agent 编排
 
 ### 本阶段当前更适合继续推进的方向
@@ -137,14 +140,15 @@
 - 继续保持 repo chunk 以 SQLite FTS5 主路径为主；observation / session summary
   已落第一版 embedding / hybrid rerank，但不要把 graph / repo chunk 的全量
   RAG 写成已在做
-- 如果要继续推进 sidecar agent 化，按 [AGENT_DEEP_REDESIGN_PLAN.md](./AGENT_DEEP_REDESIGN_PLAN.md) 的分阶段路线渐进推进，而不是一次性推翻现有 stream / FSM / sidecar client 主链路
-- Go 侧继续保留最终落库和状态机边界；sidecar 的动作能力继续以 `side_effects` 为主，关键状态迁移后续再引入 typed command path
+- 如果要继续推进 sidecar agent 化，按 [AGENT_DEEP_REDESIGN_PLAN.md](../plans/AGENT_DEEP_REDESIGN_PLAN.md) 的分阶段路线渐进推进，而不是一次性推翻现有 stream / FSM / sidecar client 主链路
+- Go 侧继续保留最终落库和状态机边界；sidecar 的动作能力维持 `side_effects` + 少量 typed command 双轨，不把关键状态迁移退化成自由 side effect
 - 多 agent 目前只作为后续高价值长任务的实现蓝图，不作为阶段 C 的当前热路径方案
 
 ### 完成标准
 
 - 已完成能力不再在文档里被写成“待补缺口”
 - 当前真未做项和已实现能力的边界清楚
+- `runtime_trace` 和第一版 typed command path 被当成当前事实，而不是继续写成“后续概念”
 - 文档、代码和页面对当前主线的描述重新一致
 
 ---

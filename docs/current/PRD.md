@@ -1,6 +1,6 @@
 # 产品需求文档 - PracticeHelper
 
-> 状态：本文已从最初 v0 PRD 更新为 2026-03-21 的当前产品边界快照。阶段 A / B 已完成，当前主线见 [PLAN.md](./PLAN.md) 和 [PRODUCT_UPGRADE_PLAN.md](./PRODUCT_UPGRADE_PLAN.md)。
+> 状态：本文已从最初 v0 PRD 更新为 2026-03-23 的当前产品边界快照。阶段 A / B 已完成，当前主线见 [PLAN.md](./PLAN.md) 和 [PRODUCT_UPGRADE_PLAN.md](../plans/PRODUCT_UPGRADE_PLAN.md)。
 
 ## 1. 要解决的问题
 

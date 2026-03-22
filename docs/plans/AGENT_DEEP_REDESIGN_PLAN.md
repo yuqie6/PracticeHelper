@@ -1,8 +1,8 @@
 # Agent Deep Redesign Plan
 
-> 状态：审校更新版（2026-03-22）。
-> 真实完成度：Phase A 已完成；Phase B 已落一半以上但还没收口；
-> Phase C / Phase D 仍未开始。
+> 状态：审校更新版（2026-03-23）。
+> 真实完成度：Phase A / Phase B 已完成；
+> Phase C 已落第一版 command path，但仍未收口；Phase D 仍未开始。
 > 目标：在保留 Go 产品边界和执行边界的前提下，把 PracticeHelper 的
 > `sidecar` 从“基础版 constrained agent runtime”逐步升级为
 > “训练域里的成熟 agent runtime”。
@@ -31,7 +31,7 @@
 
 > 用成熟 agent runtime 支撑训练体验、长期记忆、复盘质量和持续留存。
 
-### 1.1 审校结论（2026-03-22）
+### 1.1 审校结论（2026-03-23）
 
 这次按当前工作区代码和测试逐条核对后，结论可以直接收成 3 句：
 
@@ -40,13 +40,16 @@
   vector similarity + optional rerank、`retrieval_trace`、Go 侧
   `depth_signal` 状态机接线、review 推荐归一化与知识图谱兜底、
   `prerequisite` 第一版边推断、以及 `prompt_set / prompt_hash / model /
-  raw_output` 审计日志。
-- **部分完成**：observability 已能看到 prompt 元信息、原始输出、
-  review 检索轨迹、stream 工具路径，但还没有统一结构化 trace；fallback
-  已有，但失败分类仍偏粗；memory 排序已明显比单纯 Top-N 更强，但通用
-  context compaction 还没补完。
-- **尚未开始**：typed command API、多 agent coordinator、
-  shared artifacts 和多角色协作仍然停留在设计层。
+  raw_output` 审计日志、统一 `runtime_trace` / 失败分类、`context compaction`
+  第一版，以及关键 side effects 的落库可见性。
+- **已收口**：observability 现在已经能同时看到 prompt 元信息、原始输出、
+  review 检索轨迹、stream 工具路径、统一结构化 trace，以及 Go 侧
+  `persist_*` 持久化轨迹；observations 已做会话内去重，knowledge update
+  继续走 upsert。
+- **已起步但未收口**：typed command path 第一版已经接上
+  `transition_session / upsert_review_path`、Go internal callback
+  `/internal/agent-commands`、`command_results` 回流和结果校验；多 agent
+  coordinator、shared artifacts 和多角色协作仍然停留在设计层。
 
 本次审校还做了最基本实测：
 
@@ -70,7 +73,8 @@
 - agent loop 收口不稳时会退回 `_run_single_shot`
 - 流式 `generate_question / evaluate_answer / generate_review`
   也优先走 `_stream_agent_loop`
-- stream `result` 事件已经能携带 `raw_output` 和 `side_effects`
+- stream `result` 事件已经能携带 `raw_output`、`side_effects`、`command_results`
+  和 `trace`
 
 也就是说，当前 sidecar 已经不是“带几个只读工具的 prompt wrapper”，而是：
 
@@ -121,8 +125,12 @@
 - `update_knowledge`
 - `suggest_next_session`
 - `set_depth_signal`
+- `transition_session`
+- `upsert_review_path`
 
-但这些动作工具不直接写库，而是先写入 `side_effects`，再由 Go 统一落库。
+其中前四个仍然先写入 `side_effects`，再由 Go 统一落库；后两个则通过
+Go internal callback 走第一版 typed command path，拿到结构化 command result
+后再继续完成校验和收口。
 
 这条边界是当前设计里最重要的安全原则之一，必须保留。
 
@@ -447,7 +455,7 @@ sidecar 负责：
 | `suggest_next_session` | `side_effects.recommended_next` | 建议下一轮训练 |
 | `set_depth_signal` | `side_effects.depth_signal` | 控制追问深度 |
 
-##### Track B：typed command API（后续阶段）
+##### Track B：typed command API（已落第一版，仍在扩展）
 
 适用场景：
 
@@ -456,7 +464,7 @@ sidecar 负责：
 - 长动作或重动作
 - 必须保证幂等与审计
 
-这不是当前已实现接口，但应作为后续固定设计。
+当前已经落地的是最小 command baseline，而不是完整 command 平台。
 
 建议第一版 command 只覆盖少量高价值动作：
 
@@ -464,7 +472,7 @@ sidecar 负责：
 |---|---|
 | `transition_session` | 请求关键 FSM 迁移，如准备额外 follow-up 或确认提前收口 |
 | `upsert_review_path` | 请求 Go 生成或确认推荐学习路径，并返回规范化结果 |
-| `enqueue_long_job` | 请求 Go 启动长任务，如离线分析、批量证据整理、异步索引补算 |
+| `enqueue_long_job` | 预留命令类型，后续可请求 Go 启动长任务，如离线分析、批量证据整理、异步索引补算 |
 
 typed command 的核心原则：
 
@@ -495,7 +503,7 @@ typed command 的核心原则：
 
 - 更细的失败分类
 - 更系统的恢复语义
-- 更清晰的可观测 trace
+- command / decision 轨迹的进一步细化
 
 #### Layer 6：Observability
 
@@ -508,8 +516,10 @@ typed command 的核心原则：
 
 当前对前端公开的流式事件仍保持：
 
+- `status`
 - `phase`
 - `context`
+- `trace`
 - `reasoning`
 - `content`
 - `result`
@@ -520,13 +530,15 @@ typed command 的核心原则：
 - sidecar header + Go 审计日志里已记录 `prompt_set / prompt_hash / model / raw_output`
 - `generate_review` 已会把 `retrieval_trace` 带进 review 持久化和 export
 - stream 的 `context` 事件已经能反映工具使用路径
+- `trace` 事件已经覆盖 `prepare_context / tool_call / validate / fallback /
+  finalize / persist / error`
+- `runtime_trace` 已能同时记录 sidecar runtime、`context_compaction`
+  摘要和 Go 侧 `persist_*` 持久化结果
 
-当前还没形成统一结构化 trace 的部分：
+当前仍未进入的可观测深水区只有两类：
 
-- fallback reason 目前主要体现在日志和 stream 文本，不是固定事件类型
-- validation retry 还没有独立持久化轨迹
-- 关键副作用落库结果还没有单独的 trace 事件
-- `decision / command` 这类更细事件还没进入当前实现
+- `decision / command` 这类 Phase C 后续阶段才会继续细化的动作轨迹
+- 多 agent 共享工件和 coordinator 预算轨迹
 
 ---
 
@@ -552,22 +564,27 @@ class GenerateReviewRequest(BaseModel):
     agent_context: AgentContext | None = None
 ```
 
-当前 2 类核心 envelope 继续保留 `result + side_effects + raw_output`：
+当前 2 类核心 envelope 已经升级为
+`result + side_effects + command_results + raw_output + trace`：
 
 ```python
 class EvaluateAnswerEnvelope(BaseModel):
     result: EvaluationResult
     side_effects: EvaluateAnswerSideEffects
+    command_results: list[AgentCommandResult] = []
     raw_output: str = ""
+    trace: RuntimeTrace | None = None
 
 
 class GenerateReviewEnvelope(BaseModel):
     result: ReviewCard
     side_effects: GenerateReviewSideEffects
+    command_results: list[AgentCommandResult] = []
     raw_output: str = ""
+    trace: RuntimeTrace | None = None
 ```
 
-这部分仍然是当前训练热路径的标准协议，不需要推翻。
+这部分已经是当前训练热路径的真实协议，不需要回退到旧的三段式 envelope。
 
 ### 5.2 当前 memory 读取契约
 
@@ -588,9 +605,9 @@ class AgentContext(BaseModel):
 - retrieval 通过 `memory_index` 聚合
 - materialize 时按 `ref_table + ref_id` 回源
 
-### 5.3 后续 typed command 契约
+### 5.3 当前 command 契约（后续继续扩展）
 
-后续引入 command path 时，文档固定采用下面的接口形状。
+当前第一版 command path 已经采用下面的接口形状；后续新增命令也沿这套结构扩展。
 
 #### AgentCommandEnvelope
 
@@ -772,7 +789,7 @@ class ReviewVerdict(BaseModel):
 - `depth_signal` 已接进 Go FSM
 - review 推荐链路已开始做 Go 侧知识图谱兜底
 
-### Phase B：成熟单 agent 基线（当前主线，部分完成）
+### Phase B：成熟单 agent 基线（已收口）
 
 目标：
 
@@ -791,13 +808,12 @@ class ReviewVerdict(BaseModel):
 - observation / session summary 的更强排序
 - `memory_index + vector + optional rerank` 的混合召回
 - review 推荐归一化、学习路径兜底和 `prerequisite` 第一版边推断
-
-本阶段仍待补齐的重点：
-
 - context compaction
 - validation / fallback 的失败分类
 - stream / non-stream 一致性观测
 - 关键动作的幂等与落库可见性
+
+本阶段现在可以视为收口完成，后续不再继续把这些项当作主施工点。
 
 本阶段完成标准：
 
@@ -806,19 +822,28 @@ class ReviewVerdict(BaseModel):
 - memory 不只排序更准，还能把取材与压缩过程解释清楚
 - review 推荐和学习路径更少依赖模型自由发挥
 
-### Phase C：受控放权（尚未开始）
+### Phase C：受控放权（已落第一版，进行中）
 
 目标：
 
 - 在单 agent 稳定之后，再增强 planner 与动作执行能力
 - 为关键动作引入 typed command path
 
-本阶段要补：
+本阶段已经落地的部分：
+
+- `transition_session` command：评估阶段可让 sidecar 向 Go FSM 申请
+  `skip_followup / extend` 的结构化决策
+- `upsert_review_path` command：复盘阶段可让 sidecar 先向 Go 请求规范化
+  `recommended_next / suggested_topics / next_training_focus`
+- `command_results` 已进入 envelope，并参与 review / evaluation 的结果校验
+- Go internal callback `/internal/agent-commands` 已成为 sidecar command 主链路
+
+本阶段还要补：
 
 - 更强 planner
-- typed command API
 - 更细的 action budget
 - 更清楚的 action result 回流
+- 更多高价值 command 类型
 
 本阶段完成标准：
 
@@ -1076,5 +1101,6 @@ class ReviewVerdict(BaseModel):
 
 按当前工作区的真实完成度，近期不该再把 `retrieval_trace`、
 `memory_index` 混合召回或 Go 侧推荐兜底当成主施工点；这些已经落了第一版。
-真正还没收口的是：`context compaction`、结构化失败分类、统一 trace，
-以及关键动作的幂等/可见性。
+当前真正还没收口的，是 `Phase C` 的 command 范围扩张、action budget
+和 command 结果观测；`Phase D` 的多 agent coordinator / shared artifacts
+则仍然没有开工。

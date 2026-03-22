@@ -18,18 +18,12 @@ set -a
 set +a
 
 pnpm install
-(
-  cd sidecar
-  uv sync
-)
+uv sync --project sidecar
 (
   cd server
   GOCACHE=/tmp/go-build go test -tags sqlite_fts5 ./...
 )
-(
-  cd sidecar
-  uv run pytest -q
-)
+uv run --project sidecar pytest -q
 (
   cd web
   pnpm build

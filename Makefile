@@ -14,7 +14,7 @@ AIR_BIN := $(TOOLS_BIN)/air
 SERVER_COVERAGE_MIN := 50
 SIDECAR_COVERAGE_MIN := 70
 
-.PHONY: help bootstrap setup install-tools deps deps-web deps-sidecar \
+.PHONY: help bootstrap setup install-tools deps deps-web deps-sidecar pytest \
 	check \
 	dev-web dev-server dev-server-hot dev-sidecar web-dev server-dev server-dev-hot sidecar-dev \
 	lint lint-web lint-server lint-sidecar \
@@ -42,7 +42,10 @@ deps-web: ## 安装前端依赖
 	$(ENV_LOADER); pnpm --dir "$(WEB_DIR)" install
 
 deps-sidecar: ## 同步 sidecar Python 依赖
-	$(ENV_LOADER); cd "$(SIDECAR_DIR)" && uv sync
+	$(ENV_LOADER); uv sync --project "$(SIDECAR_DIR)"
+
+pytest: ## 从仓库根运行 sidecar pytest（可用 PYTEST_ARGS 透传参数）
+	$(ENV_LOADER); uv run --project "$(SIDECAR_DIR)" pytest $(PYTEST_ARGS)
 
 $(GOLANGCI_LINT_BIN):
 	mkdir -p "$(TOOLS_BIN)"
@@ -111,7 +114,7 @@ test-server: ## 运行 Go 测试
 	$(ENV_LOADER); cd "$(SERVER_DIR)" && GOCACHE=/tmp/go-build go test -tags "$(GO_SQLITE_TAGS)" ./...
 
 test-sidecar: ## 运行 Python 测试
-	$(ENV_LOADER); cd "$(SIDECAR_DIR)" && uv run pytest
+	$(ENV_LOADER); uv run --project "$(SIDECAR_DIR)" pytest
 
 coverage: coverage-web coverage-server coverage-sidecar ## 运行三端覆盖率统计
 
