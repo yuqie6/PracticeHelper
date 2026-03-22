@@ -34,7 +34,46 @@ export function normalizeRuntimeTraceEntry(
     message: typeof record.message === 'string' ? record.message : '',
     attempt: typeof record.attempt === 'number' ? record.attempt : 0,
     tool_name: typeof record.tool_name === 'string' ? record.tool_name : '',
+    details:
+      record.details &&
+      typeof record.details === 'object' &&
+      !Array.isArray(record.details)
+        ? (record.details as Record<string, unknown>)
+        : undefined,
   };
+}
+
+export function buildRuntimeTraceDetailChips(
+  details?: Record<string, unknown>,
+): string[] {
+  if (!details) {
+    return [];
+  }
+
+  const chips: string[] = [];
+  const pushNumber = (label: string, key: string) => {
+    const value = details[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      chips.push(`${label} ${value}`);
+    }
+  };
+
+  if (typeof details.section === 'string' && details.section) {
+    chips.push(details.section);
+  }
+  if (typeof details.budget === 'string' && details.budget) {
+    chips.push(`budget ${details.budget}`);
+  }
+
+  pushNumber('before', 'before_count');
+  pushNumber('after', 'after_count');
+  pushNumber('before chars', 'before_chars');
+  pushNumber('after chars', 'after_chars');
+  pushNumber('applied', 'applied');
+  pushNumber('skipped', 'skipped');
+  pushNumber('deduped', 'deduped');
+
+  return chips;
 }
 
 export function formatRuntimeTracePhaseLabel(

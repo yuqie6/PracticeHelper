@@ -179,6 +179,7 @@ function hasSectionActivity(section: StreamSection): boolean {
   return Boolean(
     section.phase ||
     section.contexts.length ||
+    section.traces.length ||
     section.reasoning.length ||
     section.rawContent.trim(),
   );

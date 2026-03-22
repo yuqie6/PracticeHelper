@@ -591,7 +591,9 @@ export const messages = {
       tracePhases: {
         prepare_context: '准备上下文',
         tool_call: '调用工具',
+        command: '命令裁决',
         validate: '校验结果',
+        persist: '持久化结果',
         fallback: '回退处理',
         finalize: '整理收口',
         error: '错误退出',
@@ -615,6 +617,8 @@ export const messages = {
         read_repo_chunks: '正在参考关键代码',
         read_job_target_source: '正在参考岗位要求',
         read_job_target_analysis: '正在参考岗位分析',
+        transition_session: '正在向 Go 状态机申请轮次决策',
+        upsert_review_path: '正在向 Go 归一化学习路径',
       },
     },
     progress: {
@@ -1366,7 +1370,9 @@ export const messages = {
       tracePhases: {
         prepare_context: 'Prepare context',
         tool_call: 'Call tool',
+        command: 'Resolve command',
         validate: 'Validate output',
+        persist: 'Persist result',
         fallback: 'Fallback',
         finalize: 'Finalize result',
         error: 'Exit with error',
@@ -1390,6 +1396,8 @@ export const messages = {
         read_repo_chunks: 'Reviewing key code',
         read_job_target_source: 'Reviewing job requirements',
         read_job_target_analysis: 'Reviewing job analysis',
+        transition_session: 'Resolving turn decision in Go',
+        upsert_review_path: 'Normalizing review path in Go',
       },
     },
     progress: {

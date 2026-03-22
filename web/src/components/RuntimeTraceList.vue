@@ -26,6 +26,16 @@
         </span>
       </div>
 
+      <div v-if="detailChips(entry).length" class="runtime-trace-meta">
+        <span
+          v-for="chip in detailChips(entry)"
+          :key="chip"
+          class="runtime-trace-chip"
+        >
+          {{ chip }}
+        </span>
+      </div>
+
       <p v-if="entry.message" class="runtime-trace-message">
         {{ entry.message }}
       </p>
@@ -42,6 +52,7 @@ import { useI18n } from 'vue-i18n';
 
 import type { RuntimeTraceEntry } from '../api/client';
 import {
+  buildRuntimeTraceDetailChips,
   formatRuntimeTracePhaseLabel,
   formatRuntimeTraceStatusLabel,
 } from '../lib/runtimeTrace';
@@ -51,6 +62,10 @@ defineProps<{
 }>();
 
 const { t } = useI18n();
+
+function detailChips(entry: RuntimeTraceEntry): string[] {
+  return buildRuntimeTraceDetailChips(entry.details);
+}
 </script>
 
 <style scoped>

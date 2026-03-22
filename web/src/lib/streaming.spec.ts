@@ -27,6 +27,11 @@ describe('streaming helpers', () => {
         code: 'tool_call_succeeded',
         message: '工具 recall_training_context 调用成功。',
         tool_name: 'recall_training_context',
+        details: {
+          section: 'observations',
+          before_count: 4,
+          after_count: 3,
+        },
       },
     });
     sections = appendStreamEvent(sections, {
@@ -49,6 +54,7 @@ describe('streaming helpers', () => {
     expect(sections).toHaveLength(2);
     expect(sections[0].contexts).toEqual(['read_evaluation_context']);
     expect(sections[0].traces[0]?.code).toBe('tool_call_succeeded');
+    expect(sections[0].traces[0]?.details?.section).toBe('observations');
     expect(sections[0].rawContent).toContain('"score": 72');
     expect(sections[1].reasoning).toEqual(['正在整理复盘']);
   });

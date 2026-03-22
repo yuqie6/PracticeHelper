@@ -75,6 +75,7 @@ export interface RuntimeTraceEntry {
   message?: string;
   attempt?: number;
   tool_name?: string;
+  details?: Record<string, unknown>;
 }
 
 export interface RuntimeTrace {
