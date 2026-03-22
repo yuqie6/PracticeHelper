@@ -32,13 +32,13 @@
             {{ t('home.currentSession.kicker') }}
           </p>
           <h2 class="text-xl font-black">{{ t('train.resumeTitle') }}</h2>
-          <p class="neo-note">
-            {{
-              t('train.resumeDescription', {
-                name: formatSessionName(currentSession),
-                status: formatStatusLabel(t, currentSession.status),
-              })
-            }}
+            <p class="neo-note">
+              {{
+                t('train.resumeDescription', {
+                  name: formatSessionName(t, currentSession),
+                  status: formatStatusLabel(t, currentSession.status),
+                })
+              }}
           </p>
           <RouterLink
             :to="buildSessionTarget(currentSession)"
@@ -393,7 +393,6 @@ import {
   listProjects,
   type PromptSetSummary,
   type StreamEvent,
-  type TrainingSessionSummary,
 } from '../api/client';
 import NoticePanel from '../components/NoticePanel.vue';
 import ProgressPanel from '../components/ProgressPanel.vue';
@@ -408,6 +407,7 @@ import {
   formatStatusLabel,
   formatTopicLabel,
 } from '../lib/labels';
+import { buildSessionTarget, formatSessionName } from '../lib/sessionSummary';
 import { appendStreamEvent, type StreamSection } from '../lib/streaming';
 import { useProgressSteps } from '../lib/useProgressSteps';
 
@@ -674,26 +674,6 @@ function submit() {
 function handleStreamEvent(event: StreamEvent) {
   streamEvents.value = [...streamEvents.value, event];
   streamSections.value = appendStreamEvent(streamSections.value, event);
-}
-
-function formatSessionName(session: TrainingSessionSummary): string {
-  if (session.project_name) {
-    return session.project_name;
-  }
-
-  if (session.topic) {
-    return formatTopicLabel(t, session.topic);
-  }
-
-  return formatModeLabel(t, session.mode);
-}
-
-function buildSessionTarget(session: TrainingSessionSummary): string {
-  if (session.status === 'completed' && session.review_id) {
-    return `/reviews/${session.review_id}`;
-  }
-
-  return `/sessions/${session.id}`;
 }
 
 function resolveStartErrorMessage(error: unknown): string {

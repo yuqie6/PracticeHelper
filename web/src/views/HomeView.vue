@@ -92,7 +92,7 @@
             <p class="home-signal-copy">
               {{
                 t('home.currentSession.description', {
-                  name: formatSessionName(currentSession),
+                  name: formatSessionName(t, currentSession),
                   status: formatStatusLabel(t, currentSession.status),
                 })
               }}
@@ -307,7 +307,7 @@
                       {{ formatModeLabel(t, session.mode) }}
                     </p>
                     <p class="text-xl font-black">
-                      {{ formatSessionName(session) }}
+                      {{ formatSessionName(t, session) }}
                     </p>
                   </div>
                   <span class="neo-badge bg-[var(--neo-blue)]">
@@ -453,7 +453,6 @@ import {
   listDueReviews,
   listProjects,
   type ReviewScheduleItem,
-  type TrainingSessionSummary,
   type WeaknessTrend,
 } from '../api/client';
 import {
@@ -477,6 +476,7 @@ import {
   formatTopicLabel,
   formatWeaknessKindLabel,
 } from '../lib/labels';
+import { buildSessionTarget, formatSessionName } from '../lib/sessionSummary';
 import { useToast } from '../lib/useToast';
 
 const { data } = useQuery({
@@ -615,30 +615,6 @@ const summaryTiles = computed(() => {
     },
   ];
 });
-
-function formatSessionName(session: TrainingSessionSummary): string {
-  if (session.project_name) {
-    return session.project_name;
-  }
-
-  if (session.topic) {
-    return formatTopicLabel(t, session.topic);
-  }
-
-  if (session.mode) {
-    return formatModeLabel(t, session.mode);
-  }
-
-  return t('common.unknownSession');
-}
-
-function buildSessionTarget(session: TrainingSessionSummary): string {
-  if (session.status === 'completed' && session.review_id) {
-    return `/reviews/${session.review_id}`;
-  }
-
-  return `/sessions/${session.id}`;
-}
 
 function formatUpdatedAt(raw: string): string {
   const parsed = new Date(raw);

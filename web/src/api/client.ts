@@ -6,6 +6,50 @@ import {
   SESSION_BATCH_EXPORT_PATH,
   SESSION_EXPORT_FORMAT,
 } from '../lib/export';
+import type {
+  Dashboard,
+  EvaluationLogEntry,
+  JobTarget,
+  JobTargetAnalysisRun,
+  PaginatedList,
+  ProjectImportJob,
+  ProjectProfile,
+  PromptExperimentReport,
+  PromptSetSummary,
+  ReviewCard,
+  ReviewScheduleItem,
+  StreamEvent,
+  TrainingSession,
+  TrainingSessionSummary,
+  UserProfile,
+  WeaknessTag,
+  WeaknessTrend,
+} from './types';
+export type {
+  Dashboard,
+  EvaluationLogEntry,
+  JobTarget,
+  JobTargetAnalysisRun,
+  JobTargetRef,
+  PaginatedList,
+  ProjectImportJob,
+  ProjectProfile,
+  PromptExperimentMetrics,
+  PromptExperimentReport,
+  PromptExperimentSample,
+  PromptSetSummary,
+  ReviewCard,
+  ReviewScheduleItem,
+  StreamEvent,
+  TrainingEvaluation,
+  TrainingSession,
+  TrainingSessionSummary,
+  TrainingTurn,
+  UserProfile,
+  WeaknessTag,
+  WeaknessTrend,
+  WeaknessTrendPoint,
+} from './types';
 
 export interface ApiEnvelope<T> {
   data: T;
@@ -28,267 +72,6 @@ export class ApiError extends Error {
     this.code = options?.code;
     this.status = options?.status;
   }
-}
-
-export interface UserProfile {
-  id: number;
-  target_role: string;
-  target_company_type: string;
-  current_stage: string;
-  application_deadline?: string | null;
-  tech_stacks: string[];
-  primary_projects: string[];
-  self_reported_weaknesses: string[];
-  active_job_target_id?: string;
-  active_job_target?: JobTargetRef | null;
-}
-
-export interface ProjectProfile {
-  id: string;
-  name: string;
-  repo_url: string;
-  default_branch: string;
-  import_commit: string;
-  summary: string;
-  tech_stack: string[];
-  highlights: string[];
-  challenges: string[];
-  tradeoffs: string[];
-  ownership_points: string[];
-  followup_points: string[];
-  import_status: string;
-}
-
-export interface JobTargetRef {
-  id: string;
-  title: string;
-  company_name?: string;
-  latest_analysis_status?:
-    | 'idle'
-    | 'running'
-    | 'succeeded'
-    | 'failed'
-    | 'stale';
-}
-
-export interface JobTargetAnalysisRun {
-  id: string;
-  job_target_id: string;
-  source_text_snapshot: string;
-  status: 'running' | 'succeeded' | 'failed';
-  error_message?: string;
-  summary?: string;
-  must_have_skills: string[];
-  bonus_skills: string[];
-  responsibilities: string[];
-  evaluation_focus: string[];
-  created_at: string;
-  finished_at?: string;
-}
-
-export interface JobTarget {
-  id: string;
-  title: string;
-  company_name?: string;
-  source_text: string;
-  latest_analysis_id?: string;
-  latest_analysis_status: 'idle' | 'running' | 'succeeded' | 'failed' | 'stale';
-  last_used_at?: string;
-  created_at: string;
-  updated_at: string;
-  latest_successful_analysis?: JobTargetAnalysisRun | null;
-}
-
-export interface ProjectImportJob {
-  id: string;
-  repo_url: string;
-  status: 'queued' | 'running' | 'completed' | 'failed';
-  stage:
-    | 'queued'
-    | 'analyzing_repository'
-    | 'persisting_project'
-    | 'completed'
-    | 'failed';
-  message: string;
-  error_message?: string;
-  project_id?: string;
-  project_name?: string;
-  created_at: string;
-  updated_at: string;
-  started_at?: string;
-  finished_at?: string;
-}
-
-export interface PromptSetSummary {
-  id: string;
-  label: string;
-  description?: string;
-  status: string;
-  is_default?: boolean;
-}
-
-export interface WeaknessTag {
-  id: string;
-  kind: string;
-  label: string;
-  severity: number;
-  frequency: number;
-  last_seen_at: string;
-  evidence_session_id: string;
-}
-
-export interface TrainingEvaluation {
-  score: number;
-  score_breakdown: Record<string, number>;
-  headline?: string;
-  strengths: string[];
-  gaps: string[];
-  suggestion?: string;
-  followup_intent?: string;
-  followup_question?: string;
-  followup_expected_points?: string[];
-}
-
-export interface TrainingTurn {
-  id: string;
-  turn_index: number;
-  question: string;
-  expected_points: string[];
-  answer: string;
-  evaluation?: TrainingEvaluation;
-}
-
-export interface TrainingSession {
-  id: string;
-  mode: 'basics' | 'project';
-  topic?: string;
-  project_id?: string;
-  job_target_id?: string;
-  job_target_analysis_id?: string;
-  prompt_set_id?: string;
-  intensity: string;
-  status: string;
-  max_turns: number;
-  total_score: number;
-  review_id?: string;
-  turns: TrainingTurn[];
-  project?: ProjectProfile;
-  job_target?: JobTargetRef | null;
-  prompt_set?: PromptSetSummary | null;
-}
-
-export interface TrainingSessionSummary {
-  id: string;
-  mode: string;
-  topic?: string;
-  project_name?: string;
-  status: string;
-  total_score: number;
-  review_id?: string;
-  updated_at: string;
-  job_target?: JobTargetRef | null;
-  prompt_set_id?: string;
-  prompt_set?: PromptSetSummary | null;
-}
-
-export interface ReviewCard {
-  id: string;
-  session_id: string;
-  job_target_id?: string;
-  job_target_analysis_id?: string;
-  prompt_set_id?: string;
-  overall: string;
-  top_fix?: string;
-  top_fix_reason?: string;
-  highlights: string[];
-  gaps: string[];
-  suggested_topics: string[];
-  next_training_focus: string[];
-  recommended_next?: {
-    mode: 'basics' | 'project';
-    topic?: string;
-    project_id?: string;
-    reason?: string;
-  } | null;
-  score_breakdown: Record<string, number>;
-  job_target?: JobTargetRef | null;
-  prompt_set?: PromptSetSummary | null;
-}
-
-export interface EvaluationLogEntry {
-  id: number;
-  session_id: string;
-  turn_id?: string;
-  flow_name: string;
-  model_name?: string;
-  prompt_set_id?: string;
-  prompt_hash?: string;
-  raw_output?: string;
-  latency_ms: number;
-  created_at: string;
-}
-
-export interface PromptExperimentMetrics {
-  prompt_set: PromptSetSummary;
-  session_count: number;
-  completed_count: number;
-  avg_total_score: number;
-  avg_generate_question_latency_ms: number;
-  avg_evaluate_answer_latency_ms: number;
-  avg_generate_review_latency_ms: number;
-}
-
-export interface PromptExperimentSample {
-  session_id: string;
-  review_id?: string;
-  mode: string;
-  topic?: string;
-  status: string;
-  total_score: number;
-  updated_at: string;
-  prompt_set: PromptSetSummary;
-}
-
-export interface PromptExperimentReport {
-  left: PromptExperimentMetrics;
-  right: PromptExperimentMetrics;
-  recent_samples: PromptExperimentSample[];
-  applied_filters: {
-    left: string;
-    right: string;
-    mode?: string;
-    topic?: string;
-    limit: number;
-  };
-}
-
-export interface Dashboard {
-  profile: UserProfile | null;
-  weaknesses: WeaknessTag[];
-  recent_sessions: TrainingSessionSummary[];
-  current_session?: TrainingSessionSummary | null;
-  today_focus: string;
-  recommended_track: string;
-  active_job_target?: JobTargetRef | null;
-  recommendation_scope: 'generic' | 'job_target';
-  days_until_deadline?: number;
-}
-
-export interface StreamEvent {
-  type:
-    | 'phase'
-    | 'context'
-    | 'reasoning'
-    | 'content'
-    | 'status'
-    | 'result'
-    | 'error';
-  code?: string;
-  phase?: string;
-  name?: string;
-  text?: string;
-  message?: string;
-  data?: unknown;
 }
 
 function isAbortError(error: unknown): error is DOMException {
@@ -646,14 +429,6 @@ export function createSessionStream(
   );
 }
 
-export interface PaginatedList<T> {
-  items: T[];
-  total: number;
-  page: number;
-  per_page: number;
-  total_pages: number;
-}
-
 export function listSessions(params?: {
   page?: number;
   per_page?: number;
@@ -784,33 +559,8 @@ export function listWeaknesses(): Promise<WeaknessTag[]> {
   return request('/api/weaknesses');
 }
 
-export interface WeaknessTrendPoint {
-  session_id: string;
-  severity: number;
-  created_at: string;
-}
-
-export interface WeaknessTrend {
-  id: string;
-  kind: string;
-  label: string;
-  points: WeaknessTrendPoint[];
-}
-
 export function getWeaknessTrends(): Promise<WeaknessTrend[]> {
   return request('/api/weaknesses/trends');
-}
-
-export interface ReviewScheduleItem {
-  id: number;
-  session_id: string;
-  review_card_id?: string;
-  weakness_tag_id?: string;
-  weakness_kind?: string;
-  weakness_label?: string;
-  topic?: string;
-  next_review_at: string;
-  interval_days: number;
 }
 
 export function listDueReviews(): Promise<ReviewScheduleItem[]> {
