@@ -3,8 +3,11 @@
     <header class="neo-panel-hero review-stage bg-[var(--neo-blue)]">
       <div class="review-stage-copy">
         <p class="neo-kicker bg-white">{{ t('review.hero.kicker') }}</p>
-        <h1 class="review-stage-title">
-          {{ review?.overall ?? reviewHeaderText }}
+        <h1
+          class="review-stage-title"
+          :class="{ 'review-stage-title-dense': reviewHeroTitleDense }"
+        >
+          {{ reviewHeroTitle }}
         </h1>
         <p class="review-stage-note">
           {{ reviewStageNote }}
@@ -82,8 +85,11 @@
               <p class="neo-kicker bg-[var(--neo-red)]">
                 {{ t('review.topFixTitle') }}
               </p>
-              <h2 class="review-section-title">
-                {{ review.top_fix || review.overall }}
+              <h2
+                class="review-focus-title"
+                :class="{ 'review-focus-title-dense': reviewFocusTitleDense }"
+              >
+                {{ reviewFocusTitle }}
               </h2>
             </div>
             <span class="neo-badge bg-white">{{ scoreAverageDisplay }}</span>
@@ -370,12 +376,22 @@ const reviewHeaderText = computed(() => {
   }
   return t('review.emptyDescription');
 });
+const reviewHeroTitle = computed(
+  () => review.value?.overall ?? reviewHeaderText.value,
+);
 const reviewStageNote = computed(() => {
   if (review.value) {
     return review.value.top_fix_reason || t('review.topFixFallbackReason');
   }
   return reviewHeaderText.value;
 });
+const reviewHeroTitleDense = computed(() => reviewHeroTitle.value.length > 26);
+const reviewFocusTitle = computed(
+  () => review.value?.top_fix || review.value?.overall || '',
+);
+const reviewFocusTitleDense = computed(
+  () => reviewFocusTitle.value.length > 26,
+);
 
 const continueTarget = computed(() => {
   const recommended = review.value?.recommended_next;
@@ -527,6 +543,15 @@ function toggleAuditDetails() {
   line-height: 1;
   margin: 0;
   max-width: 14ch;
+  text-wrap: balance;
+}
+
+.review-stage-title-dense {
+  font-size: clamp(1.45rem, 2.8vw, 2.4rem);
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+  max-width: 28ch;
+  text-wrap: pretty;
 }
 
 .review-stage-note {
@@ -535,6 +560,7 @@ function toggleAuditDetails() {
   line-height: 1.7;
   margin: 0;
   max-width: 40rem;
+  text-wrap: pretty;
 }
 
 .review-stage-side {
@@ -604,6 +630,23 @@ function toggleAuditDetails() {
   line-height: 1;
   margin: 0;
   text-transform: uppercase;
+}
+
+.review-focus-title {
+  font-size: clamp(1.2rem, 2.4vw, 2rem);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.12;
+  margin: 0;
+  max-width: 24ch;
+  text-wrap: balance;
+}
+
+.review-focus-title-dense {
+  font-size: clamp(1.05rem, 2vw, 1.5rem);
+  line-height: 1.35;
+  max-width: 34ch;
+  text-wrap: pretty;
 }
 
 .review-next-box,

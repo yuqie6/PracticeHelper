@@ -3,8 +3,11 @@
     <header class="neo-panel-hero session-stage bg-[var(--neo-yellow)]">
       <div class="session-stage-copy">
         <p class="neo-kicker bg-white">{{ t('session.hero.kicker') }}</p>
-        <h1 class="session-stage-title">
-          {{ currentTurn?.question || t('session.currentQuestion') }}
+        <h1
+          class="session-stage-title"
+          :class="{ 'session-stage-title-dense': sessionHeroTitleDense }"
+        >
+          {{ sessionHeroTitle }}
         </h1>
         <p class="session-stage-note">
           {{ t('session.hero.description', { status: currentStatusLabel }) }}
@@ -101,7 +104,12 @@
             <p class="text-sm font-semibold leading-6">{{ followupIntent }}</p>
           </div>
 
-          <h3 class="session-question-title">{{ currentTurn.question }}</h3>
+          <h3
+            class="session-question-title"
+            :class="{ 'session-question-title-dense': sessionQuestionDense }"
+          >
+            {{ currentTurn.question }}
+          </h3>
 
           <form
             v-if="canAnswerCurrentSession"
@@ -306,6 +314,12 @@ const currentStatusLabel = computed(() => {
 
   return formatStatusLabel(t, session.value.status);
 });
+const sessionHeroTitle = computed(
+  () => currentTurn.value?.question || t('session.currentQuestion'),
+);
+const sessionHeroTitleDense = computed(
+  () => sessionHeroTitle.value.length > 26,
+);
 const turnDisplay = computed(
   () => `${currentTurnIndex.value}/${session.value?.max_turns ?? 0}`,
 );
@@ -316,6 +330,9 @@ const latestScoreDisplay = computed(() => {
   }
   return Number(score).toFixed(1);
 });
+const sessionQuestionDense = computed(
+  () => (currentTurn.value?.question?.length ?? 0) > 30,
+);
 
 const placeholderText = computed(() =>
   currentTurnIndex.value > 1
@@ -673,6 +690,15 @@ function buildProgressStepDefinitions(
   line-height: 1;
   margin: 0;
   max-width: 16ch;
+  text-wrap: balance;
+}
+
+.session-stage-title-dense {
+  font-size: clamp(1.35rem, 2.8vw, 2.3rem);
+  letter-spacing: -0.03em;
+  line-height: 1.24;
+  max-width: 28ch;
+  text-wrap: pretty;
 }
 
 .session-stage-note {
@@ -681,6 +707,7 @@ function buildProgressStepDefinitions(
   line-height: 1.7;
   margin: 0;
   max-width: 40rem;
+  text-wrap: pretty;
 }
 
 .session-stage-stats {
@@ -766,6 +793,14 @@ function buildProgressStepDefinitions(
   letter-spacing: -0.04em;
   line-height: 1.15;
   margin: 0;
+  text-wrap: balance;
+}
+
+.session-question-title-dense {
+  font-size: clamp(1.2rem, 2.4vw, 1.8rem);
+  line-height: 1.38;
+  max-width: 34ch;
+  text-wrap: pretty;
 }
 
 .session-answer-form {
