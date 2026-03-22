@@ -168,7 +168,7 @@
         </section>
       </main>
 
-      <aside class="session-side">
+      <aside class="session-side neo-stagger-list">
         <section
           v-if="showProgressPanel"
           class="session-side-panel"

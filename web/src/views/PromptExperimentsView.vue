@@ -124,7 +124,7 @@
           <p class="neo-note">{{ t('common.loading') }}</p>
         </div>
 
-        <div v-else-if="report" class="prompt-compare-grid">
+        <div v-else-if="report" class="prompt-compare-grid neo-stagger-list">
           <article
             v-for="item in [report.left, report.right]"
             :key="item.prompt_set.id"
@@ -213,7 +213,7 @@
             {{ t('promptExperiments.samples.empty') }}
           </div>
 
-          <div v-else class="prompt-sample-list">
+          <div v-else class="prompt-sample-list neo-stagger-list">
             <article
               v-for="sample in report.recent_samples"
               :key="sample.session_id"
@@ -266,7 +266,10 @@
                   :title="t('promptExperiments.logs.errorTitle')"
                   :message="logsError"
                 />
-                <div v-else-if="sampleLogs.length" class="prompt-log-list">
+                <div
+                  v-else-if="sampleLogs.length"
+                  class="prompt-log-list neo-stagger-list"
+                >
                   <div
                     v-for="log in sampleLogs"
                     :key="log.id"

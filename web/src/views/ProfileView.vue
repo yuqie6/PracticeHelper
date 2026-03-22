@@ -75,7 +75,7 @@
     />
 
     <form class="profile-shell" @submit.prevent="submit">
-      <div class="profile-main">
+      <div class="profile-main neo-stagger-list">
         <section class="neo-panel profile-section">
           <div class="profile-section-head">
             <div class="space-y-2">
@@ -232,7 +232,7 @@
         </section>
       </div>
 
-      <aside class="profile-side">
+      <aside class="profile-side neo-stagger-list">
         <section
           v-if="savedSummary"
           class="neo-panel profile-side-panel bg-[var(--neo-green)]"
@@ -691,6 +691,23 @@ function hasMeaningfulProfile(
 .profile-choice {
   font-size: 0.95rem;
   font-weight: 700;
+  transition:
+    transform var(--motion-duration-base) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-soft);
+}
+
+.profile-link-chip {
+  transition:
+    transform var(--motion-duration-base) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-soft);
+}
+
+.profile-choice:hover,
+.profile-link-chip:hover {
+  box-shadow: 5px 5px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
+  transform: translate(var(--motion-lift-sm), var(--motion-lift-sm));
 }
 
 .profile-choice-active {

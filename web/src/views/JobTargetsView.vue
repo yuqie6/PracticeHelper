@@ -68,7 +68,7 @@
             <span class="neo-badge bg-white">{{ jobTargets.length }}</span>
           </div>
 
-          <div v-if="jobTargets.length" class="jobs-list">
+          <div v-if="jobTargets.length" class="jobs-list neo-stagger-list">
             <button
               v-for="target in jobTargets"
               :key="target.id"
@@ -217,7 +217,7 @@
         </section>
 
         <div v-if="selectedJobTarget" class="jobs-insight-grid">
-          <section class="neo-panel jobs-info-panel">
+          <section class="neo-panel-soft jobs-info-panel jobs-readiness-panel">
             <p class="neo-kicker bg-[var(--neo-blue)]">
               {{ t('jobs.readinessTitle') }}
             </p>
@@ -236,7 +236,7 @@
             </div>
           </section>
 
-          <section class="neo-panel jobs-info-panel">
+          <section class="neo-panel jobs-info-panel jobs-analysis-panel">
             <p class="neo-kicker bg-[var(--neo-green)]">
               {{ t('jobs.latestAnalysisTitle') }}
             </p>
@@ -260,7 +260,10 @@
             <span class="neo-badge bg-white">{{ analysisRuns.length }}</span>
           </div>
 
-          <div v-if="analysisRuns.length" class="jobs-history-list">
+          <div
+            v-if="analysisRuns.length"
+            class="jobs-history-list neo-stagger-list"
+          >
             <article
               v-for="run in analysisRuns"
               :key="run.id"
@@ -733,15 +736,15 @@ function formatDateTime(value?: string) {
   gap: 0.75rem;
   padding: 1rem;
   transition:
-    transform 180ms ease,
-    box-shadow 180ms ease,
-    background-color 180ms ease;
+    transform var(--motion-duration-base) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-soft);
 }
 
 .jobs-list-row:hover,
 .jobs-history-row:hover {
   box-shadow: 8px 8px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
-  transform: translate(-2px, -2px);
+  transform: translate(var(--motion-lift-md), var(--motion-lift-md));
 }
 
 .jobs-list-row-active {
@@ -763,6 +766,18 @@ function formatDateTime(value?: string) {
 .jobs-insight-grid {
   display: grid;
   gap: 1rem;
+}
+
+.jobs-readiness-panel {
+  gap: 1rem;
+}
+
+.jobs-analysis-panel {
+  min-width: 0;
+}
+
+.jobs-readiness-box {
+  align-items: start;
 }
 
 @media (min-width: 768px) {
@@ -789,10 +804,6 @@ function formatDateTime(value?: string) {
   .jobs-list-wrap {
     position: sticky;
     top: 1.5rem;
-  }
-
-  .jobs-insight-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

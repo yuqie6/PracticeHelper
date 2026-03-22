@@ -117,12 +117,12 @@
           </div>
         </section>
 
-        <div class="review-grid">
+        <div class="review-grid neo-stagger-list">
           <section class="neo-panel review-list-panel">
             <p class="neo-kicker bg-[var(--neo-yellow)]">
               {{ t('review.highlights') }}
             </p>
-            <ul class="review-list">
+            <ul class="review-list neo-stagger-list">
               <li
                 v-for="item in review.highlights"
                 :key="item"
@@ -135,7 +135,7 @@
 
           <section class="neo-panel review-list-panel">
             <p class="neo-kicker bg-[var(--neo-red)]">{{ t('review.gaps') }}</p>
-            <ul class="review-list">
+            <ul class="review-list neo-stagger-list">
               <li v-for="item in review.gaps" :key="item" class="neo-note">
                 {{ item }}
               </li>
@@ -146,7 +146,7 @@
             <p class="neo-kicker bg-[var(--neo-green)]">
               {{ t('review.nextFocus') }}
             </p>
-            <ul class="review-list">
+            <ul class="review-list neo-stagger-list">
               <li
                 v-for="item in review.next_training_focus"
                 :key="item"
@@ -187,7 +187,10 @@
             :message="evaluationLogsError"
           />
 
-          <div v-else-if="evaluationLogs.length" class="review-audit-list">
+          <div
+            v-else-if="evaluationLogs.length"
+            class="review-audit-list neo-stagger-list"
+          >
             <article
               v-for="item in evaluationLogs"
               :key="item.id"
@@ -231,7 +234,7 @@
         </section>
       </main>
 
-      <aside class="review-side">
+      <aside class="review-side neo-stagger-list">
         <section class="neo-panel review-side-panel">
           <label class="space-y-2">
             <span class="text-xs font-black uppercase tracking-[0.08em]">
@@ -301,7 +304,7 @@
           <p class="neo-kicker bg-[var(--neo-green)]">
             {{ t('review.scoreBreakdown') }}
           </p>
-          <div class="review-score-list">
+          <div class="review-score-list neo-stagger-list">
             <div
               v-for="(value, key) in review.score_breakdown"
               :key="key"

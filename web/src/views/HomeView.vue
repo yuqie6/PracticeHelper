@@ -23,7 +23,7 @@
             </RouterLink>
           </div>
 
-          <div v-if="showOnboarding" class="home-stage-steps">
+          <div v-if="showOnboarding" class="home-stage-steps neo-stagger-list">
             <RouterLink
               v-for="step in onboardingSteps"
               :key="step.key"
@@ -64,7 +64,7 @@
         </div>
       </section>
 
-      <div class="home-stage-sidebar">
+      <div class="home-stage-sidebar neo-stagger-list">
         <article class="neo-panel home-signal home-signal-blue">
           <p class="neo-kicker bg-white">{{ t('home.deadline.kicker') }}</p>
           <h3 class="home-signal-title">{{ t('home.deadline.title') }}</h3>
@@ -177,7 +177,7 @@
     </div>
 
     <section class="neo-panel home-metric-strip">
-      <div class="home-metric-grid">
+      <div class="home-metric-grid neo-stagger-list">
         <article
           v-for="item in summaryTiles"
           :key="item.kicker"
@@ -206,7 +206,7 @@
             <p class="neo-note home-section-summary">{{ weaknessSummary }}</p>
           </div>
 
-          <ul class="home-list">
+          <ul class="home-list neo-stagger-list">
             <li
               v-for="item in dashboard?.weaknesses ?? []"
               :key="item.id"
@@ -236,7 +236,7 @@
             </li>
           </ul>
 
-          <div v-if="trends.length" class="home-trend-grid">
+          <div v-if="trends.length" class="home-trend-grid neo-stagger-list">
             <div
               v-for="trend in trends"
               :key="trend.id"
@@ -291,7 +291,7 @@
             <p class="neo-note home-section-summary">{{ sessionSummary }}</p>
           </div>
 
-          <ul class="home-list">
+          <ul class="home-list neo-stagger-list">
             <li
               v-for="session in dashboard?.recent_sessions ?? []"
               :key="session.id"
@@ -356,7 +356,7 @@
             </h3>
           </div>
 
-          <div class="home-queue-list">
+          <div class="home-queue-list neo-stagger-list">
             <article
               v-for="item in dueReviews.slice(0, 5)"
               :key="item.id"
@@ -769,14 +769,14 @@ function onboardingStepClass(status: OnboardingStepStatus): string {
   gap: 0.75rem;
   padding: 1rem;
   transition:
-    transform 180ms ease,
-    box-shadow 180ms ease,
-    background-color 180ms ease;
+    transform var(--motion-duration-base) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-soft);
 }
 
 .home-stage-step:hover {
   box-shadow: 8px 8px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
-  transform: translate(-2px, -2px);
+  transform: translate(var(--motion-lift-md), var(--motion-lift-md));
 }
 
 .home-stage-step-status {
@@ -1059,7 +1059,7 @@ function onboardingStepClass(status: OnboardingStepStatus): string {
 
 .home-link-row {
   display: block;
-  transition: transform 180ms ease;
+  transition: transform var(--motion-duration-base) var(--motion-ease-standard);
 }
 
 .home-link-row:hover {
@@ -1102,13 +1102,13 @@ function onboardingStepClass(status: OnboardingStepStatus): string {
   gap: 0.85rem;
   padding: 1rem;
   transition:
-    transform 180ms ease,
-    box-shadow 180ms ease;
+    transform var(--motion-duration-base) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard);
 }
 
 .home-queue-item:hover {
   box-shadow: 8px 8px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
-  transform: translate(-2px, -2px);
+  transform: translate(var(--motion-lift-md), var(--motion-lift-md));
 }
 
 .home-queue-actions {

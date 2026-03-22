@@ -70,6 +70,7 @@
               :to="item.to"
               class="app-nav-link"
               :class="item.active ? 'app-nav-link-active' : ''"
+              :aria-current="item.active ? 'page' : undefined"
             >
               {{ item.label }}
             </RouterLink>
@@ -239,10 +240,10 @@ function isRouteActive(prefixes: string[]): boolean {
 }
 
 .app-header {
-  backdrop-filter: blur(10px);
-  background: color-mix(in srgb, var(--neo-bg) 82%, transparent);
-  border-bottom: 2px solid
-    color-mix(in srgb, var(--neo-border) 18%, transparent);
+  backdrop-filter: blur(6px);
+  background: color-mix(in srgb, var(--neo-bg) 90%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--neo-border) 16%, transparent);
   position: sticky;
   top: 0;
   z-index: 40;
@@ -251,61 +252,71 @@ function isRouteActive(prefixes: string[]): boolean {
 .app-header-main {
   align-items: start;
   display: grid;
-  gap: 1rem;
-  padding-bottom: 1rem;
-  padding-top: 1.25rem;
+  gap: 0.6rem;
+  padding-bottom: 0.45rem;
+  padding-top: 0.55rem;
 }
 
 .app-brand {
   display: grid;
-  gap: 0.9rem;
+  gap: 0.5rem;
 }
 
 .app-brand-title {
-  font-size: clamp(1.8rem, 4vw, 2.9rem);
+  font-size: clamp(1.1rem, 2.5vw, 1.55rem);
   font-weight: 900;
-  letter-spacing: -0.06em;
-  line-height: 0.95;
+  letter-spacing: -0.04em;
+  line-height: 1;
   margin: 0;
   text-transform: uppercase;
 }
 
 .app-brand-note {
-  font-size: 0.82rem;
+  font-size: 0.62rem;
   font-weight: 900;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.14em;
   line-height: 1.4;
   margin: 0;
-  opacity: 0.72;
+  opacity: 0.56;
   text-transform: uppercase;
 }
 
 .app-import-notice {
-  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
+  background: color-mix(in srgb, var(--neo-yellow) 18%, var(--neo-bg));
   border: 2px solid var(--neo-border);
-  box-shadow: 4px 4px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
+  box-shadow: 3px 3px 0 0
+    rgba(var(--neo-shadow-rgb), calc(var(--neo-shadow-alpha) * 0.9));
   display: inline-flex;
-  font-size: 0.78rem;
+  font-size: 0.66rem;
   font-weight: 900;
   letter-spacing: 0.08em;
   max-width: 100%;
-  padding: 0.75rem 0.9rem;
+  padding: 0.42rem 0.62rem;
   text-transform: uppercase;
+  transition:
+    transform var(--motion-duration-base) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-soft);
+}
+
+.app-import-notice:hover {
+  box-shadow: 5px 5px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
+  transform: translate(var(--motion-lift-sm), var(--motion-lift-sm));
 }
 
 .app-controls {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.4rem;
 }
 
 .app-toggle-group {
   align-items: start;
   display: grid;
-  gap: 0.45rem;
+  gap: 0.22rem;
 }
 
 .app-toggle-label {
-  font-size: 0.72rem;
+  font-size: 0.6rem;
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -314,82 +325,158 @@ function isRouteActive(prefixes: string[]): boolean {
 .app-toggle-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .app-toggle-chip {
-  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
-  border: 2px solid var(--neo-border);
-  font-size: 0.74rem;
+  background: color-mix(in srgb, var(--neo-bg) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--neo-border) 26%, transparent);
+  box-shadow: 2px 2px 0 0
+    rgba(var(--neo-shadow-rgb), calc(var(--neo-shadow-alpha) * 0.55));
+  font-size: 0.68rem;
   font-weight: 900;
   letter-spacing: 0.08em;
-  min-height: 2.1rem;
-  padding: 0.45rem 0.8rem;
+  min-height: 1.65rem;
+  padding: 0.24rem 0.52rem;
   text-transform: uppercase;
-  transition: background-color 180ms ease;
+  transition:
+    transform var(--motion-duration-base) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-soft),
+    border-color var(--motion-duration-fast) var(--motion-ease-soft);
+}
+
+.app-toggle-chip:hover {
+  border-color: color-mix(in srgb, var(--neo-border) 40%, transparent);
+  box-shadow: 3px 3px 0 0
+    rgba(var(--neo-shadow-rgb), calc(var(--neo-shadow-alpha) * 0.72));
+  transform: translate(var(--motion-lift-sm), var(--motion-lift-sm));
 }
 
 .app-toggle-chip-active {
-  background: color-mix(in srgb, var(--neo-yellow) 70%, white);
+  background: color-mix(in srgb, var(--neo-yellow) 34%, var(--neo-bg));
+  border-color: var(--neo-border);
+  box-shadow: 3px 3px 0 0
+    rgba(var(--neo-shadow-rgb), calc(var(--neo-shadow-alpha) * 0.7));
 }
 
 .app-nav-shell {
   border-top: 1px solid color-mix(in srgb, var(--neo-border) 14%, transparent);
-  padding-bottom: 0.75rem;
+  padding-bottom: 0.28rem;
 }
 
 .app-nav-wrap {
   padding-bottom: 0;
-  padding-top: 0.75rem;
+  padding-top: 0.32rem;
 }
 
 .app-nav {
   display: flex;
-  gap: 0.65rem;
+  gap: 0.35rem;
   overflow-x: auto;
-  padding-bottom: 0.15rem;
+  padding-bottom: 0.1rem;
 }
 
 .app-nav-link {
-  background: color-mix(in srgb, var(--neo-surface) 86%, transparent);
-  border: 2px solid color-mix(in srgb, var(--neo-border) 24%, transparent);
+  background: color-mix(in srgb, var(--neo-bg) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--neo-border) 16%, transparent);
   color: var(--neo-text);
   display: inline-flex;
-  font-size: 0.8rem;
+  font-size: 0.66rem;
   font-weight: 900;
   letter-spacing: 0.08em;
-  min-height: 2.4rem;
+  min-height: 1.8rem;
   min-width: max-content;
-  padding: 0.55rem 0.9rem;
+  overflow: hidden;
+  padding: 0.3rem 0.58rem;
+  position: relative;
   text-transform: uppercase;
   transition:
-    transform 180ms ease,
-    background-color 180ms ease,
-    border-color 180ms ease;
+    transform var(--motion-duration-base) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-soft),
+    border-color var(--motion-duration-fast) var(--motion-ease-soft),
+    color var(--motion-duration-fast) var(--motion-ease-soft);
+}
+
+.app-nav-link::after {
+  background: color-mix(in srgb, var(--neo-yellow) 88%, var(--neo-red) 12%);
+  bottom: 0.24rem;
+  content: '';
+  height: 2px;
+  left: 0.52rem;
+  opacity: 0;
+  position: absolute;
+  right: 0.52rem;
+  transform: scaleX(0.35);
+  transform-origin: left;
+  transition:
+    opacity var(--motion-duration-fast) var(--motion-ease-soft),
+    transform var(--motion-duration-base) var(--motion-ease-standard);
 }
 
 .app-nav-link:hover {
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--neo-paper) 56%, var(--neo-bg));
+  border-color: color-mix(in srgb, var(--neo-border) 28%, transparent);
+  box-shadow: 3px 3px 0 0
+    rgba(var(--neo-shadow-rgb), calc(var(--neo-shadow-alpha) * 0.7));
+  transform: translate(var(--motion-lift-sm), var(--motion-lift-sm));
+}
+
+.app-nav-link:hover::after {
+  opacity: 0.72;
+  transform: scaleX(1);
 }
 
 .app-nav-link-active {
-  background: var(--neo-black);
-  border-color: var(--neo-border);
-  color: white;
+  background: color-mix(in srgb, var(--neo-yellow) 22%, var(--neo-bg));
+  border-color: color-mix(in srgb, var(--neo-border) 32%, transparent);
+  box-shadow: 3px 3px 0 0
+    rgba(var(--neo-shadow-rgb), calc(var(--neo-shadow-alpha) * 0.72));
+  color: var(--neo-text);
+}
+
+.app-nav-link-active::after {
+  opacity: 1;
+  transform: scaleX(1);
 }
 
 .app-main {
-  min-height: calc(100vh - 10rem);
+  min-height: calc(100vh - 6.4rem);
 }
 
 @media (min-width: 1024px) {
   .app-header-main {
     align-items: end;
     grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1rem;
   }
 
   .app-controls {
     justify-items: end;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-import-notice,
+  .app-toggle-chip,
+  .app-nav-link,
+  .app-nav-link::after {
+    transition: none;
+  }
+
+  .app-import-notice:hover,
+  .app-toggle-chip:hover,
+  .app-nav-link:hover {
+    box-shadow: inherit;
+    transform: none;
+  }
+
+  .app-nav-link::after,
+  .app-nav-link:hover::after,
+  .app-nav-link-active::after {
+    opacity: 1;
+    transform: none;
   }
 }
 </style>

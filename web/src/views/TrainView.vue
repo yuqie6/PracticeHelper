@@ -10,7 +10,7 @@
           {{ t('train.hero.description') }}
         </p>
 
-        <div class="train-stage-stats">
+        <div class="train-stage-stats neo-stagger-list">
           <article class="train-stage-stat">
             <span>{{ projectCount }}</span>
             <small>{{ t('projects.listTitle') }}</small>
@@ -32,13 +32,13 @@
             {{ t('home.currentSession.kicker') }}
           </p>
           <h2 class="text-xl font-black">{{ t('train.resumeTitle') }}</h2>
-            <p class="neo-note">
-              {{
-                t('train.resumeDescription', {
-                  name: formatSessionName(t, currentSession),
-                  status: formatStatusLabel(t, currentSession.status),
-                })
-              }}
+          <p class="neo-note">
+            {{
+              t('train.resumeDescription', {
+                name: formatSessionName(t, currentSession),
+                status: formatStatusLabel(t, currentSession.status),
+              })
+            }}
           </p>
           <RouterLink
             :to="buildSessionTarget(currentSession)"
@@ -111,7 +111,10 @@
     />
 
     <div class="train-shell">
-      <form class="neo-panel train-form-panel" @submit.prevent="submit">
+      <form
+        class="neo-panel train-form-panel neo-stagger-list"
+        @submit.prevent="submit"
+      >
         <section class="train-form-section">
           <div class="train-section-head">
             <div class="space-y-2">
@@ -319,7 +322,7 @@
         </div>
       </form>
 
-      <aside class="train-side">
+      <aside class="train-side neo-stagger-list">
         <section class="neo-panel train-side-panel">
           <p class="neo-kicker bg-[var(--neo-blue)]">
             {{

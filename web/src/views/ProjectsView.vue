@@ -109,7 +109,10 @@
             </span>
           </div>
 
-          <div v-if="importJobs.length" class="projects-job-list">
+          <div
+            v-if="importJobs.length"
+            class="projects-job-list neo-stagger-list"
+          >
             <article
               v-for="job in importJobs"
               :key="job.id"
@@ -142,7 +145,7 @@
                   v-if="job.project_id"
                   type="button"
                   class="neo-button-dark w-full"
-                  @click="selectProject(job.project_id)"
+                  @click="selectProject(job.project_id, { revealDetail: true })"
                 >
                   {{ t('projects.openProject') }}
                 </button>
@@ -180,7 +183,7 @@
             <span class="neo-badge bg-white">{{ projects.length }}</span>
           </div>
 
-          <div v-if="projects.length" class="projects-list">
+          <div v-if="projects.length" class="projects-list neo-stagger-list">
             <button
               v-for="project in projects"
               :key="project.id"
@@ -189,7 +192,7 @@
               :class="{
                 'projects-list-row-active': selectedProjectId === project.id,
               }"
-              @click="selectProject(project.id)"
+              @click="selectProject(project.id, { revealDetail: true })"
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="space-y-1">
@@ -212,7 +215,11 @@
           </p>
         </section>
 
-        <section v-if="selectedProject" class="neo-panel projects-editor-panel">
+        <section
+          v-if="selectedProject"
+          ref="projectDetailRef"
+          class="neo-panel projects-editor-panel"
+        >
           <div class="projects-section-head">
             <div class="space-y-2">
               <p class="neo-kicker bg-[var(--neo-red)]">
@@ -327,7 +334,7 @@
 
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 
@@ -357,6 +364,7 @@ const retryError = ref('');
 const saveError = ref('');
 const { t } = useI18n();
 const onboardingMode = computed(() => route.query.onboarding === '1');
+const projectDetailRef = ref<HTMLElement | null>(null);
 
 const editor = reactive({
   name: '',
@@ -410,7 +418,7 @@ watch(
     // 页面交互默认是“列表有数据就始终绑定一个当前编辑对象”，
     // 这里只在还没有用户选择时自动选首项，避免 refetch 把正在编辑的项目切走。
     if (!selectedProjectId.value && items.length > 0) {
-      selectProject(items[0].id);
+      selectProject(items[0].id, { revealDetail: false });
     }
   },
   { immediate: true },
@@ -443,9 +451,6 @@ const importMutation = useMutation({
   onSuccess: async (project) => {
     repoUrl.value = '';
     importError.value = '';
-    if (project.project_id) {
-      selectedProjectId.value = project.project_id;
-    }
     await queryClient.invalidateQueries({ queryKey: ['import-jobs'] });
     await queryClient.invalidateQueries({ queryKey: ['projects'] });
 
@@ -453,6 +458,11 @@ const importMutation = useMutation({
       await router.push(
         `/train?onboarding=1&mode=project&project_id=${encodeURIComponent(project.project_id)}`,
       );
+      return;
+    }
+
+    if (project.project_id) {
+      await selectProject(project.project_id, { revealDetail: true });
     }
   },
   onError: (error) => {
@@ -504,8 +514,20 @@ function splitLines(value: string): string[] {
     .filter(Boolean);
 }
 
-function selectProject(projectId: string) {
+async function selectProject(
+  projectId: string,
+  options: { revealDetail?: boolean } = {},
+) {
   selectedProjectId.value = projectId;
+  if (!options.revealDetail || !shouldRevealProjectDetail()) {
+    return;
+  }
+
+  await nextTick();
+  projectDetailRef.value?.scrollIntoView({
+    behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    block: 'start',
+  });
 }
 
 function submitImport() {
@@ -545,6 +567,28 @@ function mutationGuard(value: string, action: () => void) {
   }
 
   action();
+}
+
+function shouldRevealProjectDetail(): boolean {
+  if (
+    typeof window === 'undefined' ||
+    typeof window.matchMedia !== 'function'
+  ) {
+    return false;
+  }
+
+  return window.matchMedia('(max-width: 1279px)').matches;
+}
+
+function prefersReducedMotion(): boolean {
+  if (
+    typeof window === 'undefined' ||
+    typeof window.matchMedia !== 'function'
+  ) {
+    return false;
+  }
+
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 </script>
 
@@ -691,15 +735,15 @@ function mutationGuard(value: string, action: () => void) {
   gap: 0.85rem;
   padding: 1rem;
   transition:
-    transform 180ms ease,
-    box-shadow 180ms ease,
-    background-color 180ms ease;
+    transform var(--motion-duration-base) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-soft);
 }
 
 .projects-job-row:hover,
 .projects-list-row:hover {
   box-shadow: 8px 8px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
-  transform: translate(-2px, -2px);
+  transform: translate(var(--motion-lift-md), var(--motion-lift-md));
 }
 
 .projects-list-row-active {

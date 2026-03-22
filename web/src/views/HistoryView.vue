@@ -30,7 +30,7 @@
     </header>
 
     <div class="history-shell">
-      <aside class="history-side">
+      <aside class="history-side neo-stagger-list">
         <section class="neo-panel history-filter-panel">
           <div class="history-section-head">
             <div class="space-y-2">
@@ -172,7 +172,10 @@
           <p class="neo-note">{{ t('history.empty') }}</p>
         </section>
 
-        <section v-else class="neo-panel history-results-panel">
+        <section
+          v-else
+          class="neo-panel history-results-panel neo-stagger-list"
+        >
           <div class="history-section-head">
             <div class="space-y-2">
               <p class="neo-kicker bg-[var(--neo-yellow)]">
@@ -566,7 +569,7 @@ function resolveSessionLink(item: TrainingSessionSummary) {
 .history-row-link {
   display: grid;
   gap: 0.85rem;
-  transition: transform 180ms ease;
+  transition: transform var(--motion-duration-base) var(--motion-ease-standard);
 }
 
 .history-row-link:hover {
