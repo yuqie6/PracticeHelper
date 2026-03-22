@@ -1,5 +1,9 @@
 # 架构文档 - PracticeHelper
 
+当前工程收口执行计划见 [ARCHITECTURE_CONVERGENCE_PLAN.md](./ARCHITECTURE_CONVERGENCE_PLAN.md)；
+如果要继续推进训练域 agent runtime 的深层升级，见
+[AGENT_DEEP_REDESIGN_PLAN.md](./AGENT_DEEP_REDESIGN_PLAN.md)。
+
 ## 1. 系统总览
 
 PracticeHelper 由三个进程组成，通过 HTTP 通信：

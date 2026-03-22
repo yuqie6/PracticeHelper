@@ -4,6 +4,8 @@
 
 如果后续要把 sidecar 从“当前这套已具备 agent loop、行动工具、长期记忆装载和 Go 侧副作用回写的受约束 agent runtime”继续升级为“训练域里的成熟 agent runtime”，当前仓库已经有一份按源码审校过的独立方案，见 [AGENT_DEEP_REDESIGN_PLAN.md](./AGENT_DEEP_REDESIGN_PLAN.md)。
 
+当前这轮工程收口则走独立执行计划，见 [ARCHITECTURE_CONVERGENCE_PLAN.md](./ARCHITECTURE_CONVERGENCE_PLAN.md)。
+
 ## 已完成
 
 | Phase | 内容 | 交付物 |
