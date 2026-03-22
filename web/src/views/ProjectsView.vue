@@ -430,21 +430,25 @@ const selectedProject = computed(
     null,
 );
 
-watch(selectedProject, (project) => {
-  if (!project) {
-    return;
-  }
-  // 编辑器用逗号/换行文本框承载数组字段，目的是降低手工维护成本，
-  // 所以这里需要把后端结构化数据稳定映射回用户可直接粘贴编辑的文本格式。
-  editor.name = project.name;
-  editor.summary = project.summary;
-  editor.tech_stack = project.tech_stack.join(', ');
-  editor.highlights = project.highlights.join('\n');
-  editor.challenges = project.challenges.join('\n');
-  editor.tradeoffs = project.tradeoffs.join('\n');
-  editor.ownership_points = project.ownership_points.join('\n');
-  editor.followup_points = project.followup_points.join('\n');
-});
+watch(
+  selectedProject,
+  (project) => {
+    if (!project) {
+      return;
+    }
+    // 编辑器用逗号/换行文本框承载数组字段，目的是降低手工维护成本，
+    // 所以这里需要把后端结构化数据稳定映射回用户可直接粘贴编辑的文本格式。
+    editor.name = project.name;
+    editor.summary = project.summary;
+    editor.tech_stack = project.tech_stack.join(', ');
+    editor.highlights = project.highlights.join('\n');
+    editor.challenges = project.challenges.join('\n');
+    editor.tradeoffs = project.tradeoffs.join('\n');
+    editor.ownership_points = project.ownership_points.join('\n');
+    editor.followup_points = project.followup_points.join('\n');
+  },
+  { immediate: true },
+);
 
 const importMutation = useMutation({
   mutationFn: importProject,
