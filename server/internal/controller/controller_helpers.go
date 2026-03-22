@@ -117,6 +117,14 @@ func streamJSON(
 }
 
 func errorCode(err error) string {
+	type codedError interface {
+		ErrorCode() string
+	}
+	var coded codedError
+	if errors.As(err, &coded) && coded.ErrorCode() != "" {
+		return coded.ErrorCode()
+	}
+
 	switch {
 	case errors.Is(err, service.ErrInvalidMode):
 		return "invalid_mode"

@@ -209,6 +209,7 @@ func migrate(db *sql.DB) error {
 			prompt_set_id TEXT NOT NULL DEFAULT '',
 			prompt_hash TEXT NOT NULL DEFAULT '',
 			raw_output TEXT NOT NULL DEFAULT '',
+			runtime_trace_json TEXT NOT NULL DEFAULT 'null',
 			latency_ms REAL NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL
 		);`,
@@ -389,6 +390,9 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 	if err := ensureColumn(db, "evaluation_logs", "raw_output", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "evaluation_logs", "runtime_trace_json", "TEXT NOT NULL DEFAULT 'null'"); err != nil {
 		return err
 	}
 	if err := ensureColumn(db, "project_import_jobs", "claim_token", "TEXT NOT NULL DEFAULT ''"); err != nil {

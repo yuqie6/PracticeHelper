@@ -16,6 +16,10 @@ from app.config import Settings
 class ModelClientError(RuntimeError):
     """Raised when the upstream LLM provider cannot satisfy a request."""
 
+    def __init__(self, message: str, *, code: str = "") -> None:
+        super().__init__(message)
+        self.code = code
+
 
 @dataclass(frozen=True)
 class ChatCompletionResult:

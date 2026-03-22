@@ -29,6 +29,7 @@ func (s *Service) recordEvaluationLog(
 		metaValue(meta, func(item *domain.PromptExecutionMeta) string { return item.PromptSetID }),
 		metaValue(meta, func(item *domain.PromptExecutionMeta) string { return item.PromptHash }),
 		metaValue(meta, func(item *domain.PromptExecutionMeta) string { return item.RawOutput }),
+		metaTrace(meta),
 		latencyMs,
 	)
 }
@@ -41,4 +42,11 @@ func metaValue(
 		return ""
 	}
 	return pick(meta)
+}
+
+func metaTrace(meta *domain.PromptExecutionMeta) *domain.RuntimeTrace {
+	if meta == nil {
+		return nil
+	}
+	return meta.RuntimeTrace
 }

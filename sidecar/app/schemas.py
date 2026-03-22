@@ -48,6 +48,8 @@ from app.schema_runtime import (
     GenerateReviewSideEffects,
     NextSession,
     ReviewCard,
+    RuntimeTrace,
+    RuntimeTraceEntry,
     TrainingSession,
     TrainingTurn,
 )
@@ -94,6 +96,8 @@ __all__ = [
     "RerankMemoryResponse",
     "RerankMemoryResult",
     "ReviewCard",
+    "RuntimeTrace",
+    "RuntimeTraceEntry",
     "SessionMemorySummary",
     "TrainingSession",
     "TrainingTurn",

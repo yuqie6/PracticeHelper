@@ -18,6 +18,16 @@ def test_evaluate_answer_stream_endpoint_sets_prompt_headers_and_streams_ndjson(
     def fake_stream(_request):
         yield {"type": "phase", "phase": "prepare_context"}
         yield {
+            "type": "trace",
+            "data": {
+                "flow": "evaluate_answer",
+                "phase": "prepare_context",
+                "status": "info",
+                "code": "runtime_started",
+                "message": "开始执行 agent runtime。",
+            },
+        }
+        yield {
             "type": "result",
             "data": {
                 "result": {
@@ -33,6 +43,17 @@ def test_evaluate_answer_stream_endpoint_sets_prompt_headers_and_streams_ndjson(
                     "weakness_hits": [],
                 },
                 "raw_output": '{"score":88}',
+                "trace": {
+                    "entries": [
+                        {
+                            "flow": "evaluate_answer",
+                            "phase": "finalize",
+                            "status": "success",
+                            "code": "runtime_completed",
+                            "message": "agent runtime 已稳定收口。",
+                        }
+                    ]
+                },
             },
         }
 
@@ -60,8 +81,10 @@ def test_evaluate_answer_stream_endpoint_sets_prompt_headers_and_streams_ndjson(
 
     lines = [json.loads(line) for line in response.text.splitlines() if line.strip()]
     assert lines[0] == {"type": "phase", "phase": "prepare_context"}
+    assert lines[1]["type"] == "trace"
     assert lines[-1]["data"]["result"]["score"] == 88
     assert lines[-1]["data"]["raw_output"] == '{"score":88}'
+    assert lines[-1]["data"]["trace"]["entries"][0]["code"] == "runtime_completed"
 
 
 def test_generate_review_stream_endpoint_sets_prompt_headers_and_streams_ndjson(
@@ -137,6 +160,7 @@ def test_model_client_errors_map_to_expected_status_codes(monkeypatch) -> None:
         },
     )
     assert required_response.status_code == 503
+    assert required_response.json()["error"]["code"] == "llm_required"
     assert "LLM is required" in required_response.json()["error"]["message"]
 
     monkeypatch.setitem(main.flows, "generate_review", GatewayFlow())
@@ -145,6 +169,7 @@ def test_model_client_errors_map_to_expected_status_codes(monkeypatch) -> None:
         json={"session": {"id": "sess_1", "mode": "basics", "topic": "redis"}},
     )
     assert gateway_response.status_code == 502
+    assert gateway_response.json()["error"]["code"] == "unknown_error"
     assert "provider temporarily unavailable" in gateway_response.json()["error"]["message"]
 
 

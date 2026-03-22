@@ -1295,27 +1295,30 @@ func TestCreateEvaluationLogPersistsEntry(t *testing.T) {
 		"stable-v1",
 		"hash-evaluate-answer",
 		"{\"score\":82}",
+		nil,
 		12.5,
 	); err != nil {
 		t.Fatalf("CreateEvaluationLog() error = %v", err)
 	}
 
 	var (
-		sessionID   string
-		turnID      string
-		flowName    string
-		modelName   string
-		promptSetID string
-		promptHash  string
-		rawOutput   string
-		latencyMs   float64
+		sessionID        string
+		turnID           string
+		flowName         string
+		modelName        string
+		promptSetID      string
+		promptHash       string
+		rawOutput        string
+		runtimeTraceJSON string
+		latencyMs        float64
 	)
 	if err := store.db.QueryRow(`
-		SELECT session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash, raw_output, latency_ms
-		FROM evaluation_logs
-		ORDER BY id DESC
-		LIMIT 1
-	`).Scan(
+			SELECT session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash,
+				raw_output, runtime_trace_json, latency_ms
+			FROM evaluation_logs
+			ORDER BY id DESC
+			LIMIT 1
+		`).Scan(
 		&sessionID,
 		&turnID,
 		&flowName,
@@ -1323,6 +1326,7 @@ func TestCreateEvaluationLogPersistsEntry(t *testing.T) {
 		&promptSetID,
 		&promptHash,
 		&rawOutput,
+		&runtimeTraceJSON,
 		&latencyMs,
 	); err != nil {
 		t.Fatalf("query evaluation log: %v", err)
@@ -1345,6 +1349,9 @@ func TestCreateEvaluationLogPersistsEntry(t *testing.T) {
 	}
 	if rawOutput != "{\"score\":82}" {
 		t.Fatalf("expected raw output to persist, got %q", rawOutput)
+	}
+	if runtimeTraceJSON != "null" {
+		t.Fatalf("expected empty runtime trace json, got %q", runtimeTraceJSON)
 	}
 	if latencyMs != 12.5 {
 		t.Fatalf("expected latency 12.5, got %.2f", latencyMs)

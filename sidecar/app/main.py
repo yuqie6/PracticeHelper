@@ -103,7 +103,10 @@ async def log_requests(request: Request, call_next):
 def handle_model_client_error(_: Request, exc: ModelClientError) -> JSONResponse:
     message = str(exc)
     status_code = 503 if "LLM is required" in message else 502
-    return JSONResponse(status_code=status_code, content={"error": {"message": message}})
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"code": exc.code or classify_error_code(exc), "message": message}},
+    )
 
 
 @app.get("/healthz")
@@ -228,11 +231,55 @@ def _ndjson_stream(events):
     try:
         for event in events:
             yield JSONResponse(content=event).body + b"\n"
+    except ModelClientError as exc:
+        yield (
+            JSONResponse(
+                content={
+                    "type": "error",
+                    "code": exc.code or classify_error_code(exc),
+                    "message": str(exc),
+                }
+            ).body
+            + b"\n"
+        )
     except Exception as exc:
-        yield JSONResponse(content={"type": "error", "message": str(exc)}).body + b"\n"
+        yield (
+            JSONResponse(
+                content={
+                    "type": "error",
+                    "code": classify_error_code(exc),
+                    "message": str(exc),
+                }
+            ).body
+            + b"\n"
+        )
 
 
 def apply_prompt_headers(response: Response, prompt_meta) -> None:
     response.headers[PROMPT_SET_HEADER] = prompt_meta.prompt_set_id
     response.headers[PROMPT_HASH_HEADER] = prompt_meta.prompt_hash
     response.headers[MODEL_NAME_HEADER] = settings.model
+
+
+def classify_error_code(exc: Exception) -> str:
+    if isinstance(exc, ModelClientError) and exc.code:
+        return exc.code
+
+    message = str(exc).lower()
+    if "required" in message and "llm" in message:
+        return "llm_required"
+    if "required tool context" in message:
+        return "tool_context_missing"
+    if "validation" in message:
+        return "semantic_validation_failed"
+    if "json" in message:
+        return "json_parse_failed"
+    if "timeout" in message or "timed out" in message:
+        return "timeout"
+    if "go backend" in message:
+        return "backend_callback_failed"
+    if "tool loop" in message:
+        return "tool_loop_exhausted"
+    if "single-shot" in message:
+        return "single_shot_failed"
+    return "unknown_error"

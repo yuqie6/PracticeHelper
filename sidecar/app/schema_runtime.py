@@ -53,14 +53,30 @@ class AnalyzeJobTargetResponse(JobTargetAnalysisSnapshot):
     pass
 
 
+class RuntimeTraceEntry(BaseModel):
+    flow: str
+    phase: str
+    status: str = "info"
+    code: str = ""
+    message: str = ""
+    attempt: int = 0
+    tool_name: str = ""
+
+
+class RuntimeTrace(BaseModel):
+    entries: list[RuntimeTraceEntry] = Field(default_factory=list)
+
+
 class AnalyzeRepoEnvelope(BaseModel):
     result: AnalyzeRepoResponse
     raw_output: str = ""
+    trace: RuntimeTrace | None = None
 
 
 class AnalyzeJobTargetEnvelope(BaseModel):
     result: AnalyzeJobTargetResponse
     raw_output: str = ""
+    trace: RuntimeTrace | None = None
 
 
 class GenerateQuestionRequest(BaseModel):
@@ -86,6 +102,7 @@ class GenerateQuestionResponse(BaseModel):
 class GenerateQuestionEnvelope(BaseModel):
     result: GenerateQuestionResponse
     raw_output: str = ""
+    trace: RuntimeTrace | None = None
 
 
 class EvaluateAnswerRequest(BaseModel):
@@ -128,6 +145,7 @@ class EvaluateAnswerEnvelope(BaseModel):
     result: EvaluationResult
     side_effects: EvaluateAnswerSideEffects = Field(default_factory=EvaluateAnswerSideEffects)
     raw_output: str = ""
+    trace: RuntimeTrace | None = None
 
 
 class TrainingTurn(BaseModel):
@@ -205,3 +223,4 @@ class GenerateReviewEnvelope(BaseModel):
     result: ReviewCard
     side_effects: GenerateReviewSideEffects | None = None
     raw_output: str = ""
+    trace: RuntimeTrace | None = None

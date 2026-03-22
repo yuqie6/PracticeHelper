@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"practicehelper/server/internal/domain"
@@ -17,12 +18,20 @@ func (s *Store) CreateEvaluationLog(
 	promptSetID string,
 	promptHash string,
 	rawOutput string,
+	runtimeTrace *domain.RuntimeTrace,
 	latencyMs float64,
 ) error {
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO evaluation_logs (session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash, raw_output, latency_ms, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, sessionID, turnID, flowName, modelName, promptSetID, promptHash, rawOutput, latencyMs, nowUTC())
+	runtimeTraceJSON, err := marshalRuntimeTrace(runtimeTrace)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `
+        INSERT INTO evaluation_logs (
+            session_id, turn_id, flow_name, model_name, prompt_set_id,
+            prompt_hash, raw_output, runtime_trace_json, latency_ms, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, sessionID, turnID, flowName, modelName, promptSetID, promptHash, rawOutput, runtimeTraceJSON, latencyMs, nowUTC())
 	if err != nil {
 		return fmt.Errorf("create evaluation log: %w", err)
 	}
@@ -34,10 +43,11 @@ func (s *Store) ListEvaluationLogsBySession(
 	sessionID string,
 ) ([]domain.EvaluationLogEntry, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash, raw_output, latency_ms, created_at
-		FROM evaluation_logs
-		WHERE session_id = ?
-		ORDER BY created_at ASC, id ASC
+        SELECT id, session_id, turn_id, flow_name, model_name, prompt_set_id, prompt_hash,
+            raw_output, runtime_trace_json, latency_ms, created_at
+        FROM evaluation_logs
+        WHERE session_id = ?
+        ORDER BY created_at ASC, id ASC
 	`, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("list evaluation logs: %w", err)
@@ -191,7 +201,7 @@ func scanEvaluationLogEntry(
 	var (
 		id                                                  int64
 		sessionID, turnID, flowName, modelName, promptSetID string
-		promptHash, rawOutput, createdAt                    string
+		promptHash, rawOutput, runtimeTraceJSON, createdAt  string
 		latencyMs                                           float64
 	)
 	if err := scanner.Scan(
@@ -203,24 +213,57 @@ func scanEvaluationLogEntry(
 		&promptSetID,
 		&promptHash,
 		&rawOutput,
+		&runtimeTraceJSON,
 		&latencyMs,
 		&createdAt,
 	); err != nil {
 		return nil, err
 	}
 
+	runtimeTrace, err := unmarshalRuntimeTrace(runtimeTraceJSON)
+	if err != nil {
+		return nil, err
+	}
+
 	return &domain.EvaluationLogEntry{
-		ID:          id,
-		SessionID:   sessionID,
-		TurnID:      turnID,
-		FlowName:    flowName,
-		ModelName:   modelName,
-		PromptSetID: promptSetID,
-		PromptHash:  promptHash,
-		RawOutput:   rawOutput,
-		LatencyMs:   latencyMs,
-		CreatedAt:   parseTime(createdAt),
+		ID:           id,
+		SessionID:    sessionID,
+		TurnID:       turnID,
+		FlowName:     flowName,
+		ModelName:    modelName,
+		PromptSetID:  promptSetID,
+		PromptHash:   promptHash,
+		RawOutput:    rawOutput,
+		RuntimeTrace: runtimeTrace,
+		LatencyMs:    latencyMs,
+		CreatedAt:    parseTime(createdAt),
 	}, nil
+}
+
+func marshalRuntimeTrace(trace *domain.RuntimeTrace) (string, error) {
+	if trace == nil || len(trace.Entries) == 0 {
+		return "null", nil
+	}
+	payload, err := json.Marshal(trace)
+	if err != nil {
+		return "", fmt.Errorf("marshal runtime trace: %w", err)
+	}
+	return string(payload), nil
+}
+
+func unmarshalRuntimeTrace(raw string) (*domain.RuntimeTrace, error) {
+	if raw == "" || raw == "null" {
+		return nil, nil
+	}
+
+	var trace domain.RuntimeTrace
+	if err := json.Unmarshal([]byte(raw), &trace); err != nil {
+		return nil, fmt.Errorf("unmarshal runtime trace: %w", err)
+	}
+	if len(trace.Entries) == 0 {
+		return nil, nil
+	}
+	return &trace, nil
 }
 
 func promptExperimentSessionWhere(

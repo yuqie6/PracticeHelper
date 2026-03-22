@@ -350,6 +350,7 @@ func seedPromptExperimentSession(
 			promptSet.ID,
 			item.promptHash,
 			item.rawOutput,
+			nil,
 			item.latencyMs,
 		); err != nil {
 			t.Fatalf("CreateEvaluationLog(%s) error = %v", item.flowName, err)

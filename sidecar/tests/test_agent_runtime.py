@@ -694,6 +694,7 @@ def test_evaluate_answer_task_retries_inside_agent_loop_after_validation_failure
 
     assert result.result.followup_question == "如果线上抖动，你会先看什么？"
     assert len(client.calls) == 3
+    assert any(entry.code == "semantic_validation_failed" for entry in result.trace.entries)
     assert any(
         message["role"] == "user" and "missing strengths/gaps" in message["content"]
         for message in client.calls[-1]["messages"]
@@ -1405,14 +1406,18 @@ def test_stream_evaluate_answer_uses_agent_loop_and_emits_side_effects() -> None
     )
 
     context_names = [event["name"] for event in events if event["type"] == "context"]
+    trace_codes = [event["data"]["code"] for event in events if event["type"] == "trace"]
     result_event = events[-1]
     assert "recall_training_context" in context_names
     assert "record_observation" in context_names
     assert "set_depth_signal" in context_names
+    assert "runtime_started" in trace_codes
+    assert "runtime_completed" in trace_codes
     assert result_event["type"] == "result"
     assert result_event["data"]["result"]["score"] == 88
     assert result_event["data"]["side_effects"]["depth_signal"] == "skip_followup"
     assert len(result_event["data"]["side_effects"]["observations"]) == 1
+    assert result_event["data"]["trace"]["entries"][-1]["code"] == "runtime_completed"
 
 
 def test_stream_generate_review_uses_agent_loop_and_emits_recommended_next_side_effect() -> None:

@@ -22,23 +22,39 @@ type PromptSetSummary struct {
 }
 
 type PromptExecutionMeta struct {
-	ModelName   string `json:"model_name,omitempty"`
-	PromptSetID string `json:"prompt_set_id,omitempty"`
-	PromptHash  string `json:"prompt_hash,omitempty"`
-	RawOutput   string `json:"raw_output,omitempty"`
+	ModelName    string        `json:"model_name,omitempty"`
+	PromptSetID  string        `json:"prompt_set_id,omitempty"`
+	PromptHash   string        `json:"prompt_hash,omitempty"`
+	RawOutput    string        `json:"raw_output,omitempty"`
+	RuntimeTrace *RuntimeTrace `json:"runtime_trace,omitempty"`
+}
+
+type RuntimeTraceEntry struct {
+	Flow     string `json:"flow"`
+	Phase    string `json:"phase"`
+	Status   string `json:"status"`
+	Code     string `json:"code,omitempty"`
+	Message  string `json:"message,omitempty"`
+	Attempt  int    `json:"attempt,omitempty"`
+	ToolName string `json:"tool_name,omitempty"`
+}
+
+type RuntimeTrace struct {
+	Entries []RuntimeTraceEntry `json:"entries"`
 }
 
 type EvaluationLogEntry struct {
-	ID          int64     `json:"id"`
-	SessionID   string    `json:"session_id"`
-	TurnID      string    `json:"turn_id,omitempty"`
-	FlowName    string    `json:"flow_name"`
-	ModelName   string    `json:"model_name,omitempty"`
-	PromptSetID string    `json:"prompt_set_id,omitempty"`
-	PromptHash  string    `json:"prompt_hash,omitempty"`
-	RawOutput   string    `json:"raw_output,omitempty"`
-	LatencyMs   float64   `json:"latency_ms"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID           int64         `json:"id"`
+	SessionID    string        `json:"session_id"`
+	TurnID       string        `json:"turn_id,omitempty"`
+	FlowName     string        `json:"flow_name"`
+	ModelName    string        `json:"model_name,omitempty"`
+	PromptSetID  string        `json:"prompt_set_id,omitempty"`
+	PromptHash   string        `json:"prompt_hash,omitempty"`
+	RawOutput    string        `json:"raw_output,omitempty"`
+	RuntimeTrace *RuntimeTrace `json:"runtime_trace,omitempty"`
+	LatencyMs    float64       `json:"latency_ms"`
+	CreatedAt    time.Time     `json:"created_at"`
 }
 
 type PromptExperimentRequest struct {

@@ -34,6 +34,17 @@ func TestEvaluateAnswerSupportsEnvelopedResultPayload(t *testing.T) {
 				"depth_signal": "extend",
 			},
 			"raw_output": `{"score":82}`,
+			"trace": map[string]any{
+				"entries": []map[string]any{
+					{
+						"flow":    "evaluate_answer",
+						"phase":   "finalize",
+						"status":  "success",
+						"code":    "runtime_completed",
+						"message": "agent runtime 已稳定收口。",
+					},
+				},
+			},
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}
@@ -70,6 +81,9 @@ func TestEvaluateAnswerSupportsEnvelopedResultPayload(t *testing.T) {
 	}
 	if meta.RawOutput != `{"score":82}` {
 		t.Fatalf("expected raw output to be preserved, got %q", meta.RawOutput)
+	}
+	if meta.RuntimeTrace == nil || len(meta.RuntimeTrace.Entries) != 1 {
+		t.Fatalf("expected runtime trace to be preserved, got %+v", meta.RuntimeTrace)
 	}
 	if sideEffects == nil || sideEffects.DepthSignal != domain.DepthSignalExtend {
 		t.Fatalf("expected depth signal extend, got %+v", sideEffects)
@@ -154,6 +168,16 @@ func TestGenerateReviewStreamReadsRawOutputFromResultEventEnvelope(t *testing.T)
 		lines := []map[string]any{
 			{"type": "phase", "phase": "prepare_context"},
 			{
+				"type": "trace",
+				"data": map[string]any{
+					"flow":    "generate_review",
+					"phase":   "fallback",
+					"status":  "fallback",
+					"code":    "single_shot_failed",
+					"message": "工具循环没有稳定收口，正在退回单轮生成。",
+				},
+			},
+			{
 				"type": "result",
 				"data": map[string]any{
 					"result": map[string]any{
@@ -174,6 +198,17 @@ func TestGenerateReviewStreamReadsRawOutputFromResultEventEnvelope(t *testing.T)
 						},
 					},
 					"raw_output": `{"overall":"整体过线，但还可以再补强。"}`,
+					"trace": map[string]any{
+						"entries": []map[string]any{
+							{
+								"flow":    "generate_review",
+								"phase":   "finalize",
+								"status":  "success",
+								"code":    "runtime_completed",
+								"message": "single-shot fallback 已成功收口。",
+							},
+						},
+					},
 				},
 			},
 		}
@@ -211,6 +246,11 @@ func TestGenerateReviewStreamReadsRawOutputFromResultEventEnvelope(t *testing.T)
 			if event.Phase != "" {
 				phases = append(phases, event.Phase)
 			}
+			if event.Type == "trace" {
+				if payload, ok := event.Data.(map[string]any); ok {
+					phases = append(phases, payload["phase"].(string))
+				}
+			}
 			return nil
 		},
 	)
@@ -218,7 +258,7 @@ func TestGenerateReviewStreamReadsRawOutputFromResultEventEnvelope(t *testing.T)
 		t.Fatalf("GenerateReviewStream() error = %v", err)
 	}
 
-	if len(phases) != 1 || phases[0] != "prepare_context" {
+	if len(phases) != 2 || phases[0] != "prepare_context" || phases[1] != "fallback" {
 		t.Fatalf("expected prepare_context phase, got %v", phases)
 	}
 	if result.Overall == "" {
@@ -229,6 +269,9 @@ func TestGenerateReviewStreamReadsRawOutputFromResultEventEnvelope(t *testing.T)
 	}
 	if meta.RawOutput != `{"overall":"整体过线，但还可以再补强。"}` {
 		t.Fatalf("unexpected raw output: %q", meta.RawOutput)
+	}
+	if meta.RuntimeTrace == nil || len(meta.RuntimeTrace.Entries) != 1 {
+		t.Fatalf("expected runtime trace, got %+v", meta.RuntimeTrace)
 	}
 	if sideEffects == nil || sideEffects.RecommendedNext == nil {
 		t.Fatalf("expected recommended_next side effects, got %+v", sideEffects)
