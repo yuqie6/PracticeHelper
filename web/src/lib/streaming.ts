@@ -1,9 +1,11 @@
-import type { StreamEvent } from '../api/client';
+import type { RuntimeTraceEntry, StreamEvent } from '../api/client';
+import { normalizeRuntimeTraceEntry } from './runtimeTrace';
 
 export interface StreamSection {
   id: string;
   phase: string;
   contexts: string[];
+  traces: RuntimeTraceEntry[];
   reasoning: string[];
   rawContent: string;
 }
@@ -51,6 +53,7 @@ export function appendStreamEvent(
   const next = sections.map((section) => ({
     ...section,
     contexts: [...section.contexts],
+    traces: [...section.traces],
     reasoning: [...section.reasoning],
   }));
 
@@ -75,6 +78,13 @@ export function appendStreamEvent(
         current.contexts.push(event.name);
       }
       break;
+    case 'trace': {
+      const entry = normalizeRuntimeTraceEntry(event.data);
+      if (entry) {
+        current.traces.push(entry);
+      }
+      break;
+    }
     case 'reasoning':
       if (event.text) {
         current.reasoning.push(event.text);
@@ -159,6 +169,7 @@ function createStreamSection(): StreamSection {
     id: `stream-${Math.random().toString(36).slice(2, 10)}`,
     phase: '',
     contexts: [],
+    traces: [],
     reasoning: [],
     rawContent: '',
   };

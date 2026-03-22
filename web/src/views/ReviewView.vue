@@ -187,8 +187,89 @@
             :message="evaluationLogsError"
           />
 
+          <section
+            v-if="review.retrieval_trace && !isLoadingEvaluationLogs"
+            class="review-trace-panel space-y-4"
+          >
+            <div class="space-y-1">
+              <p class="neo-subheading">
+                {{ t('review.retrievalTraceTitle') }}
+              </p>
+              <p class="neo-note">
+                {{ t('review.retrievalTraceDescription') }}
+              </p>
+            </div>
+
+            <div class="review-trace-meta">
+              <span class="neo-badge bg-white">
+                {{ review.retrieval_trace.topic || '—' }}
+              </span>
+              <span class="neo-note">
+                {{
+                  new Date(review.retrieval_trace.generated_at).toLocaleString()
+                }}
+              </span>
+            </div>
+
+            <div class="review-trace-groups">
+              <article
+                v-for="group in retrievalTraceGroups"
+                :key="group.key"
+                class="review-audit-row"
+              >
+                <div class="space-y-1">
+                  <p class="text-base font-black">{{ group.title }}</p>
+                  <p v-if="group.trace" class="neo-note">
+                    {{ group.trace.strategy }} /
+                    {{ group.trace.selected_count }} /
+                    {{ group.trace.candidate_count }}
+                  </p>
+                </div>
+
+                <p v-if="group.trace?.query" class="neo-note">
+                  {{ group.trace.query }}
+                </p>
+                <p v-if="group.trace?.fallback_reason" class="neo-note">
+                  {{ group.trace.fallback_reason }}
+                </p>
+
+                <ul
+                  v-if="group.trace?.hits.length"
+                  class="review-trace-hit-list neo-stagger-list"
+                >
+                  <li
+                    v-for="(hit, index) in group.trace?.hits"
+                    :key="`${group.key}-${hit.ref_id}-${index}`"
+                    class="review-trace-hit"
+                  >
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="font-black">{{ hit.summary || '—' }}</span>
+                      <code v-if="hit.ref_table" class="review-trace-code">
+                        {{ hit.ref_table }}/{{ hit.ref_id || '—' }}
+                      </code>
+                    </div>
+                    <p class="neo-note">
+                      {{
+                        [
+                          hit.scope_type || '—',
+                          hit.topic || '—',
+                          formatTraceScore(hit.final_score),
+                        ].join(' / ')
+                      }}
+                    </p>
+                    <p v-if="hit.reason" class="neo-note">{{ hit.reason }}</p>
+                  </li>
+                </ul>
+
+                <p v-else class="neo-note">
+                  {{ t('review.retrievalTraceEmpty') }}
+                </p>
+              </article>
+            </div>
+          </section>
+
           <div
-            v-else-if="evaluationLogs.length"
+            v-if="evaluationLogs.length"
             class="review-audit-list neo-stagger-list"
           >
             <article
@@ -210,6 +291,13 @@
                 <p class="neo-note text-xs">
                   {{ new Date(item.created_at).toLocaleString() }}
                 </p>
+              </div>
+
+              <div v-if="item.runtime_trace?.entries.length" class="space-y-2">
+                <p class="text-xs font-black uppercase tracking-[0.08em]">
+                  {{ t('review.runtimeTraceTitle') }}
+                </p>
+                <RuntimeTraceList :entries="item.runtime_trace.entries" />
               </div>
 
               <div
@@ -335,8 +423,10 @@ import {
   downloadSessionExport,
   getReview,
   listSessionEvaluationLogs,
+  type MemoryRetrievalTrace,
 } from '../api/client';
 import NoticePanel from '../components/NoticePanel.vue';
+import RuntimeTraceList from '../components/RuntimeTraceList.vue';
 import {
   formatEvaluationRawOutput,
   hasEvaluationRawOutput,
@@ -468,6 +558,29 @@ const evaluationLogsError = computed(() =>
     ? evaluationLogsQueryError.value.message
     : '',
 );
+const retrievalTraceGroups = computed(() => {
+  const trace = review.value?.retrieval_trace;
+  if (!trace) {
+    return [];
+  }
+
+  return [
+    {
+      key: 'observations',
+      title: t('review.retrievalTraceObservations'),
+      trace: trace.observations ?? null,
+    },
+    {
+      key: 'session-summaries',
+      title: t('review.retrievalTraceSummaries'),
+      trace: trace.session_summaries ?? null,
+    },
+  ] as Array<{
+    key: string;
+    title: string;
+    trace: MemoryRetrievalTrace | null;
+  }>;
+});
 
 async function exportReport() {
   if (!review.value?.session_id || isExporting.value) {
@@ -499,6 +612,13 @@ async function exportReport() {
 
 function toggleAuditDetails() {
   showAuditDetails.value = !showAuditDetails.value;
+}
+
+function formatTraceScore(value?: number): string {
+  if (value == null || Number.isNaN(value) || value === 0) {
+    return '—';
+  }
+  return value.toFixed(3);
 }
 </script>
 
@@ -665,9 +785,41 @@ function toggleAuditDetails() {
 .review-grid,
 .review-side-actions,
 .review-score-list,
+.review-trace-groups,
 .review-audit-list {
   display: grid;
   gap: 1rem;
+}
+
+.review-trace-panel,
+.review-trace-hit-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.review-trace-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.review-trace-hit {
+  background: color-mix(in srgb, var(--neo-paper) 90%, transparent);
+  border: 2px solid var(--neo-border);
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.9rem 1rem;
+}
+
+.review-trace-code {
+  background: color-mix(in srgb, var(--neo-surface) 92%, transparent);
+  border: 2px solid var(--neo-border);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0.2rem 0.45rem;
 }
 
 .review-list {

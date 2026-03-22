@@ -38,6 +38,11 @@
         </ul>
       </div>
 
+      <div v-if="section.traces.length" class="space-y-2">
+        <p class="neo-subheading">{{ t('session.traceTitle') }}</p>
+        <RuntimeTraceList :entries="section.traces" />
+      </div>
+
       <div class="space-y-3">
         <p class="neo-subheading">{{ contentTitle }}</p>
 
@@ -311,6 +316,7 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+import RuntimeTraceList from './RuntimeTraceList.vue';
 import {
   parseStreamPayload,
   type ParsedStreamPayload,

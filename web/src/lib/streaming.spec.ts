@@ -19,6 +19,17 @@ describe('streaming helpers', () => {
       name: 'read_evaluation_context',
     });
     sections = appendStreamEvent(sections, {
+      type: 'trace',
+      data: {
+        flow: 'evaluate_answer',
+        phase: 'tool_call',
+        status: 'success',
+        code: 'tool_call_succeeded',
+        message: '工具 recall_training_context 调用成功。',
+        tool_name: 'recall_training_context',
+      },
+    });
+    sections = appendStreamEvent(sections, {
       type: 'reasoning',
       text: '正在评估主回答',
     });
@@ -37,6 +48,7 @@ describe('streaming helpers', () => {
 
     expect(sections).toHaveLength(2);
     expect(sections[0].contexts).toEqual(['read_evaluation_context']);
+    expect(sections[0].traces[0]?.code).toBe('tool_call_succeeded');
     expect(sections[0].rawContent).toContain('"score": 72');
     expect(sections[1].reasoning).toEqual(['正在整理复盘']);
   });

@@ -67,6 +67,56 @@ export interface TrainingSessionSummary {
   prompt_set?: PromptSetSummary | null;
 }
 
+export interface RuntimeTraceEntry {
+  flow: string;
+  phase: string;
+  status: string;
+  code?: string;
+  message?: string;
+  attempt?: number;
+  tool_name?: string;
+}
+
+export interface RuntimeTrace {
+  entries: RuntimeTraceEntry[];
+}
+
+export interface MemoryRetrievalHit {
+  source: string;
+  memory_index_id?: string;
+  ref_table?: string;
+  ref_id?: string;
+  scope_type?: string;
+  scope_id?: string;
+  topic?: string;
+  summary?: string;
+  rule_score?: number;
+  vector_score?: number;
+  rerank_score?: number;
+  final_score?: number;
+  reason?: string;
+}
+
+export interface MemoryRetrievalTrace {
+  memory_type: string;
+  query?: string;
+  strategy: string;
+  candidate_count: number;
+  selected_count: number;
+  fallback_used?: boolean;
+  fallback_reason?: string;
+  hits: MemoryRetrievalHit[];
+}
+
+export interface RetrievalTrace {
+  generated_at: string;
+  topic?: string;
+  project_id?: string;
+  job_target_id?: string;
+  observations?: MemoryRetrievalTrace | null;
+  session_summaries?: MemoryRetrievalTrace | null;
+}
+
 export interface ReviewCard {
   id: string;
   session_id: string;
@@ -87,6 +137,7 @@ export interface ReviewCard {
     reason?: string;
   } | null;
   score_breakdown: Record<string, number>;
+  retrieval_trace?: RetrievalTrace | null;
   job_target?: JobTargetRef | null;
   prompt_set?: PromptSetSummary | null;
 }
@@ -100,6 +151,7 @@ export interface EvaluationLogEntry {
   prompt_set_id?: string;
   prompt_hash?: string;
   raw_output?: string;
+  runtime_trace?: RuntimeTrace | null;
   latency_ms: number;
   created_at: string;
 }
@@ -120,6 +172,7 @@ export interface StreamEvent {
   type:
     | 'phase'
     | 'context'
+    | 'trace'
     | 'reasoning'
     | 'content'
     | 'status'

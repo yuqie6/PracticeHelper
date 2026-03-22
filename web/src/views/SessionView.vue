@@ -251,6 +251,7 @@ import FeedbackPanel from '../components/FeedbackPanel.vue';
 import NoticePanel from '../components/NoticePanel.vue';
 import ProgressPanel from '../components/ProgressPanel.vue';
 import StreamTracePanel from '../components/StreamTracePanel.vue';
+import { resolveApiErrorMessage } from '../lib/apiErrors';
 import { formatStatusLabel } from '../lib/labels';
 import { isSubmitShortcut } from '../lib/shortcuts';
 import { appendStreamEvent, type StreamSection } from '../lib/streaming';
@@ -543,22 +544,7 @@ function shouldRefreshSession(error: unknown): boolean {
 
 function resolveSessionErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    switch (error.code) {
-      case 'session_busy':
-        return t('session.conflictBusy');
-      case 'session_review_pending':
-        return t('session.conflictReviewPending');
-      case 'session_completed':
-        return t('session.conflictCompleted');
-      case 'session_not_recoverable':
-        return t('session.retryReviewNotRecoverable');
-      case 'session_answer_conflict':
-        return t('session.conflictInvalidStatus');
-      case 'review_generation_retry':
-        return t('session.reviewGenerationRetry');
-      default:
-        return error.message;
-    }
+    return resolveApiErrorMessage(t, error);
   }
 
   return error instanceof Error ? error.message : t('common.requestFailed');

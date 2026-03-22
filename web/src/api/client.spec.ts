@@ -66,6 +66,16 @@ describe('api client', () => {
         ndjsonResponse([
           { type: 'status', name: 'answer_received' },
           {
+            type: 'trace',
+            data: {
+              flow: 'generate_question',
+              phase: 'prepare_context',
+              status: 'info',
+              code: 'runtime_started',
+              message: '开始执行 agent runtime。',
+            },
+          },
+          {
             type: 'result',
             data: {
               id: 'sess_stream_1',
@@ -93,10 +103,20 @@ describe('api client', () => {
     );
 
     expect(session.id).toBe('sess_stream_1');
-    expect(onEvent).toHaveBeenCalledTimes(2);
+    expect(onEvent).toHaveBeenCalledTimes(3);
     expect(onEvent).toHaveBeenNthCalledWith(1, {
       type: 'status',
       name: 'answer_received',
+    });
+    expect(onEvent).toHaveBeenNthCalledWith(2, {
+      type: 'trace',
+      data: {
+        flow: 'generate_question',
+        phase: 'prepare_context',
+        status: 'info',
+        code: 'runtime_started',
+        message: '开始执行 agent runtime。',
+      },
     });
   });
 

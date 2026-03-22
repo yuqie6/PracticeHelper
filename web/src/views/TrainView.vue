@@ -400,6 +400,7 @@ import {
 import NoticePanel from '../components/NoticePanel.vue';
 import ProgressPanel from '../components/ProgressPanel.vue';
 import StreamTracePanel from '../components/StreamTracePanel.vue';
+import { resolveApiErrorMessage } from '../lib/apiErrors';
 import {
   describeJobTargetStatus,
   isJobTargetReady,
@@ -699,6 +700,10 @@ function resolveStartErrorMessage(error: unknown): string {
       );
     }
     return t('train.jobTargetUnavailable');
+  }
+
+  if (error instanceof ApiError) {
+    return resolveApiErrorMessage(t, error);
   }
 
   return error instanceof Error ? error.message : t('common.requestFailed');

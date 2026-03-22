@@ -56,6 +56,20 @@ export const messages = {
       },
       exportSuccess: '导出成功',
       operationSuccess: '操作成功',
+      apiErrors: {
+        toolContextMissing:
+          '系统在拿到必要上下文前就中断了本次生成，请直接重试。',
+        toolCallFailed: '系统在调用内部工具时失败了，请稍后重试。',
+        toolLoopExhausted: '系统来回推理过多次仍没收口，本次生成已终止。',
+        jsonParseFailed: '系统生成了不可解析的结果格式，本次结果已中止。',
+        semanticValidationFailed:
+          '系统生成的结果没有通过业务校验，请直接重试。',
+        singleShotFailed: '回退到单轮生成后仍未成功，请稍后再试。',
+        backendCallbackFailed: '系统补取训练材料时失败了，请稍后重试。',
+        timeout: '这次请求处理超时了，请直接重试。',
+        llmRequired: '当前环境没有可用模型，暂时不能继续生成。',
+        unknownError: '这次生成失败了，请稍后重试。',
+      },
     },
     enums: {
       mode: {
@@ -558,6 +572,8 @@ export const messages = {
       jobTargetEmpty: '本轮未关联岗位 JD，当前仍按通用训练处理。',
       streamPending: '内容生成中，正在整理结果，请稍候。',
       streamSectionCounter: '步骤 {index}',
+      traceTitle: '运行轨迹',
+      traceEmpty: '当前步骤还没有结构化轨迹。',
       streamKinds: {
         prepare: '正在准备上下文',
         drafting: '生成中',
@@ -571,6 +587,21 @@ export const messages = {
         score: '当前得分：{score}',
         scoreBreakdown: '分项得分',
         followupQuestion: '后续追问',
+      },
+      tracePhases: {
+        prepare_context: '准备上下文',
+        tool_call: '调用工具',
+        validate: '校验结果',
+        fallback: '回退处理',
+        finalize: '整理收口',
+        error: '错误退出',
+      },
+      traceStatuses: {
+        info: '进行中',
+        success: '成功',
+        retry: '重试',
+        fallback: '已回退',
+        error: '失败',
       },
       streamContexts: {
         read_question_templates: '正在参考题库',
@@ -642,6 +673,13 @@ export const messages = {
       auditMeta: '模型 / Prompt 哈希 / 耗时',
       auditRawOutput: '原始输出',
       auditEmpty: '当前没有可展开的评估日志。',
+      runtimeTraceTitle: '运行轨迹',
+      retrievalTraceTitle: '检索轨迹',
+      retrievalTraceDescription:
+        '这里展示复盘生成时实际命中的长期记忆材料和 fallback 情况。',
+      retrievalTraceObservations: 'Observations',
+      retrievalTraceSummaries: 'Session Summaries',
+      retrievalTraceEmpty: '当前没有记录到这组材料的命中结果。',
     },
     promptExperiments: {
       hero: {
@@ -745,6 +783,26 @@ export const messages = {
       },
       exportSuccess: 'Export complete',
       operationSuccess: 'Done',
+      apiErrors: {
+        toolContextMissing:
+          'The run stopped before the model read the required context. Please retry.',
+        toolCallFailed:
+          'The system failed while calling an internal tool. Please retry shortly.',
+        toolLoopExhausted:
+          'The model kept looping without converging to a final answer. This run was stopped.',
+        jsonParseFailed:
+          'The system produced an invalid result shape that could not be parsed.',
+        semanticValidationFailed:
+          'The generated result did not pass business validation. Please retry.',
+        singleShotFailed:
+          'The fallback single-shot generation also failed. Please retry later.',
+        backendCallbackFailed:
+          'The system failed while fetching extra training material from the backend.',
+        timeout: 'This request timed out. Please retry.',
+        llmRequired:
+          'No working model is configured right now, so generation is unavailable.',
+        unknownError: 'This run failed. Please retry later.',
+      },
     },
     enums: {
       mode: {
@@ -1288,6 +1346,9 @@ export const messages = {
       streamPending:
         'Content is being generated. The result will appear shortly.',
       streamSectionCounter: 'Step {index}',
+      traceTitle: 'Runtime trace',
+      traceEmpty:
+        'No structured runtime trace has been recorded for this step yet.',
       streamKinds: {
         prepare: 'Preparing context',
         drafting: 'Generating content',
@@ -1301,6 +1362,21 @@ export const messages = {
         score: 'Current score: {score}',
         scoreBreakdown: 'Score breakdown',
         followupQuestion: 'Next follow-up',
+      },
+      tracePhases: {
+        prepare_context: 'Prepare context',
+        tool_call: 'Call tool',
+        validate: 'Validate output',
+        fallback: 'Fallback',
+        finalize: 'Finalize result',
+        error: 'Exit with error',
+      },
+      traceStatuses: {
+        info: 'Running',
+        success: 'Success',
+        retry: 'Retry',
+        fallback: 'Fallback',
+        error: 'Error',
       },
       streamContexts: {
         read_question_templates: 'Reviewing question bank',
@@ -1392,6 +1468,13 @@ export const messages = {
       auditMeta: 'Model / prompt hash / latency',
       auditRawOutput: 'Raw output',
       auditEmpty: 'No evaluation logs are available for this review yet.',
+      runtimeTraceTitle: 'Runtime trace',
+      retrievalTraceTitle: 'Retrieval trace',
+      retrievalTraceDescription:
+        'This shows which long-term memory items were actually recalled during review generation.',
+      retrievalTraceObservations: 'Observations',
+      retrievalTraceSummaries: 'Session Summaries',
+      retrievalTraceEmpty: 'No hit was recorded for this material group.',
     },
     promptExperiments: {
       hero: {
