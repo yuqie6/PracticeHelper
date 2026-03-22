@@ -538,7 +538,6 @@ func (s *Store) upsertKnowledgeUpdateTx(
 		if node == nil {
 			return "", nil, nil
 		}
-		nodeID = node.ID
 	} else {
 		nodeID, err = s.ensureKnowledgeNodeTx(ctx, tx, domain.KnowledgeNode{
 			ScopeType:   normalizeMemoryScope(update.ScopeType),

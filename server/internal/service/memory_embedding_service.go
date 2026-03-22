@@ -231,17 +231,6 @@ func (s *Service) indexMemoryIndexEntries(
 	return s.repo.UpsertMemoryEmbeddingRecords(ctx, records)
 }
 
-func (s *Service) rerankMemoryIndexEntriesByVector(
-	ctx context.Context,
-	memoryType string,
-	params agentContextParams,
-	entries []domain.MemoryIndexEntry,
-	limit int,
-) []domain.MemoryIndexEntry {
-	ranked, _, _, _ := s.rankMemoryIndexEntriesByVector(ctx, memoryType, params, entries, limit)
-	return ranked
-}
-
 func (s *Service) rankMemoryIndexEntriesByVector(
 	ctx context.Context,
 	memoryType string,

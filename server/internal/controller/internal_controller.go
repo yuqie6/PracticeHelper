@@ -13,6 +13,11 @@ import (
 
 const internalTokenHeader = "X-PracticeHelper-Internal-Token"
 
+func registerInternalRoutes(internal *gin.RouterGroup, handler *Handler) {
+	internal.GET("/search-chunks", handler.searchChunksInternal)
+	internal.GET("/session-detail/:id", handler.getSessionDetailInternal)
+}
+
 func (h *Handler) searchChunksInternal(c *gin.Context) {
 	projectID := c.Query("project_id")
 	query := c.Query("query")

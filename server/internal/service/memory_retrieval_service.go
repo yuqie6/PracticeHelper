@@ -9,14 +9,6 @@ import (
 	"practicehelper/server/internal/domain"
 )
 
-func (s *Service) loadObservationMemory(
-	ctx context.Context,
-	params agentContextParams,
-) ([]domain.AgentObservation, error) {
-	items, _, err := s.loadObservationMemoryWithTrace(ctx, params)
-	return items, err
-}
-
 func (s *Service) loadObservationMemoryWithTrace(
 	ctx context.Context,
 	params agentContextParams,
@@ -81,14 +73,6 @@ func (s *Service) loadObservationMemoryWithTrace(
 		true,
 		"memory_index 候选不足，使用 observation 直接查询补齐。",
 	), nil
-}
-
-func (s *Service) loadSessionSummaryMemory(
-	ctx context.Context,
-	params agentContextParams,
-) ([]domain.SessionMemorySummary, error) {
-	items, _, err := s.loadSessionSummaryMemoryWithTrace(ctx, params)
-	return items, err
 }
 
 func (s *Service) loadSessionSummaryMemoryWithTrace(
@@ -418,13 +402,14 @@ func buildMemoryRetrievalHit(
 
 func buildMemoryHitReason(item memoryScoredEntry) string {
 	reasons := make([]string, 0, 5)
-	if item.entry.ScopeType == domain.MemoryScopeProject {
+	switch item.entry.ScopeType {
+	case domain.MemoryScopeProject:
 		reasons = append(reasons, "项目 scope 命中")
-	} else if item.entry.ScopeType == domain.MemoryScopeJobTarget {
+	case domain.MemoryScopeJobTarget:
 		reasons = append(reasons, "岗位 scope 命中")
-	} else if item.entry.ScopeType == domain.MemoryScopeSession {
+	case domain.MemoryScopeSession:
 		reasons = append(reasons, "历史 session 命中")
-	} else {
+	default:
 		reasons = append(reasons, "全局记忆兜底")
 	}
 	if item.entry.Topic != "" {
