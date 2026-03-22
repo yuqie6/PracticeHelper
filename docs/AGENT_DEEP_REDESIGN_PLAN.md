@@ -1,6 +1,8 @@
 # Agent Deep Redesign Plan
 
-> 状态：执行版方案，已按 2026-03-22 当前工作区实现审校。
+> 状态：审校更新版（2026-03-22）。
+> 真实完成度：Phase A 已完成；Phase B 已落一半以上但还没收口；
+> Phase C / Phase D 仍未开始。
 > 目标：在保留 Go 产品边界和执行边界的前提下，把 PracticeHelper 的
 > `sidecar` 从“基础版 constrained agent runtime”逐步升级为
 > “训练域里的成熟 agent runtime”。
@@ -28,6 +30,28 @@
 所以本文不是“另开一条和产品无关的 AI 支线”，而是：
 
 > 用成熟 agent runtime 支撑训练体验、长期记忆、复盘质量和持续留存。
+
+### 1.1 审校结论（2026-03-22）
+
+这次按当前工作区代码和测试逐条核对后，结论可以直接收成 3 句：
+
+- **已经落地**：`AgentRuntime` 的 tool loop / retry / single-shot fallback /
+  stream fallback、`agent_context` 五类预装载、`memory_index` + rule rerank +
+  vector similarity + optional rerank、`retrieval_trace`、Go 侧
+  `depth_signal` 状态机接线、review 推荐归一化与知识图谱兜底、
+  `prerequisite` 第一版边推断、以及 `prompt_set / prompt_hash / model /
+  raw_output` 审计日志。
+- **部分完成**：observability 已能看到 prompt 元信息、原始输出、
+  review 检索轨迹、stream 工具路径，但还没有统一结构化 trace；fallback
+  已有，但失败分类仍偏粗；memory 排序已明显比单纯 Top-N 更强，但通用
+  context compaction 还没补完。
+- **尚未开始**：typed command API、多 agent coordinator、
+  shared artifacts 和多角色协作仍然停留在设计层。
+
+本次审校还做了最基本实测：
+
+- `cd sidecar && uv run pytest` 通过，`85 passed`
+- `cd server && GOCACHE=/tmp/go-build go test -tags sqlite_fts5 ./...` 通过
 
 ---
 
@@ -126,14 +150,16 @@ Go 端目前已经具备这些持久层：
 - observations / knowledge / session summaries 都会同步进 `memory_index`
 - `agent_context` 预装载 observations / session summaries 时，
   已经优先走 `memory_index`，再按 `ref_id` 回源 materialize
+- review 持久化时已经会带上 `retrieval_trace`，导出链路也能看到命中来源、
+  分数和 fallback 情况
 
 但当前 memory 的主要问题不是“没有存”，而是“还不会更聪明地拿”：
 
-- 主要还是 Go 预装载 Top-N
+- observations / session summaries 已经不是纯 Top-N，而是
+  `memory_index` 候选池上的规则重排 + vector similarity + optional rerank
 - project 场景仍以预选 repo chunks 为主，按需回调只是补充
-- observation / session summary 已经有第一版 embedding + hybrid rerank
-- 当前向量检索仍然是围绕 `memory_index` 候选池做混合召回，
-  还没有扩成更激进的全局 semantic recall
+- `retrieval_trace` 已经能解释为什么命中、分数怎么来的、是否走了 fallback
+- 还没有通用 context compaction，也还没有扩成更激进的全局 semantic recall
 
 ### 2.4 当前训练深度已经能受 sidecar 影响，但最终边界仍在 Go
 
@@ -152,11 +178,11 @@ Go 端目前已经具备这些持久层：
 - 但它没有直接改 session 状态的权限
 - Go 仍然保留最终状态机边界和兜底上限
 
-### 2.5 当前 Go 侧已经开始承担知识图谱兜底推荐
+### 2.5 当前 Go 侧已经承担第一版知识图谱兜底推荐
 
-这部分不能再写成 future work，因为当前工作区已经开始落第一版。
+这部分不能再写成 future work，因为当前工作区已经落了第一版。
 
-Go 侧当前已经开始做：
+Go 侧当前已经在做：
 
 - 对 `recommended_next` 做 basics/project 归一化
 - 当 review 太稀疏时，基于知识图谱回填 `suggested_topics`
@@ -364,11 +390,15 @@ sidecar 负责：
 - memory_index 先筛，再回源 materialize
 - repo chunks 继续以 SQLite FTS5 主路径为主
 
-近期要继续强化的方向：
+当前已经补上的能力：
 
 - observation / session summary 的更强排序
 - retrieval trace
+
+近期还要继续强化的方向：
+
 - 更明确的 context compaction
+- 更广的 semantic recall 范围与压缩策略
 
 #### Layer 3：Planning Engine
 
@@ -485,14 +515,18 @@ typed command 的核心原则：
 - `result`
 - `error`
 
-后续新增的更细观测，例如：
+当前已经落地的可观测面：
 
-- `decision`
-- `validation_retry`
-- `fallback`
-- `command`
+- sidecar header + Go 审计日志里已记录 `prompt_set / prompt_hash / model / raw_output`
+- `generate_review` 已会把 `retrieval_trace` 带进 review 持久化和 export
+- stream 的 `context` 事件已经能反映工具使用路径
 
-默认只作为内部 trace 或审计日志，不强制全部暴露给前端。
+当前还没形成统一结构化 trace 的部分：
+
+- fallback reason 目前主要体现在日志和 stream 文本，不是固定事件类型
+- validation retry 还没有独立持久化轨迹
+- 关键副作用落库结果还没有单独的 trace 事件
+- `decision / command` 这类更细事件还没进入当前实现
 
 ---
 
@@ -647,14 +681,22 @@ class ReviewVerdict(BaseModel):
 
 | 任务 | 回忆工具 | 动作工具 |
 |---|---|---|
-| `generate_question` | `recall_training_context` `recall_weakness_profile` `recall_knowledge_graph` `recall_observations` `search_repo_chunks` | — |
+| `generate_question` | `recall_training_context` `recall_knowledge_graph` `recall_observations` `search_repo_chunks` | — |
 | `evaluate_answer` | `recall_training_context` `recall_knowledge_graph` `recall_observations` `search_repo_chunks` | `record_observation` `update_knowledge` `set_depth_signal` |
 | `generate_review` | `recall_training_context` `recall_weakness_profile` `recall_knowledge_graph` `recall_observations` `recall_session_summaries` `get_session_detail` | `record_observation` `update_knowledge` `suggest_next_session` |
 
+补充说明：
+
+- 上表主要列 agent memory / callback / action 工具
+- 每个 flow 仍然额外带有各自的 `read_*` prompt tools，例如
+  `read_evaluation_context`、`read_turn_history`、`read_question_templates`
+- `search_repo_chunks` 只在绑定项目且 Go callback 可用时注入
+- `get_session_detail` 只在 review 场景且有 session id 时注入
+
 当前约束继续保留：
 
-- 热路径任务不堆过多工具
-- 当前任务默认工具数尽量控制在 `<= 6`
+- 热路径任务不应该继续无限膨胀工具面
+- 当前实现里各 flow 的工具数实际已经偏厚，大多在 `7~10` 个量级
 - 新增工具前先压缩职责，不顺手膨胀
 
 ### 6.2 retrieval 的近期设计
@@ -666,6 +708,11 @@ class ReviewVerdict(BaseModel):
 3. 按 `ref_table + ref_id` 回源 materialize
 4. sidecar 必要时按需回调 `search_repo_chunks / get_session_detail`
 5. 最终再做 token budget 裁剪
+
+补充说明：
+
+- 当前这一步主要还是依赖固定 limit 和 `compact_chunks` 的轻量裁剪
+- 它还不是通用 context compaction，这也是 Phase B 还没收口的原因之一
 
 几个明确边界：
 
@@ -725,7 +772,7 @@ class ReviewVerdict(BaseModel):
 - `depth_signal` 已接进 Go FSM
 - review 推荐链路已开始做 Go 侧知识图谱兜底
 
-### Phase B：成熟单 agent 基线（当前近期主线）
+### Phase B：成熟单 agent 基线（当前主线，部分完成）
 
 目标：
 
@@ -738,11 +785,16 @@ class ReviewVerdict(BaseModel):
 3. 恢复更完整
 4. 可观测性更强
 
-本阶段要补的重点：
+本阶段已经确认落地的部分：
 
 - retrieval trace
-- context compaction
 - observation / session summary 的更强排序
+- `memory_index + vector + optional rerank` 的混合召回
+- review 推荐归一化、学习路径兜底和 `prerequisite` 第一版边推断
+
+本阶段仍待补齐的重点：
+
+- context compaction
 - validation / fallback 的失败分类
 - stream / non-stream 一致性观测
 - 关键动作的幂等与落库可见性
@@ -751,10 +803,10 @@ class ReviewVerdict(BaseModel):
 
 - 单 agent 在 question / answer / review 主链路上更稳
 - 出错后能解释为什么降级、为什么重试
-- memory 召回不再只是机械 Top-N
+- memory 不只排序更准，还能把取材与压缩过程解释清楚
 - review 推荐和学习路径更少依赖模型自由发挥
 
-### Phase C：受控放权
+### Phase C：受控放权（尚未开始）
 
 目标：
 
@@ -774,7 +826,7 @@ class ReviewVerdict(BaseModel):
 - Go 仍然保留最终状态迁移与持久化边界
 - 新能力不破坏当前训练热路径的稳定性
 
-### Phase D：多 agent 进入高价值长任务
+### Phase D：多 agent 进入高价值长任务（尚未开始）
 
 目标：
 
@@ -928,8 +980,13 @@ class ReviewVerdict(BaseModel):
 
 ### 9.1 当前单 agent 基线验证
 
-- `cd sidecar && uv run pytest`
-- `cd server && GOCACHE=/tmp/go-build go test -tags sqlite_fts5 ./internal/repo ./internal/service ./internal/controller`
+- `make test-sidecar`
+- `make test-server`
+
+本次审校实测结果：
+
+- `cd sidecar && uv run pytest`：`85 passed`
+- `cd server && GOCACHE=/tmp/go-build go test -tags sqlite_fts5 ./...`：通过
 
 重点场景：
 
@@ -951,13 +1008,17 @@ class ReviewVerdict(BaseModel):
 - fallback 是否更清晰
 - 观测是否足够解释失败
 
-建议增加的验收场景：
+当前已经可以验到的场景：
 
 - 第一版 retrieval trace 已能随 review/export 暴露 observations / session summaries
   的命中原因、分数和 fallback 情况
-- stream / non-stream 在核心结果上保持一致
-- fallback 原因可以被日志明确定位
 - recommendation / learning path 在模型稀疏输出下仍然可解释
+
+当前仍建议补的验收场景：
+
+- stream / non-stream 在核心结果上保持一致，并且有统一 trace 对照
+- fallback 原因可以被日志明确定位，并沉淀成更稳定的失败分类
+- side effects 落库结果在调试路径中可见，而不只是在 repo 状态里间接体现
 
 ### 9.3 后续 command path 验收
 
@@ -1012,3 +1073,8 @@ class ReviewVerdict(BaseModel):
 一句话总结：
 
 > 近期先把单 agent 做成熟，后续再把多 agent 做正确。
+
+按当前工作区的真实完成度，近期不该再把 `retrieval_trace`、
+`memory_index` 混合召回或 Go 侧推荐兜底当成主施工点；这些已经落了第一版。
+真正还没收口的是：`context compaction`、结构化失败分类、统一 trace，
+以及关键动作的幂等/可见性。
