@@ -26,6 +26,10 @@
             }}
           </button>
         </form>
+
+        <p class="neo-note projects-stage-hint">
+          {{ t('projects.hero.hint') }}
+        </p>
       </div>
 
       <div class="projects-stage-side">
@@ -92,241 +96,118 @@
       :message="saveError"
     />
 
+    <section
+      v-if="activeImportCount || importJobs.length"
+      class="neo-panel projects-activity-strip"
+    >
+      <div class="projects-section-head">
+        <div class="space-y-2">
+          <p class="neo-kicker bg-[var(--neo-blue)]">
+            {{ t('projects.activityTitle') }}
+          </p>
+          <h2 class="projects-section-title">
+            {{ t('projects.activityDescription', { count: activeImportCount }) }}
+          </h2>
+        </div>
+        <span class="neo-badge bg-white">{{ importJobs.length }}</span>
+      </div>
+
+      <div class="projects-activity-list">
+        <article
+          v-for="job in importJobs.slice(0, 3)"
+          :key="job.id"
+          class="projects-activity-card"
+        >
+          <div class="space-y-1">
+            <p class="text-sm font-black uppercase tracking-[0.08em]">
+              {{ formatImportJobStatusLabel(t, job.status) }}
+            </p>
+            <p class="text-base font-semibold">{{ job.message }}</p>
+          </div>
+          <p class="neo-note break-all">{{ job.repo_url }}</p>
+          <span class="neo-badge bg-[var(--neo-yellow)]">
+            {{ formatImportJobStageLabel(t, job.stage) }}
+          </span>
+        </article>
+      </div>
+    </section>
+
     <div class="projects-shell">
-      <aside class="projects-feed">
-        <section class="neo-panel projects-jobs-panel">
-          <div class="projects-section-head">
-            <div class="space-y-2">
-              <p class="neo-kicker bg-[var(--neo-blue)]">
-                {{ t('projects.jobsTitle') }}
-              </p>
-              <h2 class="projects-section-title">
-                {{ t('projects.jobsTitle') }}
-              </h2>
-            </div>
-            <span class="neo-badge bg-white">
-              {{ importJobs.length }}
-            </span>
+      <section class="neo-panel projects-list-panel">
+        <div class="projects-section-head">
+          <div class="space-y-2">
+            <p class="neo-kicker bg-[var(--neo-yellow)]">
+              {{ t('projects.listTitle') }}
+            </p>
+            <h2 class="projects-section-title">
+              {{ t('projects.libraryTitle') }}
+            </h2>
           </div>
+          <span class="neo-badge bg-white">{{ projects.length }}</span>
+        </div>
 
-          <div
-            v-if="importJobs.length"
-            class="projects-job-list neo-stagger-list"
+        <p class="neo-note">{{ t('projects.libraryDescription') }}</p>
+
+        <div v-if="projects.length" class="projects-list neo-stagger-list">
+          <button
+            v-for="project in projects"
+            :key="project.id"
+            type="button"
+            class="projects-list-row"
+            :class="{
+              'projects-list-row-active': selectedProjectId === project.id,
+            }"
+            @click="selectProject(project.id, { revealDetail: true })"
           >
-            <article
-              v-for="job in importJobs"
-              :key="job.id"
-              class="projects-job-row"
-            >
-              <div class="flex flex-wrap items-start justify-between gap-3">
-                <div class="space-y-1">
-                  <p class="text-sm font-black uppercase tracking-[0.08em]">
-                    {{ formatImportJobStatusLabel(t, job.status) }}
-                  </p>
-                  <p class="text-base font-semibold">{{ job.message }}</p>
-                </div>
-                <span class="neo-badge bg-[var(--neo-yellow)]">
-                  {{ formatImportJobStageLabel(t, job.stage) }}
-                </span>
-              </div>
-
-              <div
-                class="space-y-1 break-all text-sm font-semibold text-black/80"
-              >
-                <p>{{ t('projects.jobRepo') }}: {{ job.repo_url }}</p>
-                <p v-if="job.error_message">{{ job.error_message }}</p>
-                <p v-if="job.project_name">
-                  {{ t('projects.jobResult') }}: {{ job.project_name }}
+            <div class="flex items-start justify-between gap-3">
+              <div class="space-y-1">
+                <p class="text-sm font-black uppercase">
+                  {{ formatImportStatusLabel(t, project.import_status) }}
                 </p>
+                <p class="text-lg font-black">{{ project.name }}</p>
               </div>
-
-              <div class="projects-job-actions">
-                <button
-                  v-if="job.project_id"
-                  type="button"
-                  class="neo-button-dark w-full"
-                  @click="selectProject(job.project_id, { revealDetail: true })"
-                >
-                  {{ t('projects.openProject') }}
-                </button>
-                <button
-                  v-if="job.status === 'failed'"
-                  type="button"
-                  class="neo-button-red w-full"
-                  :disabled="isRetrying"
-                  @click="retryJob(job.id)"
-                >
-                  {{
-                    isRetrying
-                      ? t('common.starting')
-                      : t('projects.retryAction')
-                  }}
-                </button>
-              </div>
-            </article>
-          </div>
-          <p v-else class="neo-note">{{ t('projects.jobsEmpty') }}</p>
-        </section>
-      </aside>
+              <span class="neo-badge bg-white">
+                {{ formatImportStatusLabel(t, project.import_status) }}
+              </span>
+            </div>
+            <p class="break-all text-sm font-semibold text-black/80">
+              {{ project.repo_url }}
+            </p>
+          </button>
+        </div>
+        <p v-else class="neo-note">
+          {{ t('projects.emptyList') }}
+        </p>
+      </section>
 
       <div class="projects-workspace">
-        <section class="neo-panel projects-list-panel">
-          <div class="projects-section-head">
-            <div class="space-y-2">
-              <p class="neo-kicker bg-[var(--neo-yellow)]">
-                {{ t('projects.listTitle') }}
-              </p>
-              <h2 class="projects-section-title">
-                {{ t('projects.listTitle') }}
-              </h2>
-            </div>
-            <span class="neo-badge bg-white">{{ projects.length }}</span>
-          </div>
-
-          <div v-if="projects.length" class="projects-list neo-stagger-list">
-            <button
-              v-for="project in projects"
-              :key="project.id"
-              type="button"
-              class="projects-list-row"
-              :class="{
-                'projects-list-row-active': selectedProjectId === project.id,
-              }"
-              @click="selectProject(project.id, { revealDetail: true })"
-            >
-              <div class="flex items-start justify-between gap-3">
-                <div class="space-y-1">
-                  <p class="text-sm font-black uppercase">
-                    {{ formatImportStatusLabel(t, project.import_status) }}
-                  </p>
-                  <p class="text-lg font-black">{{ project.name }}</p>
-                </div>
-                <span class="neo-badge bg-white">
-                  {{ formatImportStatusLabel(t, project.import_status) }}
-                </span>
-              </div>
-              <p class="break-all text-sm font-semibold text-black/80">
-                {{ project.repo_url }}
-              </p>
-            </button>
-          </div>
-          <p v-else class="neo-note">
-            {{ t('projects.emptyList') }}
-          </p>
-        </section>
-
-        <section
-          v-if="selectedProject"
-          ref="projectDetailRef"
-          class="neo-panel projects-editor-panel"
-        >
-          <div class="projects-section-head">
-            <div class="space-y-2">
-              <p class="neo-kicker bg-[var(--neo-red)]">
-                {{ t('projects.editorTitle') }}
-              </p>
-              <h2 class="projects-section-title">
-                {{ selectedProject.name }}
-              </h2>
-            </div>
-            <span class="neo-badge bg-white">
-              {{ formatImportStatusLabel(t, selectedProject.import_status) }}
-            </span>
-          </div>
-
-          <p class="neo-note projects-editor-summary">
-            {{
-              selectedProject.summary ||
-              selectedProject.repo_url ||
-              t('projects.hero.description')
-            }}
-          </p>
-
-          <form class="projects-editor-form" @submit.prevent="submitUpdate">
-            <div class="projects-editor-grid">
-              <label class="space-y-2">
-                <span class="neo-subheading">{{
-                  t('projects.fields.name')
-                }}</span>
-                <input v-model="editor.name" class="neo-input" />
-              </label>
-
-              <label class="space-y-2">
-                <span class="neo-subheading">
-                  {{ t('projects.fields.techStack') }}
-                </span>
-                <input v-model="editor.tech_stack" class="neo-input" />
-              </label>
-            </div>
-
-            <label class="space-y-2">
-              <span class="neo-subheading">{{
-                t('projects.fields.summary')
-              }}</span>
-              <textarea v-model="editor.summary" class="neo-textarea" />
-            </label>
-
-            <div class="projects-editor-grid">
-              <label class="space-y-2">
-                <span class="neo-subheading">
-                  {{ t('projects.fields.highlights') }}
-                </span>
-                <textarea v-model="editor.highlights" class="neo-textarea" />
-              </label>
-
-              <label class="space-y-2">
-                <span class="neo-subheading">
-                  {{ t('projects.fields.challenges') }}
-                </span>
-                <textarea v-model="editor.challenges" class="neo-textarea" />
-              </label>
-
-              <label class="space-y-2">
-                <span class="neo-subheading">
-                  {{ t('projects.fields.tradeoffs') }}
-                </span>
-                <textarea v-model="editor.tradeoffs" class="neo-textarea" />
-              </label>
-
-              <label class="space-y-2">
-                <span class="neo-subheading">
-                  {{ t('projects.fields.ownership') }}
-                </span>
-                <textarea
-                  v-model="editor.ownership_points"
-                  class="neo-textarea"
-                />
-              </label>
-            </div>
-
-            <label class="space-y-2">
-              <span class="neo-subheading">
-                {{ t('projects.fields.followups') }}
-              </span>
-              <textarea v-model="editor.followup_points" class="neo-textarea" />
-            </label>
-
-            <button
-              class="neo-button-dark w-full sm:w-auto"
-              type="submit"
-              :disabled="isUpdating"
-            >
-              {{ isUpdating ? t('common.saving') : t('projects.saveAction') }}
-            </button>
-          </form>
-        </section>
+        <div v-if="selectedProject" ref="projectDetailRef">
+          <ProjectProfileEditor
+            :project="selectedProject"
+            :editor="editor"
+            :is-updating="isUpdating"
+            @submit="submitUpdate"
+          />
+        </div>
 
         <section v-else class="neo-panel projects-empty-panel">
           <p class="neo-kicker bg-[var(--neo-red)]">
             {{ t('projects.editorTitle') }}
           </p>
           <h2 class="projects-section-title">
-            {{ t('projects.listTitle') }}
+            {{ t('projects.emptyTitle') }}
           </h2>
           <p class="neo-note">
-            {{ t('projects.emptyList') }}
+            {{ t('projects.emptyDescription') }}
           </p>
         </section>
+
+        <ProjectImportJobsPanel
+          :jobs="importJobs"
+          :is-retrying="isRetrying"
+          @open-project="openProjectFromJob"
+          @retry-job="retryJob"
+        />
       </div>
     </div>
   </section>
@@ -348,6 +229,8 @@ import {
   type ProjectProfile,
 } from '../api/client';
 import NoticePanel from '../components/NoticePanel.vue';
+import ProjectImportJobsPanel from '../components/ProjectImportJobsPanel.vue';
+import ProjectProfileEditor from '../components/ProjectProfileEditor.vue';
 import {
   formatImportJobStageLabel,
   formatImportJobStatusLabel,
@@ -544,6 +427,10 @@ function retryJob(jobId: string) {
   retryMutation.mutate(jobId);
 }
 
+function openProjectFromJob(projectId: string) {
+  void selectProject(projectId, { revealDetail: true });
+}
+
 function submitUpdate() {
   if (!selectedProject.value) {
     return;
@@ -633,6 +520,10 @@ function prefersReducedMotion(): boolean {
   gap: 1rem;
 }
 
+.projects-stage-hint {
+  max-width: 38rem;
+}
+
 .projects-stage-title {
   font-size: clamp(2.1rem, 6vw, 4.8rem);
   font-weight: 900;
@@ -687,22 +578,35 @@ function prefersReducedMotion(): boolean {
   text-transform: uppercase;
 }
 
-.projects-shell {
+.projects-shell,
+.projects-workspace {
   display: grid;
   gap: 1rem;
 }
 
-.projects-feed {
-  min-width: 0;
-}
-
-.projects-jobs-panel,
 .projects-list-panel,
-.projects-editor-panel,
 .projects-empty-panel {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+}
+
+.projects-activity-strip {
+  display: grid;
+  gap: 1rem;
+}
+
+.projects-activity-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.projects-activity-card {
+  background: color-mix(in srgb, var(--neo-surface) 88%, transparent);
+  border: 2px solid color-mix(in srgb, var(--neo-border) 20%, transparent);
+  display: grid;
+  gap: 0.6rem;
+  padding: 1rem;
 }
 
 .projects-section-head {
@@ -725,13 +629,11 @@ function prefersReducedMotion(): boolean {
   text-transform: uppercase;
 }
 
-.projects-job-list,
 .projects-list {
   display: grid;
   gap: 0.85rem;
 }
 
-.projects-job-row,
 .projects-list-row {
   background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
   border: 2px solid var(--neo-border);
@@ -744,7 +646,6 @@ function prefersReducedMotion(): boolean {
     background-color var(--motion-duration-fast) var(--motion-ease-soft);
 }
 
-.projects-job-row:hover,
 .projects-list-row:hover {
   box-shadow: 8px 8px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
   transform: translate(var(--motion-lift-md), var(--motion-lift-md));
@@ -752,32 +653,6 @@ function prefersReducedMotion(): boolean {
 
 .projects-list-row-active {
   background: color-mix(in srgb, var(--neo-yellow) 72%, white);
-}
-
-.projects-job-actions {
-  display: grid;
-  gap: 0.65rem;
-}
-
-.projects-workspace {
-  display: grid;
-  gap: 1rem;
-}
-
-.projects-editor-summary {
-  line-height: 1.7;
-  margin: 0;
-  max-width: 54rem;
-}
-
-.projects-editor-form {
-  display: grid;
-  gap: 1rem;
-}
-
-.projects-editor-grid {
-  display: grid;
-  gap: 1rem;
 }
 
 @media (min-width: 768px) {
@@ -789,8 +664,8 @@ function prefersReducedMotion(): boolean {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .projects-editor-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .projects-activity-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -802,26 +677,20 @@ function prefersReducedMotion(): boolean {
 
   .projects-shell {
     align-items: start;
-    grid-template-columns: minmax(18rem, 22rem) minmax(0, 1fr);
-  }
-
-  .projects-jobs-panel {
-    position: sticky;
-    top: 1.5rem;
+    grid-template-columns: minmax(18rem, 21rem) minmax(0, 1fr);
   }
 
   .projects-workspace {
-    grid-template-columns: minmax(18rem, 20rem) minmax(0, 1fr);
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .projects-job-row,
   .projects-list-row {
     transition: none;
   }
 
-  .projects-job-row:hover,
   .projects-list-row:hover {
     box-shadow: inherit;
     transform: none;
