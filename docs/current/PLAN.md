@@ -137,9 +137,9 @@
 - 不再把已落地的多轮训练、弱项级待复习入口、评估审计面板重新写成“半成能力”
 - 把 Prompt 版本管理从 v1 继续补强：当前已有版本选择、A/B 对比和审计明细，但还没有在线编辑、更细粒度 flow 级切换和更强实验分析
 - 把单 agent 成熟化作为当前技术主线：优先补检索升级、memory 利用、恢复语义和观测能力，而不是先上多 agent
-- 继续保持 repo chunk 以 SQLite FTS5 主路径为主；observation / session summary
-  已落第一版 embedding / hybrid rerank，但不要把 graph / repo chunk 的全量
-  RAG 写成已在做
+- observation / session summary 已落第一版 embedding / hybrid rerank；repo chunk 这一轮已经补上
+  `Qdrant vector recall + optional rerank + FTS5 fallback`，但不要顺手把 graph / 更大范围
+  的全量 RAG 写成已经在做
 - 如果要继续推进 sidecar agent 化，按 [AGENT_DEEP_REDESIGN_PLAN.md](../plans/AGENT_DEEP_REDESIGN_PLAN.md) 的分阶段路线渐进推进，而不是一次性推翻现有 stream / FSM / sidecar client 主链路
 - Go 侧继续保留最终落库和状态机边界；sidecar 的动作能力维持 `side_effects` + 少量 typed command 双轨，不把关键状态迁移退化成自由 side effect
 - 多 agent 目前只作为后续高价值长任务的实现蓝图，不作为阶段 C 的当前热路径方案

@@ -53,8 +53,9 @@
 
 本次审校还做了最基本实测：
 
-- `cd sidecar && uv run pytest` 通过，`85 passed`
-- `cd server && GOCACHE=/tmp/go-build go test -tags sqlite_fts5 ./...` 通过
+- `cd sidecar && uv run --group dev pytest tests/test_agent_runtime.py tests/test_prompt_versioning.py tests/test_main_streaming.py -q` 通过，`65 passed`
+- `cd server && go test -tags sqlite_fts5 ./internal/sidecar ./internal/service ./internal/controller -count=1` 通过
+- `pnpm --dir web test -- --run src/lib/streaming.spec.ts src/api/client.spec.ts` 通过，`14` 个 test files、`46` 个 tests 通过
 
 ---
 
@@ -174,15 +175,16 @@ Go 端目前已经具备这些持久层：
 `answer_service.go` 当前逻辑已经不是固定 2 轮写死：
 
 - 默认按 `turn_index / max_turns` 驱动多轮 FSM
-- `side_effects.depth_signal = skip_followup` 时可提前收口
-- `side_effects.depth_signal = extend` 时，若当前已到上限且 `max_turns < 6`，
-  Go 会额外补一轮
+- `transition_session` command result 会优先裁决 `skip_followup / extend`
+- 没有 command result 时，才回退 `side_effects.depth_signal`
+- 当最终决策是 `extend` 且当前已到上限但 `max_turns < 6` 时，Go 仍会额外补一轮
 - 真正创建 follow-up turn、调整 `max_turns`、进入 `review_pending`
   的最终决定仍由 Go 执行
 
 也就是说：
 
-- 模型已经可以提出“跳过追问”或“追加一轮”的信号
+- 模型已经可以先向 Go 申请关键轮次决策，再提出“跳过追问”或“追加一轮”的结构化意图
+- 旧 `side_effects.depth_signal` 仍保留为兼容 fallback，但不再是热路径首选
 - 但它没有直接改 session 状态的权限
 - Go 仍然保留最终状态机边界和兜底上限
 
@@ -530,14 +532,16 @@ typed command 的核心原则：
 - sidecar header + Go 审计日志里已记录 `prompt_set / prompt_hash / model / raw_output`
 - `generate_review` 已会把 `retrieval_trace` 带进 review 持久化和 export
 - stream 的 `context` 事件已经能反映工具使用路径
-- `trace` 事件已经覆盖 `prepare_context / tool_call / validate / fallback /
-  finalize / persist / error`
+- `trace` 事件已经覆盖 `prepare_context / tool_call / command / validate /
+  fallback / finalize / persist / error`
 - `runtime_trace` 已能同时记录 sidecar runtime、`context_compaction`
   摘要和 Go 侧 `persist_*` 持久化结果
 
 当前仍未进入的可观测深水区只有两类：
 
-- `decision / command` 这类 Phase C 后续阶段才会继续细化的动作轨迹
+- `command` 轨迹已经落第一版：`command` phase trace 与流式
+  `command_requested / command_applied / command_deferred / command_rejected`
+  已可见；后续只继续细化粒度和多 agent 预算轨迹
 - 多 agent 共享工件和 coordinator 预算轨迹
 
 ---
@@ -699,8 +703,8 @@ class ReviewVerdict(BaseModel):
 | 任务 | 回忆工具 | 动作工具 |
 |---|---|---|
 | `generate_question` | `recall_training_context` `recall_knowledge_graph` `recall_observations` `search_repo_chunks` | — |
-| `evaluate_answer` | `recall_training_context` `recall_knowledge_graph` `recall_observations` `search_repo_chunks` | `record_observation` `update_knowledge` `set_depth_signal` |
-| `generate_review` | `recall_training_context` `recall_weakness_profile` `recall_knowledge_graph` `recall_observations` `recall_session_summaries` `get_session_detail` | `record_observation` `update_knowledge` `suggest_next_session` |
+| `evaluate_answer` | `recall_training_context` `recall_knowledge_graph` `recall_observations` `search_repo_chunks` | `record_observation` `update_knowledge` `set_depth_signal` `transition_session` |
+| `generate_review` | `recall_training_context` `recall_weakness_profile` `recall_knowledge_graph` `recall_observations` `recall_session_summaries` `get_session_detail` | `record_observation` `update_knowledge` `suggest_next_session` `upsert_review_path` |
 
 补充说明：
 
@@ -708,6 +712,9 @@ class ReviewVerdict(BaseModel):
 - 每个 flow 仍然额外带有各自的 `read_*` prompt tools，例如
   `read_evaluation_context`、`read_turn_history`、`read_question_templates`
 - `search_repo_chunks` 只在绑定项目且 Go callback 可用时注入
+- 当前 `stable-v1` 和 `candidate-v1` prompt 已默认优先走
+  `transition_session / upsert_review_path`；`set_depth_signal /
+  suggest_next_session` 继续保留为兼容 fallback
 - `get_session_detail` 只在 review 场景且有 session id 时注入
 
 当前约束继续保留：
@@ -734,9 +741,9 @@ class ReviewVerdict(BaseModel):
 几个明确边界：
 
 - 不一次把所有 memory 都塞进 prompt
-- repo chunk 主路径仍然是 SQLite FTS5
-- 不把 graph / repo chunks 急着全 embedding 化
-- observation / session summary 是第一批适合 embedding 的对象
+- repo chunk 已升级成 `Qdrant vector recall + optional rerank + FTS5 fallback`
+- 不把 graph 或更大范围的 repo 语义层急着全 embedding 化
+- observation / session summary 仍然是第一批已经收口完成的 embedding 对象
 
 ### 6.3 embedding / rerank 的近期边界
 
@@ -744,13 +751,13 @@ class ReviewVerdict(BaseModel):
 
 - `agent_observations`
 - `session_memory_summaries`
+- `repo_chunks`（仅限当前项目范围，且保留 FTS5 fallback）
 
 第一批不急着 embedding 的对象：
 
 - `knowledge_nodes`
 - `knowledge_edges`
 - `weakness_tags`
-- `repo_chunks`
 
 当前已落地的排序链路：
 
@@ -837,6 +844,9 @@ class ReviewVerdict(BaseModel):
   `recommended_next / suggested_topics / next_training_focus`
 - `command_results` 已进入 envelope，并参与 review / evaluation 的结果校验
 - Go internal callback `/internal/agent-commands` 已成为 sidecar command 主链路
+- `evaluate_answer / generate_review` 的默认 prompt 已切到新命令语义
+- runtime 已有单次 run 内的 command budget 与 idempotency cache
+- stream 与 trace 已能暴露 `command_requested / command_applied / command_deferred / command_rejected`
 
 本阶段还要补：
 
@@ -1010,8 +1020,9 @@ class ReviewVerdict(BaseModel):
 
 本次审校实测结果：
 
-- `cd sidecar && uv run pytest`：`85 passed`
-- `cd server && GOCACHE=/tmp/go-build go test -tags sqlite_fts5 ./...`：通过
+- `cd sidecar && uv run --group dev pytest tests/test_agent_runtime.py tests/test_prompt_versioning.py tests/test_main_streaming.py -q`：`65 passed`
+- `cd server && go test -tags sqlite_fts5 ./internal/sidecar ./internal/service ./internal/controller -count=1`：通过
+- `pnpm --dir web test -- --run src/lib/streaming.spec.ts src/api/client.spec.ts`：`14` 个 test files、`46` 个 tests 通过
 
 重点场景：
 

@@ -16,7 +16,7 @@ SIDECAR_COVERAGE_MIN := 70
 
 .PHONY: help bootstrap setup install-tools deps deps-web deps-sidecar pytest \
 	check \
-	dev-web dev-server dev-server-hot dev-sidecar web-dev server-dev server-dev-hot sidecar-dev \
+	dev-web dev-server dev-server-hot dev-sidecar dev-qdrant web-dev server-dev server-dev-hot sidecar-dev \
 	lint lint-web lint-server lint-sidecar \
 	format format-web format-server format-sidecar \
 	test test-web test-server test-sidecar \
@@ -72,6 +72,9 @@ dev-server-hot: $(AIR_BIN) ## 启动 Go API 服务热重载 (8090)
 
 dev-sidecar: ## 启动 Python sidecar (8000)
 	$(ENV_LOADER); cd "$(SIDECAR_DIR)" && uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+dev-qdrant: ## 启动本地 Qdrant (6333)
+	./scripts/dev_qdrant.sh
 
 web-dev: dev-web
 
