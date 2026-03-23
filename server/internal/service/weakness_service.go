@@ -22,7 +22,7 @@ func (s *Service) lookupSessionContext(ctx context.Context, session *domain.Trai
 	}
 
 	query := strings.Join(append(session.Project.FollowupPoints, session.Project.Summary), " ")
-	return s.repo.SearchProjectChunks(ctx, session.Project.ID, query, 6)
+	return s.SearchProjectChunks(ctx, session.Project.ID, query, 6)
 }
 
 func (s *Service) coolDownSessionWeakness(

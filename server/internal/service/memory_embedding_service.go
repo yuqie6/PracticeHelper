@@ -181,6 +181,7 @@ func (s *Service) indexMemoryIndexEntries(
 			ID:     document.Entry.ID,
 			Vector: item.Vector,
 			Payload: map[string]any{
+				"document_kind": domain.VectorDocumentKindMemory,
 				"memory_type":   document.Entry.MemoryType,
 				"scope_type":    document.Entry.ScopeType,
 				"scope_id":      document.Entry.ScopeID,

@@ -69,6 +69,17 @@ const (
 	MemoryEmbeddingJobStatusRunning = "running"
 	MemoryEmbeddingJobStatusFailed  = "failed"
 
+	RepoChunkEmbeddingStatusPending = "pending"
+	RepoChunkEmbeddingStatusIndexed = "indexed"
+	RepoChunkEmbeddingStatusFailed  = "failed"
+
+	RepoChunkEmbeddingJobStatusQueued  = "queued"
+	RepoChunkEmbeddingJobStatusRunning = "running"
+	RepoChunkEmbeddingJobStatusFailed  = "failed"
+
+	VectorDocumentKindMemory    = "memory"
+	VectorDocumentKindRepoChunk = "repo_chunk"
+
 	DepthSignalNormal       = "normal"
 	DepthSignalSkipFollowup = "skip_followup"
 	DepthSignalExtend       = "extend"

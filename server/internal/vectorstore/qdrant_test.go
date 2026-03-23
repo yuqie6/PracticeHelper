@@ -76,3 +76,58 @@ func TestQdrantStoreUpsertEnsuresCollectionOnceAndReadsBackVectors(t *testing.T)
 		t.Fatalf("expected retrieved vector, got %#v", points)
 	}
 }
+
+func TestQdrantStoreSearchUsesPayloadFilterAndReturnsScores(t *testing.T) {
+	var capturedFilter map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/collections/practicehelper_memory/points/search":
+			var requestBody map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+				t.Fatalf("decode search request: %v", err)
+			}
+			filter, _ := requestBody["filter"].(map[string]any)
+			capturedFilter = filter
+			w.Header().Set("Content-Type", "application/json")
+			if err := json.NewEncoder(w).Encode(map[string]any{
+				"result": []map[string]any{
+					{
+						"id":      "chunk_1",
+						"score":   0.97,
+						"payload": map[string]any{"document_kind": "repo_chunk", "project_id": "proj_1"},
+					},
+					{
+						"id":      "chunk_2",
+						"score":   0.73,
+						"payload": map[string]any{"document_kind": "repo_chunk", "project_id": "proj_1"},
+					},
+				},
+			}); err != nil {
+				t.Fatalf("encode search response: %v", err)
+			}
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	store := NewQdrantStore(server.URL, "secret", "practicehelper_memory", time.Second)
+	results, err := store.Search(context.Background(), []float64{0.2, 0.4}, SearchFilter{
+		Equals: map[string]string{
+			"document_kind": "repo_chunk",
+			"project_id":    "proj_1",
+		},
+	}, 2)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(results) != 2 || results[0].ID != "chunk_1" || results[0].Score != 0.97 {
+		t.Fatalf("unexpected search results: %+v", results)
+	}
+
+	must, ok := capturedFilter["must"].([]any)
+	if !ok || len(must) != 2 {
+		t.Fatalf("expected filter.must with 2 conditions, got %+v", capturedFilter)
+	}
+}

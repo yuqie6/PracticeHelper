@@ -36,14 +36,15 @@ type Service struct {
 	repo    *repo.Store
 	sidecar *sidecar.Client
 
-	vectorStore                vectorstore.Store
-	vectorWriteEnabled         bool
-	vectorReadEnabled          bool
-	vectorRerankEnabled        bool
-	memoryHotIndexTimeout      time.Duration
-	memoryEmbeddingClaimTTL    time.Duration
-	memoryEmbeddingPollEvery   time.Duration
-	memoryEmbeddingWorkerAlive bool
+	vectorStore                   vectorstore.Store
+	vectorWriteEnabled            bool
+	vectorReadEnabled             bool
+	vectorRerankEnabled           bool
+	memoryHotIndexTimeout         time.Duration
+	memoryEmbeddingClaimTTL       time.Duration
+	memoryEmbeddingPollEvery      time.Duration
+	memoryEmbeddingWorkerAlive    bool
+	repoChunkEmbeddingWorkerAlive bool
 }
 
 type Option func(*Service)
@@ -93,6 +94,7 @@ func New(repository *repo.Store, sc *sidecar.Client, options ...Option) *Service
 	}
 	svc.resumePendingImportJobs()
 	svc.startMemoryEmbeddingWorker()
+	svc.startRepoChunkEmbeddingWorker()
 	return svc
 }
 

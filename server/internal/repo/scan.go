@@ -189,6 +189,88 @@ func scanRepoChunk(scanner interface{ Scan(dest ...any) error }) (*domain.RepoCh
 	}, nil
 }
 
+func scanRepoChunkEmbeddingRecord(scanner interface{ Scan(dest ...any) error }) (*domain.RepoChunkEmbeddingRecord, error) {
+	var (
+		id, repoChunkID, projectID, contentHash string
+		modelName, vectorStoreID, status        string
+		lastError, lastIndexedAt                string
+		createdAt, updatedAt                    string
+	)
+	var vectorDim int
+	if err := scanner.Scan(
+		&id,
+		&repoChunkID,
+		&projectID,
+		&contentHash,
+		&modelName,
+		&vectorStoreID,
+		&vectorDim,
+		&status,
+		&lastError,
+		&lastIndexedAt,
+		&createdAt,
+		&updatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return &domain.RepoChunkEmbeddingRecord{
+		ID:            id,
+		RepoChunkID:   repoChunkID,
+		ProjectID:     projectID,
+		ContentHash:   contentHash,
+		ModelName:     modelName,
+		VectorStoreID: vectorStoreID,
+		VectorDim:     vectorDim,
+		Status:        status,
+		LastError:     lastError,
+		LastIndexedAt: parseNullableTime(lastIndexedAt),
+		CreatedAt:     parseTime(createdAt),
+		UpdatedAt:     parseTime(updatedAt),
+	}, nil
+}
+
+func scanRepoChunkEmbeddingJob(scanner interface{ Scan(dest ...any) error }) (*domain.RepoChunkEmbeddingJob, error) {
+	var (
+		id, repoChunkID, projectID, status string
+		errorMessage, claimToken           string
+		claimExpiresAt, createdAt          string
+		updatedAt, startedAt, finishedAt   string
+	)
+	var attemptCount int
+	if err := scanner.Scan(
+		&id,
+		&repoChunkID,
+		&projectID,
+		&status,
+		&attemptCount,
+		&errorMessage,
+		&claimToken,
+		&claimExpiresAt,
+		&createdAt,
+		&updatedAt,
+		&startedAt,
+		&finishedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return &domain.RepoChunkEmbeddingJob{
+		ID:             id,
+		RepoChunkID:    repoChunkID,
+		ProjectID:      projectID,
+		Status:         status,
+		AttemptCount:   attemptCount,
+		ErrorMessage:   errorMessage,
+		ClaimToken:     claimToken,
+		ClaimExpiresAt: parseNullableTime(claimExpiresAt),
+		CreatedAt:      parseTime(createdAt),
+		UpdatedAt:      parseTime(updatedAt),
+		StartedAt:      parseNullableTime(startedAt),
+		FinishedAt:     parseNullableTime(finishedAt),
+	}, nil
+}
+
 func scanQuestionTemplate(scanner interface{ Scan(dest ...any) error }) (*domain.QuestionTemplate, error) {
 	var id, mode, topic, prompt, focusPointsJSON, badAnswersJSON, followupTemplatesJSON, scoreWeightsJSON string
 	if err := scanner.Scan(&id, &mode, &topic, &prompt, &focusPointsJSON, &badAnswersJSON, &followupTemplatesJSON, &scoreWeightsJSON); err != nil {

@@ -79,3 +79,33 @@ type AnalyzeRepoResponse struct {
 	FollowupPoints  []string    `json:"followup_points"`
 	Chunks          []RepoChunk `json:"chunks"`
 }
+
+type RepoChunkEmbeddingRecord struct {
+	ID            string     `json:"id"`
+	RepoChunkID   string     `json:"repo_chunk_id"`
+	ProjectID     string     `json:"project_id"`
+	ContentHash   string     `json:"content_hash"`
+	ModelName     string     `json:"model_name"`
+	VectorStoreID string     `json:"vector_store_id"`
+	VectorDim     int        `json:"vector_dim"`
+	Status        string     `json:"status"`
+	LastError     string     `json:"last_error,omitempty"`
+	LastIndexedAt *time.Time `json:"last_indexed_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+type RepoChunkEmbeddingJob struct {
+	ID             string     `json:"id"`
+	RepoChunkID    string     `json:"repo_chunk_id"`
+	ProjectID      string     `json:"project_id"`
+	Status         string     `json:"status"`
+	AttemptCount   int        `json:"attempt_count"`
+	ErrorMessage   string     `json:"error_message,omitempty"`
+	ClaimToken     string     `json:"claim_token,omitempty"`
+	ClaimExpiresAt *time.Time `json:"claim_expires_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	StartedAt      *time.Time `json:"started_at,omitempty"`
+	FinishedAt     *time.Time `json:"finished_at,omitempty"`
+}

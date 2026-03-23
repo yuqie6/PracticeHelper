@@ -170,7 +170,7 @@ func (s *Service) prepareSession(
 		session.Project = project
 		generateRequest.Project = project
 		query := strings.Join(append(project.FollowupPoints, project.Summary), " ")
-		chunks, err := s.repo.SearchProjectChunks(ctx, project.ID, query, 6)
+		chunks, err := s.SearchProjectChunks(ctx, project.ID, query, 6)
 		if err != nil {
 			return nil, domain.GenerateQuestionRequest{}, err
 		}

@@ -12,7 +12,7 @@ func (s *Service) SearchProjectChunksForAgent(
 	query string,
 	limit int,
 ) ([]domain.RepoChunk, error) {
-	return s.repo.SearchProjectChunks(ctx, projectID, query, limit)
+	return s.SearchProjectChunks(ctx, projectID, query, limit)
 }
 
 func (s *Service) GetAgentSessionDetail(

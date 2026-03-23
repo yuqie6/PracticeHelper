@@ -327,6 +327,34 @@ func migrate(db *sql.DB) error {
 			started_at TEXT NOT NULL DEFAULT '',
 			finished_at TEXT NOT NULL DEFAULT ''
 		);`,
+		`CREATE TABLE IF NOT EXISTS repo_chunk_embedding_records (
+			id TEXT PRIMARY KEY,
+			repo_chunk_id TEXT NOT NULL UNIQUE,
+			project_id TEXT NOT NULL DEFAULT '',
+			content_hash TEXT NOT NULL DEFAULT '',
+			model_name TEXT NOT NULL DEFAULT '',
+			vector_store_id TEXT NOT NULL DEFAULT '',
+			vector_dim INTEGER NOT NULL DEFAULT 0,
+			status TEXT NOT NULL CHECK(status IN ('pending','indexed','failed')),
+			last_error TEXT NOT NULL DEFAULT '',
+			last_indexed_at TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS repo_chunk_embedding_jobs (
+			id TEXT PRIMARY KEY,
+			repo_chunk_id TEXT NOT NULL UNIQUE,
+			project_id TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL CHECK(status IN ('queued','running','failed')),
+			attempt_count INTEGER NOT NULL DEFAULT 0,
+			error_message TEXT NOT NULL DEFAULT '',
+			claim_token TEXT NOT NULL DEFAULT '',
+			claim_expires_at TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			started_at TEXT NOT NULL DEFAULT '',
+			finished_at TEXT NOT NULL DEFAULT ''
+		);`,
 		`CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_scope_label
 			ON knowledge_nodes(scope_type, scope_id, node_type, label);`,
 		`CREATE INDEX IF NOT EXISTS idx_knowledge_snapshots_node_created
@@ -343,6 +371,12 @@ func migrate(db *sql.DB) error {
 			ON memory_embedding_records(memory_index_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_memory_embedding_jobs_status
 			ON memory_embedding_jobs(status, updated_at ASC);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_repo_chunk_embedding_records_chunk
+			ON repo_chunk_embedding_records(repo_chunk_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_repo_chunk_embedding_records_project
+			ON repo_chunk_embedding_records(project_id, status);`,
+		`CREATE INDEX IF NOT EXISTS idx_repo_chunk_embedding_jobs_status
+			ON repo_chunk_embedding_jobs(status, updated_at ASC);`,
 	}
 
 	for _, statement := range statements {

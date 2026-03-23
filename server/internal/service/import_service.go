@@ -176,7 +176,10 @@ func (s *Service) startImportJobAttempt(job domain.ProjectImportJob, allowRetry 
 			project.ID,
 		); err != nil {
 			slog.Error("complete import job failed", "job_id", job.ID, "project_id", project.ID, "error", err)
+			return
 		}
+
+		go s.enqueueProjectRepoChunkEmbeddings(context.Background(), project.ID)
 	}()
 }
 

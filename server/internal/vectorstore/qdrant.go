@@ -18,6 +18,16 @@ type Point struct {
 	Payload map[string]any `json:"payload,omitempty"`
 }
 
+type SearchFilter struct {
+	Equals map[string]string
+}
+
+type SearchResult struct {
+	ID      string
+	Score   float64
+	Payload map[string]any
+}
+
 type StoredPoint struct {
 	ID      string
 	Vector  []float64
@@ -28,6 +38,7 @@ type Store interface {
 	Enabled() bool
 	Upsert(ctx context.Context, points []Point, vectorSize int) error
 	Get(ctx context.Context, ids []string) (map[string]StoredPoint, error)
+	Search(ctx context.Context, vector []float64, filter SearchFilter, limit int) ([]SearchResult, error)
 }
 
 type QdrantStore struct {
@@ -97,6 +108,41 @@ func (s *QdrantStore) Get(ctx context.Context, ids []string) (map[string]StoredP
 		byID[item.ID] = item
 	}
 	return byID, nil
+}
+
+func (s *QdrantStore) Search(
+	ctx context.Context,
+	vector []float64,
+	filter SearchFilter,
+	limit int,
+) ([]SearchResult, error) {
+	if !s.Enabled() || len(vector) == 0 || limit <= 0 {
+		return nil, nil
+	}
+
+	requestBody := map[string]any{
+		"vector":       vector,
+		"limit":        limit,
+		"with_payload": true,
+	}
+	if qdrantFilter := buildQdrantSearchFilter(filter); len(qdrantFilter) > 0 {
+		requestBody["filter"] = qdrantFilter
+	}
+
+	var response struct {
+		Result any `json:"result"`
+	}
+	if err := s.callJSON(
+		ctx,
+		http.MethodPost,
+		"/collections/"+s.collection+"/points/search",
+		requestBody,
+		&response,
+	); err != nil {
+		return nil, err
+	}
+
+	return parseQdrantSearchResult(response.Result), nil
 }
 
 func (s *QdrantStore) ensureCollection(ctx context.Context, vectorSize int) error {
@@ -175,6 +221,36 @@ func parseQdrantRetrieveResult(raw any) []StoredPoint {
 	return nil
 }
 
+func parseQdrantSearchResult(raw any) []SearchResult {
+	items, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+
+	results := make([]SearchResult, 0, len(items))
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		id := fmt.Sprint(entry["id"])
+		score, _ := entry["score"].(float64)
+		payload := map[string]any{}
+		if rawPayload, ok := entry["payload"].(map[string]any); ok {
+			payload = rawPayload
+		}
+		if id == "" {
+			continue
+		}
+		results = append(results, SearchResult{
+			ID:      id,
+			Score:   score,
+			Payload: payload,
+		})
+	}
+	return results
+}
+
 func parseQdrantPoints(raw []any) []StoredPoint {
 	items := make([]StoredPoint, 0, len(raw))
 	for _, item := range raw {
@@ -217,4 +293,27 @@ func parseFloat64Slice(raw any) []float64 {
 	default:
 		return nil
 	}
+}
+
+func buildQdrantSearchFilter(filter SearchFilter) map[string]any {
+	if len(filter.Equals) == 0 {
+		return nil
+	}
+
+	must := make([]map[string]any, 0, len(filter.Equals))
+	for key, value := range filter.Equals {
+		if strings.TrimSpace(key) == "" || value == "" {
+			continue
+		}
+		must = append(must, map[string]any{
+			"key": key,
+			"match": map[string]any{
+				"value": value,
+			},
+		})
+	}
+	if len(must) == 0 {
+		return nil
+	}
+	return map[string]any{"must": must}
 }

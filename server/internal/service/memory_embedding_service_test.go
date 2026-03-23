@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"testing"
 	"time"
 
@@ -230,7 +231,8 @@ func TestGetAgentContextUsesVectorSimilarityForSessionSummaries(t *testing.T) {
 }
 
 type fakeVectorStore struct {
-	points map[string]vectorstore.StoredPoint
+	points    map[string]vectorstore.StoredPoint
+	searchErr error
 }
 
 func newFakeVectorStore() *fakeVectorStore {
@@ -262,6 +264,57 @@ func (s *fakeVectorStore) Get(_ context.Context, ids []string) (map[string]vecto
 		items[id] = point
 	}
 	return items, nil
+}
+
+func (s *fakeVectorStore) Search(
+	_ context.Context,
+	vector []float64,
+	filter vectorstore.SearchFilter,
+	limit int,
+) ([]vectorstore.SearchResult, error) {
+	if s.searchErr != nil {
+		return nil, s.searchErr
+	}
+
+	results := make([]vectorstore.SearchResult, 0, len(s.points))
+	for _, point := range s.points {
+		if !matchesVectorFilter(point.Payload, filter) {
+			continue
+		}
+		results = append(results, vectorstore.SearchResult{
+			ID:      point.ID,
+			Score:   cosineSimilarity(vector, point.Vector),
+			Payload: point.Payload,
+		})
+	}
+
+	sort.SliceStable(results, func(i, j int) bool {
+		if results[i].Score != results[j].Score {
+			return results[i].Score > results[j].Score
+		}
+		return results[i].ID < results[j].ID
+	})
+	if limit > 0 && len(results) > limit {
+		results = results[:limit]
+	}
+	return results, nil
+}
+
+func matchesVectorFilter(payload map[string]any, filter vectorstore.SearchFilter) bool {
+	if len(filter.Equals) == 0 {
+		return true
+	}
+
+	for key, expected := range filter.Equals {
+		if expected == "" {
+			continue
+		}
+		actual, ok := payload[key]
+		if !ok || actual != expected {
+			return false
+		}
+	}
+	return true
 }
 
 func newMemoryEmbeddingTestSidecarServer(
