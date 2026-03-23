@@ -115,6 +115,13 @@ func (s *Service) prepareSession(
 		StartedAt:  &startedAt,
 	}
 
+	promptOverlay, err := normalizePromptOverlay(request.PromptOverlay)
+	if err != nil {
+		return nil, domain.GenerateQuestionRequest{}, err
+	}
+	session.PromptOverlay = promptOverlay
+	session.PromptOverlayHash = promptOverlayHash(promptOverlay)
+
 	promptSet, err := s.resolvePromptSet(ctx, request.PromptSetID)
 	if err != nil {
 		return nil, domain.GenerateQuestionRequest{}, err
@@ -146,6 +153,7 @@ func (s *Service) prepareSession(
 		Topic:             session.Topic,
 		Intensity:         intensity,
 		PromptSetID:       session.PromptSetID,
+		PromptOverlay:     session.PromptOverlay,
 		Weaknesses:        weaknesses,
 		JobTargetAnalysis: buildJobTargetAnalysisSnapshot(jobTargetAnalysis),
 	}

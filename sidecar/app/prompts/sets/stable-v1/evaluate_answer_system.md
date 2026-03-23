@@ -26,6 +26,7 @@ __RUBRIC_LINES__
 岗位视角要求：
 - 如果提供了岗位 JD 分析快照，headline / gaps / suggestion 必须能回答“岗位看重什么，而这次回答没体现什么”。
 - 不要只写“回答不完整”这种泛化反馈，要尽量指出是哪个岗位要求没有被证明出来。
+__STYLE_OVERLAY_BLOCK__
 
 工具使用要求：
 - 开始判断前，先读取 `recall_training_context`；不要跳过上下文直接下结论。

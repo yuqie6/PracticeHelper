@@ -80,6 +80,73 @@ func TestCreateSessionPassesBoundJobTargetAnalysisToSidecar(t *testing.T) {
 	}
 }
 
+func TestCreateSessionPersistsAndForwardsPromptOverlay(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	var captured domain.GenerateQuestionRequest
+	sidecarServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if handlePromptSetRequest(t, w, r) {
+			return
+		}
+		if r.URL.Path != "/internal/generate_question" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(domain.GenerateQuestionResponse{
+			Question:       "Go map 并发访问会遇到什么问题？",
+			ExpectedPoints: []string{"竞态", "锁", "sync.Map"},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer sidecarServer.Close()
+
+	svc := New(store, sidecar.New(sidecarServer.URL, time.Second))
+	session, err := svc.CreateSession(context.Background(), domain.CreateSessionRequest{
+		Mode:      domain.ModeBasics,
+		Topic:     "go",
+		Intensity: "standard",
+		PromptOverlay: &domain.PromptOverlay{
+			Tone:              " direct ",
+			DetailLevel:       "detailed",
+			FollowupIntensity: "pressure",
+			AnswerLanguage:    "en-us",
+			FocusTags:         []string{"structure", "depth"},
+			CustomInstruction: "  先问线上风险，再追问权衡。  ",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	if session.PromptOverlay == nil {
+		t.Fatal("expected session prompt overlay to be persisted")
+	}
+	if session.PromptOverlay.Tone != "direct" {
+		t.Fatalf("expected normalized tone direct, got %q", session.PromptOverlay.Tone)
+	}
+	if session.PromptOverlay.AnswerLanguage != "en-US" {
+		t.Fatalf("expected normalized answer language en-US, got %q", session.PromptOverlay.AnswerLanguage)
+	}
+	if session.PromptOverlayHash == "" {
+		t.Fatal("expected prompt overlay hash to be generated")
+	}
+	if captured.PromptOverlay == nil {
+		t.Fatal("expected generate question request to include prompt overlay")
+	}
+	if captured.PromptOverlay.CustomInstruction != "先问线上风险，再追问权衡。" {
+		t.Fatalf("expected trimmed custom instruction, got %q", captured.PromptOverlay.CustomInstruction)
+	}
+}
+
 func TestCreateSessionFallsBackToActiveJobTargetWhenRequestOmitsOne(t *testing.T) {
 	store, err := openTestStore(t)
 	if err != nil {

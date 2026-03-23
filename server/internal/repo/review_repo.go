@@ -52,7 +52,9 @@ func (s *Store) CreateReview(ctx context.Context, review *domain.ReviewCard) err
 
 func (s *Store) GetReview(ctx context.Context, reviewID string) (*domain.ReviewCard, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT rc.id, rc.session_id, ts.job_target_id, ts.job_target_analysis_id, ts.prompt_set_id, ts.prompt_set_label, ts.prompt_set_status, rc.overall, rc.top_fix, rc.top_fix_reason,
+		SELECT rc.id, rc.session_id, ts.job_target_id, ts.job_target_analysis_id, ts.prompt_set_id, ts.prompt_set_label, ts.prompt_set_status,
+			COALESCE(ts.prompt_overlay_json, 'null'), COALESCE(ts.prompt_overlay_hash, ''),
+			rc.overall, rc.top_fix, rc.top_fix_reason,
 			rc.highlights_json, rc.gaps_json, rc.suggested_topics_json, rc.next_training_focus_json,
 			rc.recommended_next_json, rc.retrieval_trace_json, rc.score_breakdown_json, rc.created_at
 		FROM review_cards rc

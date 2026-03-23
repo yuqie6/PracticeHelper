@@ -21,6 +21,15 @@ type PromptSetSummary struct {
 	IsDefault   bool   `json:"is_default,omitempty"`
 }
 
+type PromptOverlay struct {
+	Tone              string   `json:"tone,omitempty"`
+	DetailLevel       string   `json:"detail_level,omitempty"`
+	FollowupIntensity string   `json:"followup_intensity,omitempty"`
+	AnswerLanguage    string   `json:"answer_language,omitempty"`
+	FocusTags         []string `json:"focus_tags,omitempty"`
+	CustomInstruction string   `json:"custom_instruction,omitempty"`
+}
+
 type PromptExecutionMeta struct {
 	ModelName    string        `json:"model_name,omitempty"`
 	PromptSetID  string        `json:"prompt_set_id,omitempty"`

@@ -63,18 +63,6 @@ func (s *Service) resolveReviewPath(
 	return resolveReviewPrerequisiteTopic(session, suggestion.Topic), nil
 }
 
-func (s *Service) inferReviewPrerequisiteEdge(
-	ctx context.Context,
-	session *domain.TrainingSession,
-	recommendedTopic string,
-) error {
-	prerequisiteTopic := resolveReviewPrerequisiteTopic(session, recommendedTopic)
-	if prerequisiteTopic == "" {
-		return nil
-	}
-	return s.repo.EnsureKnowledgePrerequisiteEdge(ctx, prerequisiteTopic, normalizeBasicsTopic(session.Topic))
-}
-
 func resolveReviewPrerequisiteTopic(
 	session *domain.TrainingSession,
 	recommendedTopic string,

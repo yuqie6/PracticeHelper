@@ -22,6 +22,7 @@ type GenerateQuestionRequest struct {
 	Topic             string                    `json:"topic,omitempty"`
 	CandidateTopics   []string                  `json:"candidate_topics,omitempty"`
 	PromptSetID       string                    `json:"prompt_set_id,omitempty"`
+	PromptOverlay     *PromptOverlay            `json:"prompt_overlay,omitempty"`
 	Intensity         string                    `json:"intensity"`
 	Project           *ProjectProfile           `json:"project,omitempty"`
 	Templates         []QuestionTemplate        `json:"templates,omitempty"`
@@ -41,6 +42,7 @@ type EvaluateAnswerRequest struct {
 	Mode              string                    `json:"mode"`
 	Topic             string                    `json:"topic,omitempty"`
 	PromptSetID       string                    `json:"prompt_set_id,omitempty"`
+	PromptOverlay     *PromptOverlay            `json:"prompt_overlay,omitempty"`
 	Project           *ProjectProfile           `json:"project,omitempty"`
 	Question          string                    `json:"question"`
 	ExpectedPoints    []string                  `json:"expected_points"`
@@ -58,6 +60,7 @@ type GenerateReviewRequest struct {
 	Project           *ProjectProfile           `json:"project,omitempty"`
 	Turns             []TrainingTurn            `json:"turns"`
 	PromptSetID       string                    `json:"prompt_set_id,omitempty"`
+	PromptOverlay     *PromptOverlay            `json:"prompt_overlay,omitempty"`
 	JobTargetAnalysis *AnalyzeJobTargetResponse `json:"job_target_analysis,omitempty"`
 	AgentContext      *AgentContext             `json:"agent_context,omitempty"`
 }

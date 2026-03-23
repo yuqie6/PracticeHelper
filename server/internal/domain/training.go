@@ -10,6 +10,8 @@ type TrainingSession struct {
 	JobTargetID         string            `json:"job_target_id,omitempty"`
 	JobTargetAnalysisID string            `json:"job_target_analysis_id,omitempty"`
 	PromptSetID         string            `json:"prompt_set_id,omitempty"`
+	PromptOverlay       *PromptOverlay    `json:"prompt_overlay,omitempty"`
+	PromptOverlayHash   string            `json:"prompt_overlay_hash,omitempty"`
 	Intensity           string            `json:"intensity"`
 	Status              string            `json:"status"`
 	MaxTurns            int               `json:"max_turns"`
@@ -101,6 +103,8 @@ type ReviewCard struct {
 	JobTargetID         string             `json:"job_target_id,omitempty"`
 	JobTargetAnalysisID string             `json:"job_target_analysis_id,omitempty"`
 	PromptSetID         string             `json:"prompt_set_id,omitempty"`
+	PromptOverlay       *PromptOverlay     `json:"prompt_overlay,omitempty"`
+	PromptOverlayHash   string             `json:"prompt_overlay_hash,omitempty"`
 	Overall             string             `json:"overall"`
 	TopFix              string             `json:"top_fix,omitempty"`
 	TopFixReason        string             `json:"top_fix_reason,omitempty"`
@@ -124,17 +128,18 @@ type NextSession struct {
 }
 
 type TrainingSessionSummary struct {
-	ID          string            `json:"id"`
-	Mode        string            `json:"mode"`
-	Topic       string            `json:"topic,omitempty"`
-	ProjectName string            `json:"project_name,omitempty"`
-	Status      string            `json:"status"`
-	TotalScore  float64           `json:"total_score"`
-	ReviewID    string            `json:"review_id,omitempty"`
-	UpdatedAt   time.Time         `json:"updated_at"`
-	JobTarget   *JobTargetRef     `json:"job_target,omitempty"`
-	PromptSetID string            `json:"prompt_set_id,omitempty"`
-	PromptSet   *PromptSetSummary `json:"prompt_set,omitempty"`
+	ID                string            `json:"id"`
+	Mode              string            `json:"mode"`
+	Topic             string            `json:"topic,omitempty"`
+	ProjectName       string            `json:"project_name,omitempty"`
+	Status            string            `json:"status"`
+	TotalScore        float64           `json:"total_score"`
+	ReviewID          string            `json:"review_id,omitempty"`
+	UpdatedAt         time.Time         `json:"updated_at"`
+	JobTarget         *JobTargetRef     `json:"job_target,omitempty"`
+	PromptSetID       string            `json:"prompt_set_id,omitempty"`
+	PromptOverlayHash string            `json:"prompt_overlay_hash,omitempty"`
+	PromptSet         *PromptSetSummary `json:"prompt_set,omitempty"`
 }
 
 type ListSessionsRequest struct {
@@ -154,14 +159,15 @@ type PaginatedList[T any] struct {
 }
 
 type CreateSessionRequest struct {
-	Mode                  string `json:"mode" binding:"required"`
-	Topic                 string `json:"topic"`
-	ProjectID             string `json:"project_id"`
-	JobTargetID           string `json:"job_target_id"`
-	PromptSetID           string `json:"prompt_set_id"`
-	IgnoreActiveJobTarget bool   `json:"ignore_active_job_target,omitempty"`
-	Intensity             string `json:"intensity" binding:"required"`
-	MaxTurns              int    `json:"max_turns,omitempty"`
+	Mode                  string         `json:"mode" binding:"required"`
+	Topic                 string         `json:"topic"`
+	ProjectID             string         `json:"project_id"`
+	JobTargetID           string         `json:"job_target_id"`
+	PromptSetID           string         `json:"prompt_set_id"`
+	PromptOverlay         *PromptOverlay `json:"prompt_overlay,omitempty"`
+	IgnoreActiveJobTarget bool           `json:"ignore_active_job_target,omitempty"`
+	Intensity             string         `json:"intensity" binding:"required"`
+	MaxTurns              int            `json:"max_turns,omitempty"`
 }
 
 type ExportSessionsRequest struct {

@@ -140,6 +140,8 @@ func errorCode(err error) string {
 		return "session_not_found"
 	case errors.Is(err, service.ErrPromptSetNotFound):
 		return "prompt_set_not_found"
+	case errors.Is(err, service.ErrInvalidPromptOverlay):
+		return "invalid_prompt_overlay"
 	case errors.Is(err, service.ErrEmptyExportSelection):
 		return "empty_export_selection"
 	case errors.Is(err, service.ErrUnsupportedExportFormat):

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -148,6 +149,69 @@ func TestPromptExperimentRouteReturnsAggregatedReport(t *testing.T) {
 	}
 }
 
+func TestPromptExperimentRouteExcludesSessionsWithPromptOverlay(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	seedPromptRouteExperimentSession(
+		t,
+		store,
+		"sess_route_prompt_stable_plain",
+		domain.PromptSetSummary{ID: "stable-v1", Label: "Stable v1", Status: "stable"},
+		84,
+	)
+	seedPromptRouteExperimentSessionWithOverlay(
+		t,
+		store,
+		"sess_route_prompt_stable_overlay",
+		domain.PromptSetSummary{ID: "stable-v1", Label: "Stable v1", Status: "stable"},
+		91,
+		"overlay-hash-stable",
+	)
+	seedPromptRouteExperimentSession(
+		t,
+		store,
+		"sess_route_prompt_candidate_plain",
+		domain.PromptSetSummary{ID: "candidate-v1", Label: "Candidate v1", Status: "candidate"},
+		90,
+	)
+
+	router := NewRouter(service.New(store, nil))
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/prompt-experiments?left=stable-v1&right=candidate-v1&mode=basics&topic=redis&limit=10",
+		nil,
+	)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", recorder.Code, recorder.Body.String())
+	}
+
+	var payload struct {
+		Data domain.PromptExperimentReport `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if payload.Data.Left.SessionCount != 1 {
+		t.Fatalf("expected stable session count 1 after excluding overlay, got %d", payload.Data.Left.SessionCount)
+	}
+	if len(payload.Data.RecentSamples) != 2 {
+		t.Fatalf("expected 2 recent samples after excluding overlay, got %d", len(payload.Data.RecentSamples))
+	}
+	for _, item := range payload.Data.RecentSamples {
+		if item.SessionID == "sess_route_prompt_stable_overlay" {
+			t.Fatal("expected overlay session to be excluded from prompt experiments")
+		}
+	}
+}
+
 func TestPromptExperimentRouteReturnsHistoricalReportWithoutSidecar(t *testing.T) {
 	store, err := openTestStore(t)
 	if err != nil {
@@ -240,6 +304,96 @@ func TestSessionEvaluationLogsRouteReturnsPromptAuditFields(t *testing.T) {
 	}
 }
 
+func TestPromptPreferencesRoutesRoundTripNormalizedOverlay(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	router := NewRouter(service.New(store, nil))
+
+	patchRequest := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/prompt-preferences",
+		strings.NewReader(`{
+			"tone":" direct ",
+			"detail_level":"detailed",
+			"followup_intensity":"pressure",
+			"answer_language":"en-us",
+			"focus_tags":["depth","structure"],
+			"custom_instruction":"  多追问边界和取舍。  "
+		}`),
+	)
+	patchRequest.Header.Set("Content-Type", "application/json")
+	patchRecorder := httptest.NewRecorder()
+	router.ServeHTTP(patchRecorder, patchRequest)
+
+	if patchRecorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", patchRecorder.Code, patchRecorder.Body.String())
+	}
+
+	var patchPayload struct {
+		Data domain.PromptOverlay `json:"data"`
+	}
+	if err := json.Unmarshal(patchRecorder.Body.Bytes(), &patchPayload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if patchPayload.Data.Tone != "direct" {
+		t.Fatalf("expected tone direct, got %q", patchPayload.Data.Tone)
+	}
+	if patchPayload.Data.AnswerLanguage != "en-US" {
+		t.Fatalf("expected answer language en-US, got %q", patchPayload.Data.AnswerLanguage)
+	}
+	if patchPayload.Data.CustomInstruction != "多追问边界和取舍。" {
+		t.Fatalf("expected trimmed instruction, got %q", patchPayload.Data.CustomInstruction)
+	}
+
+	getRequest := httptest.NewRequest(http.MethodGet, "/api/prompt-preferences", nil)
+	getRecorder := httptest.NewRecorder()
+	router.ServeHTTP(getRecorder, getRequest)
+
+	if getRecorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", getRecorder.Code, getRecorder.Body.String())
+	}
+
+	var getPayload struct {
+		Data domain.PromptOverlay `json:"data"`
+	}
+	if err := json.Unmarshal(getRecorder.Body.Bytes(), &getPayload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if getPayload.Data.DetailLevel != "detailed" {
+		t.Fatalf("expected detail level detailed, got %q", getPayload.Data.DetailLevel)
+	}
+	if len(getPayload.Data.FocusTags) != 2 {
+		t.Fatalf("expected 2 focus tags, got %v", getPayload.Data.FocusTags)
+	}
+}
+
+func TestPromptPreferencesPatchRejectsInvalidOverlay(t *testing.T) {
+	store, err := openTestStore(t)
+	if err != nil {
+		t.Fatalf("openTestStore() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	router := NewRouter(service.New(store, nil))
+	request := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/prompt-preferences",
+		strings.NewReader(`{"focus_tags":["depth","structure","expression"]}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func newPromptSetSidecarServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
@@ -278,9 +432,46 @@ func seedPromptRouteExperimentSession(
 		MaxTurns:    1,
 		TotalScore:  totalScore,
 	}
+	seedPromptRouteExperimentSessionWithConfig(t, store, session, promptSet)
+}
+
+func seedPromptRouteExperimentSessionWithOverlay(
+	t *testing.T,
+	store *repo.Store,
+	sessionID string,
+	promptSet domain.PromptSetSummary,
+	totalScore float64,
+	overlayHash string,
+) {
+	t.Helper()
+
+	session := &domain.TrainingSession{
+		ID:                sessionID,
+		Mode:              domain.ModeBasics,
+		Topic:             domain.BasicsTopicRedis,
+		PromptSetID:       promptSet.ID,
+		PromptSet:         &promptSet,
+		PromptOverlay:     &domain.PromptOverlay{Tone: "direct"},
+		PromptOverlayHash: overlayHash,
+		Intensity:         "standard",
+		Status:            domain.StatusCompleted,
+		MaxTurns:          1,
+		TotalScore:        totalScore,
+	}
+	seedPromptRouteExperimentSessionWithConfig(t, store, session, promptSet)
+}
+
+func seedPromptRouteExperimentSessionWithConfig(
+	t *testing.T,
+	store *repo.Store,
+	session *domain.TrainingSession,
+	promptSet domain.PromptSetSummary,
+) {
+	t.Helper()
+
 	turn := &domain.TrainingTurn{
-		ID:             "turn_" + sessionID,
-		SessionID:      sessionID,
+		ID:             "turn_" + session.ID,
+		SessionID:      session.ID,
 		TurnIndex:      1,
 		Stage:          "question",
 		Question:       "Redis 为什么快？",
@@ -304,7 +495,7 @@ func seedPromptRouteExperimentSession(
 	for _, item := range logs {
 		if err := store.CreateEvaluationLog(
 			context.Background(),
-			sessionID,
+			session.ID,
 			turn.ID,
 			item.flowName,
 			"gpt-test",

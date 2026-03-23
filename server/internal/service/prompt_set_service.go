@@ -21,6 +21,27 @@ func (s *Service) ListPromptSets(ctx context.Context) ([]domain.PromptSetSummary
 	return s.sidecar.ListPromptSets(ctx)
 }
 
+func (s *Service) GetPromptPreferences(ctx context.Context) (*domain.PromptOverlay, error) {
+	return s.repo.GetPromptPreferences(ctx)
+}
+
+func (s *Service) SavePromptPreferences(
+	ctx context.Context,
+	input *domain.PromptOverlay,
+) (*domain.PromptOverlay, error) {
+	overlay, err := normalizePromptOverlay(input)
+	if err != nil {
+		return nil, err
+	}
+	if overlay == nil {
+		overlay = &domain.PromptOverlay{}
+	}
+	if err := s.repo.SavePromptPreferences(ctx, overlay); err != nil {
+		return nil, err
+	}
+	return overlay, nil
+}
+
 func (s *Service) ListPromptExperimentPromptSets(ctx context.Context) ([]domain.PromptSetSummary, error) {
 	historicalPromptSets, err := s.repo.ListHistoricalPromptSets(ctx)
 	if err != nil {

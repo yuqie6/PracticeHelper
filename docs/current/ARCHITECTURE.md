@@ -107,8 +107,8 @@ sidecar/app/
   prompts/
     loader.py        # 从 markdown 文件加载长 system prompt
     bundles.py       # 运行时动态拼装 system/user prompt
-    *.md             # 外置的长 system prompt 模板
     registry.json    # prompt 清单与版本元信息
+    sets/<id>/*.md   # 按 prompt set 分组的长 system prompt 模板
   repo_analysis/
     context.py       # 仓库克隆、文件过滤、chunk 切分、技术栈检测
   runtime/

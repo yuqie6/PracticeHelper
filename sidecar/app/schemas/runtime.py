@@ -98,6 +98,15 @@ class AnalyzeRepoEnvelope(BaseModel):
     trace: RuntimeTrace | None = None
 
 
+class PromptOverlay(BaseModel):
+    tone: str = ""
+    detail_level: str = ""
+    followup_intensity: str = ""
+    answer_language: str = ""
+    focus_tags: list[str] = Field(default_factory=list)
+    custom_instruction: str = ""
+
+
 class AnalyzeJobTargetEnvelope(BaseModel):
     result: AnalyzeJobTargetResponse
     raw_output: str = ""
@@ -110,6 +119,7 @@ class GenerateQuestionRequest(BaseModel):
     candidate_topics: list[str] = Field(default_factory=list)
     strategy: str = ""
     prompt_set_id: str = ""
+    prompt_overlay: PromptOverlay | None = None
     intensity: str
     project: ProjectProfile | None = None
     templates: list[QuestionTemplate] = Field(default_factory=list)
@@ -135,6 +145,7 @@ class EvaluateAnswerRequest(BaseModel):
     mode: str
     topic: str = ""
     prompt_set_id: str = ""
+    prompt_overlay: PromptOverlay | None = None
     retry_feedback: str = ""
     project: ProjectProfile | None = None
     question: str
@@ -194,6 +205,8 @@ class TrainingSession(BaseModel):
     job_target_id: str = ""
     job_target_analysis_id: str = ""
     prompt_set_id: str = ""
+    prompt_overlay: PromptOverlay | None = None
+    prompt_overlay_hash: str = ""
     intensity: str = "standard"
     status: str = ""
     max_turns: int = 1
@@ -208,6 +221,7 @@ class GenerateReviewRequest(BaseModel):
     project: ProjectProfile | None = None
     turns: list[TrainingTurn] = Field(default_factory=list)
     prompt_set_id: str = ""
+    prompt_overlay: PromptOverlay | None = None
     retry_feedback: str = ""
     job_target_analysis: JobTargetAnalysisSnapshot | None = None
     agent_context: AgentContext | None = None
@@ -226,6 +240,8 @@ class ReviewCard(BaseModel):
     job_target_id: str = ""
     job_target_analysis_id: str = ""
     prompt_set_id: str = ""
+    prompt_overlay: PromptOverlay | None = None
+    prompt_overlay_hash: str = ""
     overall: str
     top_fix: str = ""
     top_fix_reason: str = ""

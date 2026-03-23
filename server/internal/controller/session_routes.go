@@ -43,6 +43,8 @@ func (h *Handler) createSession(c *gin.Context) {
 		switch {
 		case errors.Is(err, service.ErrInvalidMode):
 			writeError(c, http.StatusBadRequest, err)
+		case errors.Is(err, service.ErrInvalidPromptOverlay):
+			writeError(c, http.StatusBadRequest, err)
 		case errors.Is(err, service.ErrProjectNotFound):
 			writeError(c, http.StatusNotFound, err)
 		case errors.Is(err, service.ErrJobTargetNotFound):

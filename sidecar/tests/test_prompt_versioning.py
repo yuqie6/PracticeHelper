@@ -21,6 +21,7 @@ from app.schemas import (
     GenerateQuestionResponse,
     GenerateReviewEnvelope,
     GenerateReviewRequest,
+    PromptOverlay,
     ReviewCard,
     TrainingSession,
 )
@@ -56,6 +57,37 @@ def test_render_prompt_with_meta_updates_hash_after_replacements() -> None:
     assert rendered.prompt_set_id == "stable-v1"
     assert "__RUBRIC_LINES__" not in rendered.content
     assert rendered.prompt_hash != raw_prompt.prompt_hash
+
+
+def test_prompt_overlay_changes_rendered_prompt_hash() -> None:
+    plain = main.question_prompt_meta(
+        GenerateQuestionRequest(
+            mode="basics",
+            topic="go",
+            intensity="standard",
+            prompt_set_id="stable-v1",
+        )
+    )
+    overlay = main.question_prompt_meta(
+        GenerateQuestionRequest(
+            mode="basics",
+            topic="go",
+            intensity="standard",
+            prompt_set_id="stable-v1",
+            prompt_overlay=PromptOverlay(
+                tone="direct",
+                detail_level="detailed",
+                followup_intensity="pressure",
+                answer_language="zh-CN",
+                focus_tags=["depth", "structure"],
+                custom_instruction="多问边界和取舍。",
+            ),
+        )
+    )
+
+    assert overlay.prompt_hash != plain.prompt_hash
+    assert "用户当前的额外风格偏好" in overlay.content
+    assert "多问边界和取舍。" in overlay.content
 
 
 def test_evaluate_answer_prompts_require_depth_and_repo_tools_for_all_sets() -> None:

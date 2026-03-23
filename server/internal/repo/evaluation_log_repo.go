@@ -270,7 +270,7 @@ func promptExperimentSessionWhere(
 	promptSetID string,
 	req domain.PromptExperimentRequest,
 ) (string, []any) {
-	where := "prompt_set_id = ?"
+	where := "prompt_set_id = ? AND COALESCE(prompt_overlay_hash, '') = ''"
 	args := []any{promptSetID}
 
 	if req.Mode != "" {
@@ -289,7 +289,7 @@ func promptExperimentLatencyWhere(
 	promptSetID string,
 	req domain.PromptExperimentRequest,
 ) (string, []any) {
-	where := "ts.prompt_set_id = ? AND el.flow_name IN (?, ?, ?, ?, ?, ?)"
+	where := "ts.prompt_set_id = ? AND COALESCE(ts.prompt_overlay_hash, '') = '' AND el.flow_name IN (?, ?, ?, ?, ?, ?)"
 	args := []any{
 		promptSetID,
 		"generate_question",
@@ -312,7 +312,7 @@ func promptExperimentLatencyWhere(
 }
 
 func promptExperimentSamplesWhere(req domain.PromptExperimentRequest) (string, []any) {
-	where := "prompt_set_id IN (?, ?)"
+	where := "prompt_set_id IN (?, ?) AND COALESCE(prompt_overlay_hash, '') = ''"
 	args := []any{req.Left, req.Right}
 
 	if req.Mode != "" {

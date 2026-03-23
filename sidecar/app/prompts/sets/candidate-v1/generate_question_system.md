@@ -15,6 +15,7 @@
 - 题目要让用户有机会证明“这个岗位需要的能力”，而不是只背概念。
 - expected_points 控制在 4 到 6 个，必须具体、可判定。
 - 不要输出 Markdown，不要解释，只输出 JSON。
+__STYLE_OVERLAY_BLOCK__
 
 工具使用要求：
 - 开始出题前，先读取 `recall_training_context`，不要跳过现有上下文直接生成问题。

@@ -136,6 +136,8 @@ func migrate(db *sql.DB) error {
 			prompt_set_id TEXT NOT NULL DEFAULT '',
 			prompt_set_label TEXT NOT NULL DEFAULT '',
 			prompt_set_status TEXT NOT NULL DEFAULT '',
+			prompt_overlay_json TEXT NOT NULL DEFAULT 'null',
+			prompt_overlay_hash TEXT NOT NULL DEFAULT '',
 			intensity TEXT NOT NULL,
 			status TEXT NOT NULL,
 			max_turns INTEGER NOT NULL DEFAULT 2,
@@ -212,6 +214,17 @@ func migrate(db *sql.DB) error {
 			runtime_trace_json TEXT NOT NULL DEFAULT 'null',
 			latency_ms REAL NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS prompt_preferences (
+			id INTEGER PRIMARY KEY CHECK(id = 1),
+			tone TEXT NOT NULL DEFAULT '',
+			detail_level TEXT NOT NULL DEFAULT '',
+			followup_intensity TEXT NOT NULL DEFAULT '',
+			answer_language TEXT NOT NULL DEFAULT '',
+			focus_tags_json TEXT NOT NULL DEFAULT '[]',
+			custom_instruction TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
 		);`,
 		`CREATE TABLE IF NOT EXISTS knowledge_nodes (
 			id TEXT PRIMARY KEY,
@@ -410,6 +423,12 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 	if err := ensureColumn(db, "training_sessions", "prompt_set_status", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "training_sessions", "prompt_overlay_json", "TEXT NOT NULL DEFAULT 'null'"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "training_sessions", "prompt_overlay_hash", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 	if err := ensureColumn(db, "user_profile", "active_job_target_id", "TEXT NOT NULL DEFAULT ''"); err != nil {

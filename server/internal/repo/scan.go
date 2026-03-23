@@ -296,6 +296,7 @@ func scanTrainingSession(scanner interface{ Scan(dest ...any) error }) (*domain.
 	var (
 		id, mode, topic, projectID, jobTargetID, jobTargetAnalysisID string
 		promptSetID, promptSetLabel, promptSetStatus                 string
+		promptOverlayJSON, promptOverlayHash                         string
 		intensity, status, startedAt, endedAt, reviewID              string
 		createdAt, updatedAt                                         string
 	)
@@ -311,6 +312,8 @@ func scanTrainingSession(scanner interface{ Scan(dest ...any) error }) (*domain.
 		&promptSetID,
 		&promptSetLabel,
 		&promptSetStatus,
+		&promptOverlayJSON,
+		&promptOverlayHash,
 		&intensity,
 		&status,
 		&maxTurns,
@@ -332,6 +335,8 @@ func scanTrainingSession(scanner interface{ Scan(dest ...any) error }) (*domain.
 		JobTargetID:         jobTargetID,
 		JobTargetAnalysisID: jobTargetAnalysisID,
 		PromptSetID:         promptSetID,
+		PromptOverlay:       parsePromptOverlayJSON(promptOverlayJSON),
+		PromptOverlayHash:   promptOverlayHash,
 		Intensity:           intensity,
 		Status:              status,
 		MaxTurns:            maxTurns,
@@ -383,6 +388,7 @@ func scanReviewCard(scanner interface{ Scan(dest ...any) error }) (*domain.Revie
 	var (
 		id, sessionID, jobTargetID, jobTargetAnalysisID, overall, topFix, topFixReason string
 		promptSetID, promptSetLabel, promptSetStatus                                   string
+		promptOverlayJSON, promptOverlayHash                                           string
 		highlightsJSON, gapsJSON, suggestedTopicsJSON, nextTrainingFocusJSON           string
 		recommendedNextJSON, retrievalTraceJSON, scoreBreakdownJSON, createdAt         string
 	)
@@ -394,6 +400,8 @@ func scanReviewCard(scanner interface{ Scan(dest ...any) error }) (*domain.Revie
 		&promptSetID,
 		&promptSetLabel,
 		&promptSetStatus,
+		&promptOverlayJSON,
+		&promptOverlayHash,
 		&overall,
 		&topFix,
 		&topFixReason,
@@ -434,6 +442,8 @@ func scanReviewCard(scanner interface{ Scan(dest ...any) error }) (*domain.Revie
 		JobTargetID:         jobTargetID,
 		JobTargetAnalysisID: jobTargetAnalysisID,
 		PromptSetID:         promptSetID,
+		PromptOverlay:       parsePromptOverlayJSON(promptOverlayJSON),
+		PromptOverlayHash:   promptOverlayHash,
 		Overall:             overall,
 		TopFix:              topFix,
 		TopFixReason:        topFixReason,
@@ -459,6 +469,26 @@ func parsePromptSetSummary(id, label, status string) *domain.PromptSetSummary {
 		Label:  label,
 		Status: status,
 	}
+}
+
+func parsePromptOverlayJSON(raw string) *domain.PromptOverlay {
+	if strings.TrimSpace(raw) == "" || raw == "null" {
+		return nil
+	}
+
+	var overlay domain.PromptOverlay
+	if err := json.Unmarshal([]byte(raw), &overlay); err != nil {
+		return nil
+	}
+	if overlay.Tone == "" &&
+		overlay.DetailLevel == "" &&
+		overlay.FollowupIntensity == "" &&
+		overlay.AnswerLanguage == "" &&
+		len(overlay.FocusTags) == 0 &&
+		overlay.CustomInstruction == "" {
+		return nil
+	}
+	return &overlay
 }
 
 func scanWeaknessTag(scanner interface{ Scan(dest ...any) error }) (*domain.WeaknessTag, error) {

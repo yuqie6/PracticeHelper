@@ -130,6 +130,7 @@ func (s *Service) submitAnswerCore(
 		Mode:              session.Mode,
 		Topic:             session.Topic,
 		PromptSetID:       session.PromptSetID,
+		PromptOverlay:     session.PromptOverlay,
 		Project:           session.Project,
 		Question:          turn.Question,
 		ExpectedPoints:    turn.ExpectedPoints,

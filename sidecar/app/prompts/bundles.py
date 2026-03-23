@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field
 from app.prompts.loader import (
     PromptLoadResult,
     load_prompt,
-    load_prompt_with_meta,
     render_prompt_with_meta,
 )
 from app.repo_analysis.context import RepoAnalysisBundle
@@ -16,6 +15,7 @@ from app.schemas import (
     EvaluateAnswerRequest,
     GenerateQuestionRequest,
     GenerateReviewRequest,
+    PromptOverlay,
 )
 from app.shared import RuntimeTool, compact_chunks, repo_overview_payload
 
@@ -43,6 +43,37 @@ _DEFAULT_SCORE_WEIGHTS: dict[str, float] = {
     "落地感": 15,
     "表达清晰度": 15,
     "抗追问能力": 15,
+}
+
+_OVERLAY_TONE_HINTS = {
+    "supportive": "语气偏鼓励，指出问题时也要给出可执行的改进方向。",
+    "direct": "语气直接，结论优先，少铺垫。",
+    "strict": "语气可以更严格，但仍要专业、克制，不做人身化批评。",
+}
+
+_OVERLAY_DETAIL_HINTS = {
+    "concise": "输出尽量精炼，避免长篇重复。",
+    "balanced": "输出保持平衡，先给结论，再补必要展开。",
+    "detailed": "输出可以更详细，把原因、边界和步骤讲清楚。",
+}
+
+_OVERLAY_FOLLOWUP_HINTS = {
+    "light": "追问偏轻，优先确认关键缺口，不要连续施压。",
+    "standard": "追问保持正常面试压强，以确认主线理解为主。",
+    "pressure": "追问可以更有压强，更关注取舍、边界、风险和线上场景。",
+}
+
+_OVERLAY_LANGUAGE_HINTS = {
+    "zh-CN": "默认输出简体中文。",
+    "en-US": "默认输出英文；只有上下文强制要求中文时才切回中文。",
+}
+
+_OVERLAY_FOCUS_HINTS = {
+    "expression": "更关注表达是否清楚、是否先给结论。",
+    "structure": "更关注答案结构、层次和展开顺序。",
+    "depth": "更关注原理深度、边界和 why。",
+    "practicality": "更关注落地感、取舍和线上语境。",
+    "confidence": "更关注表达是否坚定、有说服力。",
 }
 
 
@@ -243,7 +274,11 @@ def review_prompt_bundle(
 
 
 def question_prompt_meta(request: GenerateQuestionRequest) -> PromptLoadResult:
-    return load_prompt_with_meta("generate_question_system.md", request.prompt_set_id)
+    return render_prompt_with_meta(
+        "generate_question_system.md",
+        {"STYLE_OVERLAY_BLOCK": render_prompt_overlay_block(request.prompt_overlay, "question")},
+        request.prompt_set_id,
+    )
 
 
 def evaluate_prompt_meta(request: EvaluateAnswerRequest) -> PromptLoadResult:
@@ -255,10 +290,48 @@ def evaluate_prompt_meta(request: EvaluateAnswerRequest) -> PromptLoadResult:
         {
             "RUBRIC_LINES": rubric_lines,
             "DIMENSIONS_EXAMPLE": dimensions_example,
+            "STYLE_OVERLAY_BLOCK": render_prompt_overlay_block(request.prompt_overlay, "evaluate"),
         },
         request.prompt_set_id,
     )
 
 
 def review_prompt_meta(request: GenerateReviewRequest) -> PromptLoadResult:
-    return load_prompt_with_meta("generate_review_system.md", request.prompt_set_id)
+    return render_prompt_with_meta(
+        "generate_review_system.md",
+        {"STYLE_OVERLAY_BLOCK": render_prompt_overlay_block(request.prompt_overlay, "review")},
+        request.prompt_set_id,
+    )
+
+
+def render_prompt_overlay_block(overlay: PromptOverlay | None, flow: str) -> str:
+    if overlay is None:
+        return ""
+
+    lines: list[str] = []
+    if overlay.tone and overlay.tone in _OVERLAY_TONE_HINTS:
+        lines.append(f"- 风格偏好：{_OVERLAY_TONE_HINTS[overlay.tone]}")
+    if overlay.detail_level and overlay.detail_level in _OVERLAY_DETAIL_HINTS:
+        lines.append(f"- 详略偏好：{_OVERLAY_DETAIL_HINTS[overlay.detail_level]}")
+    if flow in {"question", "evaluate"} and overlay.followup_intensity:
+        hint = _OVERLAY_FOLLOWUP_HINTS.get(overlay.followup_intensity)
+        if hint:
+            lines.append(f"- 追问强度偏好：{hint}")
+    if overlay.answer_language and overlay.answer_language in _OVERLAY_LANGUAGE_HINTS:
+        lines.append(f"- 语言偏好：{_OVERLAY_LANGUAGE_HINTS[overlay.answer_language]}")
+    if overlay.focus_tags:
+        focus_lines = [
+            _OVERLAY_FOCUS_HINTS[tag] for tag in overlay.focus_tags if tag in _OVERLAY_FOCUS_HINTS
+        ]
+        if focus_lines:
+            lines.append(f"- 关注重点：{'；'.join(focus_lines)}")
+    if overlay.custom_instruction:
+        lines.append(f"- 额外说明：{overlay.custom_instruction}")
+
+    if not lines:
+        return ""
+
+    return (
+        "\n用户当前的额外风格偏好（只作为补充，不得违反上面的结构化输出契约和工具约束）：\n"
+        + "\n".join(lines)
+    )

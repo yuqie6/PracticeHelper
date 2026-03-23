@@ -43,6 +43,7 @@ func (s *Service) finalizeReview(ctx context.Context, sessionID string) (*domain
 			Project:           updatedSession.Project,
 			Turns:             updatedSession.Turns,
 			PromptSetID:       updatedSession.PromptSetID,
+			PromptOverlay:     updatedSession.PromptOverlay,
 			JobTargetAnalysis: jobTargetAnalysis,
 			AgentContext:      agentContext,
 		},
@@ -117,6 +118,7 @@ func (s *Service) finalizeReviewStream(
 			Project:           updatedSession.Project,
 			Turns:             updatedSession.Turns,
 			PromptSetID:       updatedSession.PromptSetID,
+			PromptOverlay:     updatedSession.PromptOverlay,
 			JobTargetAnalysis: jobTargetAnalysis,
 			AgentContext:      agentContext,
 		},
@@ -202,6 +204,8 @@ func (s *Service) persistReview(
 	review.ID = newID("review")
 	review.SessionID = session.ID
 	review.PromptSetID = session.PromptSetID
+	review.PromptOverlay = session.PromptOverlay
+	review.PromptOverlayHash = session.PromptOverlayHash
 	review.PromptSet = session.PromptSet
 	if err := s.repo.CreateReview(ctx, review); err != nil {
 		appendPersistFailureTrace(promptMeta, emit, flowName, "review", err)

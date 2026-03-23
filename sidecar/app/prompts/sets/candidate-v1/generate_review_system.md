@@ -25,6 +25,7 @@
 - recommended_next 必须给出一条具体下一轮建议；如果是基础题就填 topic，如果是项目题就填 project_id。
 - 不要只写“回答不完整”，而要尽量说清楚“这个岗位真正看重什么，而你还没证明出来什么”。
 - 不要输出 Markdown，不要解释，只输出 JSON。
+__STYLE_OVERLAY_BLOCK__
 
 工具使用要求：
 - 开始总结前，先读取 `recall_training_context`，不要脱离本轮 session 真实内容空泛总结。
