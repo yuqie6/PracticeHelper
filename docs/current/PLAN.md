@@ -119,7 +119,7 @@
 - `intensity=auto` 已稳定可用；`review_schedule` 也已打通 review 生成 -> 到期展示 -> 完成推进 的基础链路
 - `evaluation_logs` 已覆盖 `generate_question` / `evaluate_answer` / `generate_review` 及其 stream 变体，并且 Review 审计面板与 Prompt 实验页都已有前端承接
 - `runtime_trace` 已贯通 sidecar runtime、Go 持久化阶段和前端展示；当前不再是“只有 prompt 元信息，没有统一 trace”
-- LangGraph 当前已经收成“`analyze_repo` 多节点 + `generate_question` 策略节点 + `evaluate_answer / generate_review` 薄壳图”的结构；输出校验、重试预算和 `side_effects` 收口都在 `agent_runtime.py`
+- LangGraph 当前已经收成“`analyze_repo` 多节点 + `generate_question` 策略节点 + `evaluate_answer / generate_review` 薄壳图”的结构；输出校验、重试预算和 `side_effects` 收口都在 sidecar runtime 内部
 - 默认 JD、`recommendation_scope` 和 generic fallback 语义已经收口，岗位模式不再是阶段 C 之前的阻塞项
 - 关键动作已经进入“`side_effects` + 少量 typed command”双轨：`transition_session` 和 `upsert_review_path` 已有第一版 command path，但 Go 仍保留最终状态机和持久化边界
 
@@ -130,6 +130,8 @@
 - 近期仍然是单 agent 主路径；多 agent 只写成后续高价值长任务的演进方向，不进入当前训练热路径
 - Go 继续保留产品边界、状态机、持久化、审计和恢复入口；sidecar 继续负责上下文理解、规划、工具使用、输出校验和结构化意图生成
 - 动作模型已经不是“只有 side effects”：当前主路径是 cheap/local 动作继续走 `side_effects`，关键状态决策开始走受控 typed command，但不放权到 sidecar 直写数据库
+- sidecar 目录边界已经定死：新的 runtime 逻辑只进 `sidecar/app/runtime/*`，新的工具逻辑只进 `sidecar/app/runtime_tools/*`
+- `sidecar/app/` 顶层也已经收口：只保留 `main.py`、`config.py` 和必要的 `__init__.py`；adapter、prompt、schema、repo analysis、LangGraph flow、shared helper 分别进入 `adapters/`、`prompts/`、`schemas/`、`repo_analysis/`、`flows/`、`shared/`，后续不要再回到顶层平铺加文件
 - 近期优先补的是检索、memory 利用、失败恢复和可观测性，而不是直接铺复杂多 agent 编排
 
 ### 本阶段当前更适合继续推进的方向

@@ -53,7 +53,7 @@
 
 本次审校还做了最基本实测：
 
-- `cd sidecar && uv run --group dev pytest tests/test_agent_runtime.py tests/test_prompt_versioning.py tests/test_main_streaming.py -q` 通过，`65 passed`
+- `cd sidecar && uv run --group dev pytest tests/test_runtime_commands.py tests/test_runtime_loop.py tests/test_runtime_streaming.py tests/test_runtime_tasks.py tests/test_runtime_validation.py tests/test_prompt_versioning.py tests/test_main_streaming.py -q` 通过，`65 passed`
 - `cd server && go test -tags sqlite_fts5 ./internal/sidecar ./internal/service ./internal/controller -count=1` 通过
 - `pnpm --dir web test -- --run src/lib/streaming.spec.ts src/api/client.spec.ts` 通过，`14` 个 test files、`46` 个 tests 通过
 
@@ -65,15 +65,16 @@
 
 ### 2.1 当前不是 prompt app，而是基础版 constrained agent
 
-当前 `sidecar/app/agent_runtime.py` 已经具备：
+当前 sidecar 的 `AgentRuntime` 已经具备这些能力；实际实现已经收在
+`sidecar/app/runtime/`：
 
 - 非流式 `generate_question / evaluate_answer / generate_review / analyze_repo / analyze_job_target`
-  都优先走 `_run_agent_loop`
-- `_run_agent_loop` 允许模型读取工具、调用行动工具，再输出最终 JSON
+  都优先走 runtime 内部的 agent loop
+- runtime 内部的 agent loop 允许模型读取工具、调用行动工具，再输出最终 JSON
 - JSON 结构校验和业务语义校验都在 runtime 内部完成
-- agent loop 收口不稳时会退回 `_run_single_shot`
+- agent loop 收口不稳时会退回 `single_shot` fallback
 - 流式 `generate_question / evaluate_answer / generate_review`
-  也优先走 `_stream_agent_loop`
+  也优先走 runtime 内部的 streaming agent loop
 - stream `result` 事件已经能携带 `raw_output`、`side_effects`、`command_results`
   和 `trace`
 
@@ -96,7 +97,7 @@
 
 #### A. flow-specific 只读工具
 
-来自 `runtime_prompts.py`，例如：
+来自 `prompts/bundles.py`，例如：
 
 - `read_question_templates`
 - `read_project_brief`
@@ -108,7 +109,7 @@
 
 #### B. agent memory 工具
 
-来自 `agent_tools.py`，例如：
+真实实现已经收在 `runtime_tools/`，例如：
 
 - `recall_training_context`
 - `recall_weakness_profile`
@@ -382,7 +383,7 @@ sidecar 负责：
 当前实现位置：
 
 - `sidecar/app/main.py`
-- `sidecar/app/schemas.py`
+- `sidecar/app/schemas/`
 - `server/internal/sidecar/client.go`
 
 #### Layer 2：Context Engine
@@ -722,6 +723,10 @@ class ReviewVerdict(BaseModel):
 - 热路径任务不应该继续无限膨胀工具面
 - 当前实现里各 flow 的工具数实际已经偏厚，大多在 `7~10` 个量级
 - 新增工具前先压缩职责，不顺手膨胀
+- `sidecar/app/` 顶层只保留 `main.py`、`config.py` 和必要的 `__init__.py`；adapter、prompt、schema、repo analysis、LangGraph flow、shared helper 不允许再回到顶层平铺
+- 新 runtime 逻辑只能进入 `sidecar/app/runtime/*`
+- 新工具逻辑只能进入 `sidecar/app/runtime_tools/*`
+- 如果需要统一导出，只允许在包内 `__init__.py` 收口，不允许重新引入顶层 facade 文件
 
 ### 6.2 retrieval 的近期设计
 
@@ -1020,7 +1025,7 @@ class ReviewVerdict(BaseModel):
 
 本次审校实测结果：
 
-- `cd sidecar && uv run --group dev pytest tests/test_agent_runtime.py tests/test_prompt_versioning.py tests/test_main_streaming.py -q`：`65 passed`
+- `cd sidecar && uv run --group dev pytest tests/test_runtime_commands.py tests/test_runtime_loop.py tests/test_runtime_streaming.py tests/test_runtime_tasks.py tests/test_runtime_validation.py tests/test_prompt_versioning.py tests/test_main_streaming.py -q`：`65 passed`
 - `cd server && go test -tags sqlite_fts5 ./internal/sidecar ./internal/service ./internal/controller -count=1`：通过
 - `pnpm --dir web test -- --run src/lib/streaming.spec.ts src/api/client.spec.ts`：`14` 个 test files、`46` 个 tests 通过
 
