@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.schema_common import (
+from app.schemas.common import (
     DepthSignal,
     JobTargetAnalysisSnapshot,
     ProjectProfile,
@@ -14,7 +14,7 @@ from app.schema_common import (
     WeaknessHit,
     WeaknessTag,
 )
-from app.schema_memory import AgentContext, AgentObservation, KnowledgeUpdate
+from app.schemas.memory import AgentContext, AgentObservation, KnowledgeUpdate
 
 
 class AnalyzeRepoRequest(BaseModel):
@@ -77,6 +77,7 @@ class AgentCommandEnvelope(BaseModel):
         "enqueue_long_job",
     ]
     session_id: str = ""
+    # sidecar 只负责“提议命令”，Go 侧会按这个幂等键去重并决定是否真正执行。
     idempotency_key: str
     reason: str = ""
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -142,6 +143,7 @@ class EvaluateAnswerRequest(BaseModel):
     context_chunks: list[RepoChunk] = Field(default_factory=list)
     turn_index: int = 1
     max_turns: int = 1
+    # 允许题目模板或后端策略按题型覆盖默认 rubric，但最终仍保持简单的键值权重结构。
     score_weights: dict[str, float] = Field(default_factory=dict)
     job_target_analysis: JobTargetAnalysisSnapshot | None = None
     agent_context: AgentContext | None = None
@@ -180,6 +182,7 @@ class TrainingTurn(BaseModel):
     question: str = ""
     expected_points: list[str] = Field(default_factory=list)
     answer: str = ""
+    # `None` 表示当前轮还没评估完，前端和 review 生成都要把它当成“进行中”而不是 0 分。
     evaluation: EvaluationResult | None = None
 
 

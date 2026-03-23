@@ -5,11 +5,11 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.llm_client import ModelClientError, OpenAICompatibleModelClient
+from app.adapters.llm_client import ModelClientError, OpenAICompatibleModelClient
 from app.runtime.state import TaskExecutionResult
 from app.runtime.trace import append_trace
-from app.runtime_support import RuntimeTool, tool_summary, validate_json_response
 from app.schemas import RuntimeTrace
+from app.shared import RuntimeTool, tool_summary, validate_json_response
 
 
 def run_single_shot(
@@ -23,6 +23,8 @@ def run_single_shot(
     result_validator: Any = None,
     trace: RuntimeTrace,
 ) -> TaskExecutionResult[BaseModel]:
+    # fallback 模式不再让模型自己挑工具，而是把只读上下文快照一次性展开给它。
+    # 调用方已经先筛掉 action tools，所以这里不会重放写入副作用。
     context_dump = {tool.name: tool.handler({}) for tool in tools}
     messages = [
         {"role": "system", "content": system_prompt},
@@ -118,6 +120,8 @@ def stream_single_shot_task(
                 chunks.append(chunk.content)
                 yield {"type": "content", "text": chunk.content}
     except ModelClientError:
+        # 有些 provider 宣称支持流式，但中途会直接断流；
+        # 这里退回一次同步 completion，尽量保住本轮结果。
         completion = model_client.create_completion(messages=messages)
         if completion.content:
             chunks.append(completion.content)

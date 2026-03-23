@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.go_client import GoBackendClient
-from app.runtime_support import RuntimeTool
+from app.adapters.go_client import GoBackendClient
 from app.runtime_tools.actions import (
     make_record_observation_tool,
     make_set_depth_signal_tool,
@@ -27,6 +26,7 @@ from app.runtime_tools.readers import (
     search_repo_chunks_tool,
 )
 from app.schemas import EvaluateAnswerRequest, GenerateQuestionRequest, GenerateReviewRequest
+from app.shared import RuntimeTool
 
 ACTION_TOOL_NAMES = {
     "record_observation",

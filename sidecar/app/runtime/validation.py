@@ -2,22 +2,24 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.agent_tools import (
+from app.runtime_tools import (
     is_action_tool,
     make_record_observation_tool,
     make_set_depth_signal_tool,
     make_suggest_next_session_tool,
     make_update_knowledge_tool,
 )
-from app.runtime_support import RuntimeTool
 from app.schemas import EvaluateAnswerRequest, EvaluationResult, NextSession, ReviewCard
+from app.shared import RuntimeTool
 
 
 def read_only_tools(tools: list[RuntimeTool]) -> list[RuntimeTool]:
+    # single-shot fallback 只允许读取型工具，避免降级时又产生重复写入。
     return [tool for tool in tools if not is_action_tool(tool.name)]
 
 
 def bind_runtime_tool(tool: RuntimeTool, runtime_state: Any) -> RuntimeTool:
+    # Python sidecar 只收集 side effects / command proposals，真正落库和状态迁移由 Go 仲裁。
     if tool.runtime_bind is not None:
         return tool.runtime_bind(runtime_state)
     return rebind_action_tool(tool, runtime_state.side_effects)
@@ -50,6 +52,8 @@ def validate_evaluation_result(
         return "missing strengths/gaps"
 
     transition_result = latest_command_result(command_results)
+    # 如果 Go 已经根据命令结果裁决过 turn 深度，就以裁决结果为准，
+    # 不再相信模型早先写进 side_effects 的乐观意图。
     depth_signal = resolved_depth_signal(transition_result, side_effects)
     if depth_signal == "skip_followup":
         if result.followup_question or result.followup_expected_points:
@@ -86,6 +90,8 @@ def validate_review_result(
 
     review_path_result = latest_command_result(command_results)
     if command_result_status(review_path_result) == "applied":
+        # review 路径一旦已经由 Go 侧命令落地，模型输出就必须和持久化结果对齐，
+        # 否则前端看到的推荐训练方向会和数据库里的真实下一步打架。
         payload = command_result_data(review_path_result)
         if payload:
             expected_next = payload.get("recommended_next")
@@ -138,6 +144,7 @@ def resolved_depth_signal(
     command_result: dict[str, Any] | None,
     side_effects: dict[str, Any],
 ) -> str:
+    # deferred 命令允许后端在不立刻落库的前提下，先把“这轮是否继续追问”的裁决回传给 sidecar。
     if command_result_status(command_result) == "deferred":
         resolved = command_result_data(command_result).get("resolved_depth_signal")
         if isinstance(resolved, str) and resolved.strip():
@@ -146,6 +153,7 @@ def resolved_depth_signal(
 
 
 def resolved_max_turns(command_result: dict[str, Any] | None, default: int) -> int:
+    # 同理，后端可以在命令裁决时动态延长本次 session 的轮数上限。
     if command_result_status(command_result) == "deferred":
         resolved = command_result_data(command_result).get("resolved_max_turns")
         if isinstance(resolved, int):

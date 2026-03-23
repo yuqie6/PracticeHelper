@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.llm_client import ModelClientError, OpenAICompatibleModelClient
+from app.adapters.llm_client import ModelClientError, OpenAICompatibleModelClient
 from app.runtime.single_shot import stream_single_shot_task
 from app.runtime.state import ToolRuntimeState
 from app.runtime.trace import (
@@ -22,13 +22,13 @@ from app.runtime.trace import (
     tool_failure_code,
 )
 from app.runtime.validation import bind_runtime_tool, read_only_tools
-from app.runtime_support import (
+from app.schemas import RuntimeTrace
+from app.shared import (
     RuntimeTool,
     parse_tool_arguments,
     tool_summary,
     validate_json_response,
 )
-from app.schemas import RuntimeTrace
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ def stream_task(
     result_validator: Any = None,
     context_trace_details: list[dict[str, Any]] | None = None,
 ):
+    # 流式路径和非流式路径共用同一套降级语义，避免前端/测试看到两种不一致的行为。
     fallback_tools = fallback_tools or read_only_tools(tools)
     trace = RuntimeTrace()
 
@@ -119,6 +120,7 @@ def stream_agent_loop(
         {"role": "user", "content": user_prompt},
     ]
     tool_map = {tool.name: tool for tool in tools}
+    # 流式输出也坚持“先拿工具证据，再给最终答案”的护栏。
     used_any_tool = False
     runtime_state = ToolRuntimeState()
     validation_attempts = 0
@@ -145,6 +147,7 @@ def stream_agent_loop(
         )
         yield {"type": "trace", "data": detail_entry.model_dump(mode="json")}
 
+    # 上限要和非流式 run_agent_loop 保持一致，方便测试和排障对齐。
     for _ in range(8):
         yield {"type": "phase", "phase": "call_model"}
         completion = model_client.create_completion(
@@ -233,6 +236,7 @@ def stream_agent_loop(
                         message=f"工具 {tool_name} 调用成功。",
                         tool_name=tool_name,
                     )
+                # 把工具结果回灌进对话，后续轮次才能基于真实上下文继续推理。
                 messages.append(
                     {
                         "role": "tool",
@@ -306,6 +310,7 @@ def stream_agent_loop(
                         f"{task_name} failed after validation retries: {validation_error}",
                         code=validation_code or "semantic_validation_failed",
                     )
+                # 把失败原因显式讲回模型，流式模式下也只允许一次定向修正。
                 messages.append({"role": "assistant", "content": raw_output})
                 messages.append(
                     {
@@ -336,6 +341,7 @@ def stream_agent_loop(
                 "raw_output": raw_output,
                 "trace": trace.model_dump(mode="json"),
             }
+            # status/reasoning 事件只是过程态，真正可持久化的数据只在最终 result 里给出。
             if runtime_state.side_effects:
                 payload["side_effects"] = runtime_state.side_effects
             if runtime_state.command_results:

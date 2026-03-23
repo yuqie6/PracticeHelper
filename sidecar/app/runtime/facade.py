@@ -5,10 +5,10 @@ import time
 from collections.abc import Iterator
 from typing import Any
 
+from app.adapters.go_client import GoBackendClient
+from app.adapters.llm_client import ModelClientError, OpenAICompatibleModelClient
 from app.config import Settings
-from app.go_client import GoBackendClient
-from app.llm_client import ModelClientError, OpenAICompatibleModelClient
-from app.repo_context import RepoAnalysisBundle, collect_repo_analysis_bundle
+from app.repo_analysis.context import RepoAnalysisBundle, collect_repo_analysis_bundle
 from app.runtime.engine import run_task
 from app.runtime.specs import (
     build_analyze_job_target_spec,
@@ -36,6 +36,8 @@ logger = logging.getLogger(__name__)
 
 
 class AgentRuntime:
+    # facade 层只负责把请求翻译成 task spec，再委托给通用 runtime。
+    # 这样每个任务的 prompt/tool 组合可以演进，但执行状态机始终只有一套。
     def __init__(
         self,
         settings: Settings,

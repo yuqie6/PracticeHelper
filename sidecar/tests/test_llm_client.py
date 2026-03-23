@@ -8,9 +8,9 @@ from urllib import error as urllib_error
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app import llm_client
+from app.adapters import llm_client
+from app.adapters.llm_client import ModelClientError, OpenAICompatibleModelClient
 from app.config import Settings
-from app.llm_client import ModelClientError, OpenAICompatibleModelClient
 
 
 class FakeHeaders:

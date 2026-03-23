@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from app.go_client import GoBackendClient
-from app.runtime_support import RuntimeTool
+from app.adapters.go_client import GoBackendClient
+from app.shared import RuntimeTool
 
 
 def recall_training_context_tool(loader: Callable[[], dict[str, Any]]) -> RuntimeTool:

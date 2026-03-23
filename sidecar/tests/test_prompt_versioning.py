@@ -6,7 +6,7 @@ from fastapi import Response
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import main
-from app.prompt_loader import (
+from app.prompts.loader import (
     get_default_prompt_set,
     list_prompt_sets,
     load_prompt_with_meta,

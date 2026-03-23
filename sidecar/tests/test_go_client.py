@@ -10,8 +10,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.adapters.go_client import GoBackendClient, GoBackendClientError
 from app.config import Settings
-from app.go_client import GoBackendClient, GoBackendClientError
 
 
 class FakeHTTPResponse:

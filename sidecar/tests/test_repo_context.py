@@ -7,8 +7,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.llm_client import ModelClientError
-from app.repo_context import (
+from app.adapters.llm_client import ModelClientError
+from app.repo_analysis.context import (
     _sanitize_output,
     clone_repo,
     maybe_apply_github_token,
@@ -80,7 +80,7 @@ def test_path_importance(relative_path: str, expected_min: float) -> None:
 
 def test_clone_repo_raises_on_failure(tmp_path: Path) -> None:
     with patch(
-        "app.repo_context.subprocess.run",
+        "app.repo_analysis.context.subprocess.run",
         side_effect=subprocess.CalledProcessError(
             returncode=1,
             cmd=["git", "clone"],
@@ -99,7 +99,7 @@ def test_clone_repo_raises_on_failure(tmp_path: Path) -> None:
 
 def test_clone_repo_timeout(tmp_path: Path) -> None:
     with patch(
-        "app.repo_context.subprocess.run",
+        "app.repo_analysis.context.subprocess.run",
         side_effect=subprocess.TimeoutExpired(cmd=["git", "clone"], timeout=120),
     ):
         with pytest.raises(ModelClientError, match="timed out after 120s"):

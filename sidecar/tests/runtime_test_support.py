@@ -7,25 +7,29 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.agent_runtime import AgentRuntime, TaskExecutionResult
-from app.agent_tools import (
-    build_evaluate_answer_agent_tools,
-    build_generate_review_agent_tools,
-    prepare_generate_review_agent_tooling,
+from app.adapters.llm_client import (
+    ChatCompletionResult,
+    ChatCompletionStreamChunk,
+    ModelClientError,
 )
 from app.config import Settings
-from app.langgraph_flows import (
+from app.flows.langgraph import (
     _build_analyze_repo_graph,
     _build_evaluate_answer_graph,
     _build_generate_question_graph,
     _build_generate_review_graph,
 )
-from app.llm_client import ChatCompletionResult, ChatCompletionStreamChunk, ModelClientError
-from app.repo_context import RepoAnalysisBundle
-from app.runtime_prompts import (
+from app.prompts.bundles import (
     evaluate_prompt_bundle,
     question_prompt_bundle,
     review_prompt_bundle,
+)
+from app.repo_analysis.context import RepoAnalysisBundle
+from app.runtime import AgentRuntime, TaskExecutionResult
+from app.runtime_tools import (
+    build_evaluate_answer_agent_tools,
+    build_generate_review_agent_tools,
+    prepare_generate_review_agent_tooling,
 )
 from app.schemas import (
     AgentCommandEnvelope,

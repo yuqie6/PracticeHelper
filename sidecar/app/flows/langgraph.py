@@ -5,10 +5,10 @@ from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from app.agent_runtime import AgentRuntime, TaskExecutionResult
 from app.config import Settings
-from app.repo_context import RepoAnalysisBundle, rerank_repo_chunks
-from app.runtime_prompts import resolve_question_strategy
+from app.prompts.bundles import resolve_question_strategy
+from app.repo_analysis.context import RepoAnalysisBundle, rerank_repo_chunks
+from app.runtime import AgentRuntime, TaskExecutionResult
 from app.schemas import (
     AnalyzeJobTargetEnvelope,
     AnalyzeJobTargetRequest,

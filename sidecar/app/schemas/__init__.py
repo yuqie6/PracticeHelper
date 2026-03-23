@@ -1,4 +1,4 @@
-from app.schema_common import (
+from app.schemas.common import (
     DepthSignal,
     JobTargetAnalysisSnapshot,
     JobTargetRef,
@@ -11,7 +11,7 @@ from app.schema_common import (
     WeaknessKind,
     WeaknessTag,
 )
-from app.schema_memory import (
+from app.schemas.memory import (
     AgentContext,
     AgentObservation,
     EmbeddedMemoryVector,
@@ -28,7 +28,7 @@ from app.schema_memory import (
     RerankMemoryResult,
     SessionMemorySummary,
 )
-from app.schema_runtime import (
+from app.schemas.runtime import (
     AgentCommandEnvelope,
     AgentCommandResult,
     AgentSessionDetail,

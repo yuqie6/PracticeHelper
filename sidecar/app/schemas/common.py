@@ -9,6 +9,8 @@ DepthSignal = Literal["skip_followup", "extend", "normal"]
 
 
 def _normalize_weakness_kind(value: str) -> str:
+    # 老数据、前端文案和模型输出都可能用不同别名；
+    # 这里收口成统一枚举，避免跨语言链路把同一种弱项拆成多种标签。
     normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
     aliases = {
         "accuracy": "detail",
@@ -33,6 +35,7 @@ class RepoChunk(BaseModel):
     file_path: str
     file_type: str
     content: str
+    # 0.5 是导入阶段的中性基线；越接近 1.5 代表越值得被后续检索/总结优先看到。
     importance: float = Field(default=0.5, ge=0.0, le=1.5)
     fts_key: str
 
@@ -64,6 +67,7 @@ class JobTargetAnalysisSnapshot(BaseModel):
 class WeaknessHit(BaseModel):
     kind: WeaknessKind
     label: str
+    # 统一限制在 0~1.5，和 Go 侧权重口径保持一致，避免多端相乘后分数发散。
     severity: float = Field(default=0.4, ge=0.0, le=1.5)
 
     @field_validator("kind", mode="before")
@@ -76,6 +80,7 @@ class WeaknessTag(BaseModel):
     id: str = ""
     kind: WeaknessKind
     label: str
+    # Tag 会被长期记忆和复盘流程复用，所以沿用和 WeaknessHit 相同的归一化区间。
     severity: float = Field(default=0.4, ge=0.0, le=1.5)
     frequency: int = 1
     last_seen_at: str = ""

@@ -15,6 +15,7 @@ SERVER_COVERAGE_MIN := 50
 SIDECAR_COVERAGE_MIN := 70
 
 .PHONY: help bootstrap setup install-tools deps deps-web deps-sidecar pytest \
+	clean-sidecar-coverage \
 	check \
 	dev-web dev-server dev-server-hot dev-sidecar dev-qdrant web-dev server-dev server-dev-hot sidecar-dev \
 	lint lint-web lint-server lint-sidecar \
@@ -46,6 +47,12 @@ deps-sidecar: ## 同步 sidecar Python 依赖
 
 pytest: ## 从仓库根运行 sidecar pytest（可用 PYTEST_ARGS 透传参数）
 	$(ENV_LOADER); uv run --project "$(SIDECAR_DIR)" pytest $(PYTEST_ARGS)
+
+clean-sidecar-coverage: ## 清理 sidecar 覆盖率产物（.coverage、coverage.xml、htmlcov、*.cover）
+	find "$(SIDECAR_DIR)" \
+		\( -path "$(SIDECAR_DIR)/.venv" -o -path "$(SIDECAR_DIR)/.pytest_cache" -o -path "$(SIDECAR_DIR)/.ruff_cache" \) -prune \
+		-o \( -name '.coverage' -o -name '.coverage.*' -o -name 'coverage.xml' -o -name 'htmlcov' -o -name '*.cover' \) \
+		-print0 | xargs -0r rm -rf
 
 $(GOLANGCI_LINT_BIN):
 	mkdir -p "$(TOOLS_BIN)"
@@ -129,7 +136,7 @@ coverage-server: ## 运行 Go 覆盖率统计
 	$(ENV_LOADER); cd "$(SERVER_DIR)" && go tool cover -func=coverage.out | tee coverage.txt
 	@awk '/^total:/ { gsub("%","",$$3); if ($$3 + 0 < $(SERVER_COVERAGE_MIN)) { printf("server coverage %.1f%% below %s%%\n", $$3 + 0, "$(SERVER_COVERAGE_MIN)"); exit 1 } }' "$(SERVER_DIR)/coverage.txt"
 
-coverage-sidecar: ## 运行 Python 覆盖率统计
+coverage-sidecar: clean-sidecar-coverage ## 运行 Python 覆盖率统计
 	$(ENV_LOADER); cd "$(SIDECAR_DIR)" && uv run pytest --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-report=html:htmlcov --cov-fail-under=$(SIDECAR_COVERAGE_MIN)
 
 test-gate: lint test coverage ## 运行带覆盖率门禁的完整测试校验

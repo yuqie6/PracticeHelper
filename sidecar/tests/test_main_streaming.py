@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import main
-from app.llm_client import ModelClientError
+from app.adapters.llm_client import ModelClientError
 
 
 def test_evaluate_answer_stream_endpoint_sets_prompt_headers_and_streams_ndjson(

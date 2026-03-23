@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.schema_common import ProfileSnapshot, WeaknessTag
+from app.schemas.common import ProfileSnapshot, WeaknessTag
 
 
 class KnowledgeNode(BaseModel):

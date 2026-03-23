@@ -8,16 +8,16 @@ from pathlib import Path
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.agent_runtime import AgentRuntime
+from app.adapters.llm_client import ModelClientError, OpenAICompatibleModelClient
 from app.config import load_settings
-from app.langgraph_flows import build_flows
-from app.llm_client import ModelClientError, OpenAICompatibleModelClient
-from app.prompt_loader import list_prompt_sets
-from app.runtime_prompts import (
+from app.flows.langgraph import build_flows
+from app.prompts.bundles import (
     evaluate_prompt_meta,
     question_prompt_meta,
     review_prompt_meta,
 )
+from app.prompts.loader import list_prompt_sets
+from app.runtime import AgentRuntime
 from app.schemas import (
     AnalyzeJobTargetEnvelope,
     AnalyzeJobTargetRequest,
@@ -40,6 +40,8 @@ from app.schemas import (
 
 settings = load_settings()
 logger = logging.getLogger(__name__)
+# 这些对象跟着进程生命周期一起初始化：
+# 配置有问题时可以在启动期尽早暴露，而不是等到某个请求打进来才失败。
 model_client = OpenAICompatibleModelClient(settings)
 runtime = AgentRuntime(settings, model_client=model_client if settings.llm_enabled else None)
 
@@ -48,6 +50,8 @@ def configure_logging() -> None:
     handlers: list[logging.Handler] = [logging.StreamHandler()]
 
     if settings.log_path:
+        # sidecar 经常被 uvicorn、make dev 或 supervisor 接管 stdout，
+        # 但排查长任务或线上问题时仍需要可持久化的本地日志文件。
         log_path = Path(settings.log_path)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         handlers.append(logging.FileHandler(log_path, encoding="utf-8"))
@@ -70,6 +74,7 @@ PROMPT_HASH_HEADER = "X-PracticeHelper-Prompt-Hash"
 MODEL_NAME_HEADER = "X-PracticeHelper-Model-Name"
 
 
+# 和 Go 服务共用 `X-Request-ID`，这样一条训练请求跨服务的日志能串起来看。
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID", f"req_{secrets.token_hex(8)}")
@@ -228,6 +233,8 @@ def rerank_memory_endpoint(request: RerankMemoryRequest) -> RerankMemoryResponse
 
 
 def _ndjson_stream(events):
+    # 流式响应一旦开始写 body，就不能再切回 FastAPI 的常规 JSON 错误响应；
+    # 这里统一把异常包装成最后一条 NDJSON 事件，前端才能稳定收尾。
     try:
         for event in events:
             yield JSONResponse(content=event).body + b"\n"
@@ -256,12 +263,14 @@ def _ndjson_stream(events):
 
 
 def apply_prompt_headers(response: Response, prompt_meta) -> None:
+    # Go 侧会把这些头落到训练记录里，便于回看某次生成到底命中了哪套 prompt。
     response.headers[PROMPT_SET_HEADER] = prompt_meta.prompt_set_id
     response.headers[PROMPT_HASH_HEADER] = prompt_meta.prompt_hash
     response.headers[MODEL_NAME_HEADER] = settings.model
 
 
 def classify_error_code(exc: Exception) -> str:
+    # 流式链路经常只剩异常文本可用，这里做一层粗粒度映射，保证前后端还能按 code 分支。
     if isinstance(exc, ModelClientError) and exc.code:
         return exc.code
 

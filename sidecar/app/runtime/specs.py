@@ -5,9 +5,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.go_client import GoBackendClient
-from app.runtime.validation import validate_evaluation_result, validate_review_result
-from app.runtime_prompts import (
+from app.adapters.go_client import GoBackendClient
+from app.prompts.bundles import (
     AnalyzeJobTargetDraft,
     AnalyzeRepoDraft,
     analyze_job_target_prompt_bundle,
@@ -16,6 +15,7 @@ from app.runtime_prompts import (
     question_prompt_bundle,
     review_prompt_bundle,
 )
+from app.runtime.validation import validate_evaluation_result, validate_review_result
 from app.runtime_tools import (
     build_evaluate_answer_agent_tools,
     build_generate_question_agent_tools,

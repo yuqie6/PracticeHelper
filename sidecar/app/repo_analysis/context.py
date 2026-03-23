@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+from app.adapters.llm_client import ModelClientError
 from app.config import Settings
-from app.llm_client import ModelClientError
 from app.schemas import AnalyzeRepoRequest, RepoChunk
 
 TEXT_EXTENSIONS = {

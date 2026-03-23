@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.llm_client import ModelClientError, OpenAICompatibleModelClient
+from app.adapters.llm_client import ModelClientError, OpenAICompatibleModelClient
 from app.runtime.single_shot import run_single_shot
 from app.runtime.state import TaskExecutionResult, ToolRuntimeState
 from app.runtime.trace import (
@@ -21,8 +21,8 @@ from app.runtime.trace import (
     tool_failure_code,
 )
 from app.runtime.validation import bind_runtime_tool, read_only_tools
-from app.runtime_support import RuntimeTool, parse_tool_arguments, validate_json_response
 from app.schemas import RuntimeTrace
+from app.shared import RuntimeTool, parse_tool_arguments, validate_json_response
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,7 @@ def run_task(
     result_validator: Any = None,
     context_trace_details: list[dict[str, Any]] | None = None,
 ) -> TaskExecutionResult[BaseModel]:
+    # single-shot fallback 只带只读工具，避免 tool loop 失败后又重放写入型副作用。
     fallback_tools = fallback_tools or read_only_tools(tools)
     trace = RuntimeTrace()
 
@@ -106,6 +107,8 @@ def run_agent_loop(
         {"role": "user", "content": user_prompt},
     ]
     tool_map = {tool.name: tool for tool in tools}
+    # 只要任务声明了 tools，就要求模型先消费至少一轮工具上下文；
+    # 否则很容易直接“凭印象答题”，绕过证据和副作用约束。
     used_any_tool = False
     runtime_state = ToolRuntimeState()
     validation_attempts = 0
@@ -128,6 +131,7 @@ def run_agent_loop(
             details=detail,
         )
 
+    # provider 偶尔会在工具调用和自然语言之间抖动，这里给一个硬上限避免死循环。
     for _ in range(8):
         completion = model_client.create_completion(
             messages=messages,
@@ -250,6 +254,7 @@ def run_agent_loop(
                         validation_code = "semantic_validation_failed"
 
             if validation_error:
+                # 只给一次“按校验错误修正输出”的机会，继续反复自纠只会拉长时延。
                 validation_attempts += 1
                 status = "retry" if validation_attempts < 2 else "error"
                 append_trace(
@@ -266,6 +271,7 @@ def run_agent_loop(
                         f"{task_name} failed after validation retries: {validation_error}",
                         code=validation_code or "semantic_validation_failed",
                     )
+                # 把无效输出回填给模型，让它做定向修补，而不是从零再生成一次。
                 messages.append({"role": "assistant", "content": raw_output})
                 messages.append(
                     {

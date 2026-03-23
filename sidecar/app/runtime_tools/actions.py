@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.runtime_support import RuntimeTool
 from app.schemas import AgentObservation, DepthSignal, KnowledgeUpdate, NextSession
+from app.shared import RuntimeTool
 
 
 def make_record_observation_tool(side_effects: dict[str, Any]) -> RuntimeTool:

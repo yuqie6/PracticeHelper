@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.agent_tools import CommandBudgetExceededError
-from app.llm_client import ModelClientError
+from app.adapters.llm_client import ModelClientError
+from app.runtime_tools import CommandBudgetExceededError
 from app.schemas import RuntimeTrace, RuntimeTraceEntry
 
 

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.go_client import GoBackendClient
-from app.runtime_support import RuntimeTool
+from app.adapters.go_client import GoBackendClient
 from app.schemas import (
     AgentCommandEnvelope,
     AgentCommandResult,
@@ -11,6 +10,7 @@ from app.schemas import (
     GenerateReviewRequest,
     NextSession,
 )
+from app.shared import RuntimeTool
 
 
 class CommandBudgetExceededError(RuntimeError):

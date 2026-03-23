@@ -3,12 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.runtime_support import (
-    build_compaction_details,
-    compact_chunks,
-    compact_string_list,
-    trim_text,
-)
 from app.schemas import (
     AgentContext,
     AgentObservation,
@@ -16,10 +10,18 @@ from app.schemas import (
     GenerateQuestionRequest,
     GenerateReviewRequest,
 )
+from app.shared import (
+    build_compaction_details,
+    compact_chunks,
+    compact_string_list,
+    trim_text,
+)
 
 
 @dataclass(frozen=True)
 class PreparedAgentTooling:
+    # 这是给 runtime tools 用的“压缩后上下文快照”，不是请求体的原样镜像。
+    # 单独收口成 dataclass，是为了把 token 预算和 trace 细节绑在同一个准备阶段。
     training_context_payload: dict[str, Any]
     weakness_profile_payload: dict[str, Any] = field(default_factory=dict)
     knowledge_graph_payload: dict[str, Any] = field(default_factory=dict)
@@ -35,6 +37,7 @@ def prepare_generate_question_agent_tooling(
     trace_details: list[dict[str, Any]] = []
 
     templates_raw = [item.model_dump(mode="json") for item in request.templates]
+    # 出题阶段只需要少量高信号模板来定风格，不值得把整套题库都塞进上下文。
     templates = [_compact_question_template(item) for item in request.templates[:6]]
     if templates_raw:
         trace_details.append(
@@ -49,6 +52,7 @@ def prepare_generate_question_agent_tooling(
         )
 
     weakness_raw = [item.model_dump(mode="json") for item in request.weaknesses]
+    # 弱项只保留最值得本轮参考的前几条，避免历史包袱压过当前题目上下文。
     weaknesses = [_compact_weakness(item) for item in request.weaknesses[:5]]
     if weakness_raw:
         trace_details.append(
@@ -271,6 +275,8 @@ def _compact_knowledge_payload(
         for node in context.knowledge_subgraph.nodes
     ]
     node_ids = {node["id"] for node in compact_nodes}
+    # 只保留仍指向保留节点的边，并把边数压到节点数的线性级别，
+    # 否则图一大就会迅速吞掉 prompt 预算。
     compact_edges = [
         {
             "source_id": edge.source_id,
@@ -326,6 +332,7 @@ def _compact_session_summaries_payload(
     context: AgentContext,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     raw = [item.model_dump(mode="json") for item in context.session_summaries]
+    # 历史 session 摘要主要用于帮助模型把握近期趋势，不需要把整段复盘原文全部搬进去。
     compact = [
         {
             "id": item.id,

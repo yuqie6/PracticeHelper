@@ -4,20 +4,20 @@ import json
 
 from pydantic import BaseModel, Field
 
-from app.prompt_loader import (
+from app.prompts.loader import (
     PromptLoadResult,
     load_prompt,
     load_prompt_with_meta,
     render_prompt_with_meta,
 )
-from app.repo_context import RepoAnalysisBundle
-from app.runtime_support import RuntimeTool, compact_chunks, repo_overview_payload
+from app.repo_analysis.context import RepoAnalysisBundle
 from app.schemas import (
     AnalyzeJobTargetRequest,
     EvaluateAnswerRequest,
     GenerateQuestionRequest,
     GenerateReviewRequest,
 )
+from app.shared import RuntimeTool, compact_chunks, repo_overview_payload
 
 
 class AnalyzeRepoDraft(BaseModel):

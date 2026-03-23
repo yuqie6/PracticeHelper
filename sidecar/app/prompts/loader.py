@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
-PROMPTS_DIR = Path(__file__).with_name("prompts")
+PROMPTS_DIR = Path(__file__).resolve().parent
 PROMPT_SETS_DIR = PROMPTS_DIR / "sets"
 PROMPT_REGISTRY_PATH = PROMPTS_DIR / "registry.json"
 
