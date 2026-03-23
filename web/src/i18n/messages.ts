@@ -357,7 +357,10 @@ export const messages = {
         title: '把项目整理成适合面试表达的材料。',
         description:
           '先导入仓库，再补齐项目摘要、亮点、难点、取舍和个人贡献，方便后续训练直接使用。',
+        hint: '先把仓库导进来，再从左侧选一个项目慢慢补，后台任务会放到右侧单独看。',
       },
+      activityTitle: '导入动态',
+      activityDescription: '当前还有 {count} 个导入任务在处理中',
       onboarding: {
         kicker: '第二步',
         title: '导入项目，或者直接先开练',
@@ -382,8 +385,18 @@ export const messages = {
       jobResult: '导入结果',
       openProject: '打开项目',
       listTitle: '项目列表',
+      libraryTitle: '先选一个项目，再往下补材料',
+      libraryDescription:
+        '左边只负责选项目，右边再集中编辑内容，别把导入和编辑混在一起看。',
       emptyList: '先导入一个公开的 GitHub 仓库。',
+      emptyTitle: '先从左侧选一个项目',
+      emptyDescription: '导入成功后，点一项项目材料，右侧才会显示可编辑内容。',
       editorTitle: '项目信息编辑',
+      meta: {
+        repo: '仓库地址',
+        branch: '默认分支',
+        commit: '导入提交',
+      },
       fields: {
         name: '项目名称',
         summary: '项目摘要',
@@ -469,6 +482,7 @@ export const messages = {
         project: '选择项目',
         jobTarget: '参考岗位 JD',
         promptSet: 'Prompt 版本',
+        promptStyle: '提示风格',
       },
       resumeTitle: '继续当前训练',
       resumeDescription: '{name} · {status}',
@@ -481,6 +495,56 @@ export const messages = {
         '当前默认 JD「{name}」现在不能直接用于训练；如需按岗位要求训练，请先在岗位页修正或重新分析。',
       startAction: '开始这一轮训练',
       startErrorTitle: '启动失败',
+    },
+    promptOverlay: {
+      sectionTitle: '提示风格偏好',
+      description:
+        '这里只调整风格、详略和追问倾向，不会改动源码里的核心 Prompt 契约。',
+      useDefaultOption: '沿用默认',
+      saveDefaultAction: '保存为默认风格',
+      saveSuccess: '提示风格默认值已保存',
+      saveErrorTitle: '提示风格保存失败',
+      focusTagsHint: '最多选 2 项，作为本轮额外关注点。',
+      customInstructionPlaceholder:
+        '可补充一小段说明，例如：更关注线上风险、取舍和边界。',
+      customInstructionCounter: '补充说明 {count} / 280',
+      customInstructionSummary: '含补充说明',
+      enabledSummary: '已启用自定义风格',
+      focusTagSummary: '关注 {tags}',
+      fields: {
+        tone: '反馈语气',
+        detailLevel: '反馈详略',
+        followupIntensity: '追问强度',
+        answerLanguage: '输出语言',
+        focusTags: '额外关注点',
+        customInstruction: '补充说明',
+      },
+      tone: {
+        supportive: '鼓励式',
+        direct: '直接式',
+        strict: '严格式',
+      },
+      detailLevel: {
+        concise: '简洁',
+        balanced: '平衡',
+        detailed: '详细',
+      },
+      followupIntensity: {
+        light: '轻量追问',
+        standard: '标准追问',
+        pressure: '强化追问',
+      },
+      answerLanguage: {
+        'zh-CN': '中文',
+        'en-US': '英文',
+      },
+      focusTags: {
+        expression: '表达清楚',
+        structure: '结构层次',
+        depth: '原理深度',
+        practicality: '落地取舍',
+        confidence: '表达力度',
+      },
     },
     history: {
       hero: {
@@ -507,6 +571,7 @@ export const messages = {
       empty: '还没有训练记录。',
       noJobTarget: '无岗位关联',
       promptSetBadge: 'Prompt：{name}',
+      promptOverlayBadge: '自定义风格',
       openAction: '查看详情',
       prev: '上一页',
       next: '下一页',
@@ -570,6 +635,7 @@ export const messages = {
       jobTargetTitle: '本轮参考岗位',
       jobTargetDescription: '这轮问题、评分和复盘都会围绕这份 JD 的要求。',
       jobTargetEmpty: '本轮未关联岗位 JD，当前仍按通用训练处理。',
+      promptOverlaySummary: '本轮提示风格：{summary}',
       streamPending: '内容生成中，正在整理结果，请稍候。',
       streamSectionCounter: '步骤 {index}',
       traceTitle: '运行轨迹',
@@ -668,6 +734,9 @@ export const messages = {
       jobTargetDescription: '这轮复盘是按这份岗位 JD 的视角整理的。',
       promptSetTitle: '本轮 Prompt 版本',
       promptSetDescription: '这轮训练绑定的 Prompt 版本状态：{status}。',
+      promptOverlaySummary: '本轮提示风格：{summary}',
+      promptOverlayReminder:
+        '如果你觉得这套自定义风格更适合你，可以去开源仓库反馈，帮助我们改进默认 Prompt。',
       auditShowAction: '查看评估详情',
       auditHideAction: '收起评估详情',
       auditTitle: '评估审计详情',
@@ -692,6 +761,8 @@ export const messages = {
         description:
           '这里按多次训练结果做跨 Session 聚合对比，不会在同一轮里双跑两套 Prompt。',
       },
+      overlayNotice:
+        '这里默认只统计没有启用自定义风格 overlay 的训练，避免把个性化配置混进核心 Prompt 版本对比。',
       loadErrorTitle: '版本列表加载失败',
       compareErrorTitle: '实验结果加载失败',
       filters: {
@@ -1120,7 +1191,10 @@ export const messages = {
         title: 'Turn your projects into interview-ready material.',
         description:
           'Import a repository first, then refine the summary, highlights, challenges, trade-offs, and ownership for later training.',
+        hint: 'Import the repository first, then pick one project from the left and edit it without mixing import progress into the same workspace.',
       },
+      activityTitle: 'Import activity',
+      activityDescription: '{count} imports are still being processed',
       onboarding: {
         kicker: 'Step 2',
         title: 'Import a project, or skip it for now',
@@ -1148,8 +1222,19 @@ export const messages = {
       jobResult: 'Import result',
       openProject: 'Open project',
       listTitle: 'Project list',
+      libraryTitle: 'Pick a project first, then refine the material',
+      libraryDescription:
+        'The left side is only for selection. Keep editing focused on the right so import progress does not fight the editor.',
       emptyList: 'Import a public GitHub repository first.',
+      emptyTitle: 'Select a project from the left',
+      emptyDescription:
+        'After an import succeeds, choose one project material item to open the editor on the right.',
       editorTitle: 'Edit project details',
+      meta: {
+        repo: 'Repository',
+        branch: 'Default branch',
+        commit: 'Imported commit',
+      },
       fields: {
         name: 'Project name',
         summary: 'Summary',
@@ -1236,6 +1321,7 @@ export const messages = {
         project: 'Project',
         jobTarget: 'Job target JD',
         promptSet: 'Prompt set',
+        promptStyle: 'Prompt style',
       },
       resumeTitle: 'Resume current session',
       resumeDescription: '{name} · {status}',
@@ -1248,6 +1334,56 @@ export const messages = {
         'The current default JD "{name}" cannot be used right now. Fix or rerun it from the job target page if you want job-target mode for this round.',
       startAction: 'Start this session',
       startErrorTitle: 'Start failed',
+    },
+    promptOverlay: {
+      sectionTitle: 'Prompt style preferences',
+      description:
+        'This only adjusts style, detail, and follow-up pressure. Core prompt contracts still stay in source markdown.',
+      useDefaultOption: 'Use default',
+      saveDefaultAction: 'Save as default style',
+      saveSuccess: 'Prompt style defaults saved',
+      saveErrorTitle: 'Failed to save prompt style defaults',
+      focusTagsHint: 'Pick at most 2 extra focus areas for this round.',
+      customInstructionPlaceholder:
+        'Add a short note, for example: focus more on trade-offs, risk, and boundaries.',
+      customInstructionCounter: 'Custom note {count} / 280',
+      customInstructionSummary: 'Includes custom note',
+      enabledSummary: 'Custom style enabled',
+      focusTagSummary: 'Focus on {tags}',
+      fields: {
+        tone: 'Feedback tone',
+        detailLevel: 'Detail level',
+        followupIntensity: 'Follow-up pressure',
+        answerLanguage: 'Output language',
+        focusTags: 'Extra focus',
+        customInstruction: 'Custom note',
+      },
+      tone: {
+        supportive: 'Supportive',
+        direct: 'Direct',
+        strict: 'Strict',
+      },
+      detailLevel: {
+        concise: 'Concise',
+        balanced: 'Balanced',
+        detailed: 'Detailed',
+      },
+      followupIntensity: {
+        light: 'Light follow-up',
+        standard: 'Standard follow-up',
+        pressure: 'Pressure follow-up',
+      },
+      answerLanguage: {
+        'zh-CN': 'Chinese',
+        'en-US': 'English',
+      },
+      focusTags: {
+        expression: 'Clear expression',
+        structure: 'Structure',
+        depth: 'Depth',
+        practicality: 'Practical trade-offs',
+        confidence: 'Confidence',
+      },
     },
     history: {
       hero: {
@@ -1274,6 +1410,7 @@ export const messages = {
       empty: 'No training sessions yet.',
       noJobTarget: 'No job target',
       promptSetBadge: 'Prompt: {name}',
+      promptOverlayBadge: 'Custom style',
       openAction: 'Open details',
       prev: 'Previous',
       next: 'Next',
@@ -1347,6 +1484,7 @@ export const messages = {
         'This round uses the requirements from this JD for the question, scoring, and review.',
       jobTargetEmpty:
         'This round is not bound to a job target JD and is still running in generic mode.',
+      promptOverlaySummary: 'Prompt style: {summary}',
       streamPending:
         'Content is being generated. The result will appear shortly.',
       streamSectionCounter: 'Step {index}',
@@ -1467,6 +1605,9 @@ export const messages = {
       promptSetTitle: 'Prompt set used',
       promptSetDescription:
         'This session is bound to a prompt set with status: {status}.',
+      promptOverlaySummary: 'Prompt style: {summary}',
+      promptOverlayReminder:
+        'If this custom style worked better for you, leave a note in the open-source repo so we can improve the default prompt.',
       auditShowAction: 'Show evaluation details',
       auditHideAction: 'Hide evaluation details',
       auditTitle: 'Evaluation audit details',
@@ -1491,6 +1632,8 @@ export const messages = {
         description:
           'This page compares versions across multiple sessions instead of double-running the same session.',
       },
+      overlayNotice:
+        'By default this page excludes sessions that enabled custom prompt overlay, so core prompt-set comparisons stay clean.',
       loadErrorTitle: 'Failed to load prompt sets',
       compareErrorTitle: 'Failed to load experiment results',
       filters: {

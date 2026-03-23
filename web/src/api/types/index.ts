@@ -6,6 +6,7 @@ export type {
   JobTargetRef,
 } from './job-target';
 export type {
+  PromptOverlay,
   PromptExperimentMetrics,
   PromptExperimentReport,
   PromptExperimentSample,

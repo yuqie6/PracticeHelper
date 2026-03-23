@@ -1,7 +1,7 @@
 import type { JobTargetRef } from './job-target';
 import type { ProjectProfile } from './project';
 import type { UserProfile } from './profile';
-import type { PromptSetSummary } from './prompt';
+import type { PromptOverlay, PromptSetSummary } from './prompt';
 
 export interface WeaknessTag {
   id: string;
@@ -42,6 +42,8 @@ export interface TrainingSession {
   job_target_id?: string;
   job_target_analysis_id?: string;
   prompt_set_id?: string;
+  prompt_overlay?: PromptOverlay | null;
+  prompt_overlay_hash?: string;
   intensity: string;
   status: string;
   max_turns: number;
@@ -64,6 +66,7 @@ export interface TrainingSessionSummary {
   updated_at: string;
   job_target?: JobTargetRef | null;
   prompt_set_id?: string;
+  prompt_overlay_hash?: string;
   prompt_set?: PromptSetSummary | null;
 }
 
@@ -124,6 +127,8 @@ export interface ReviewCard {
   job_target_id?: string;
   job_target_analysis_id?: string;
   prompt_set_id?: string;
+  prompt_overlay?: PromptOverlay | null;
+  prompt_overlay_hash?: string;
   overall: string;
   top_fix?: string;
   top_fix_reason?: string;

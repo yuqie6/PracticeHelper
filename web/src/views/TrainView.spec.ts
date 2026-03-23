@@ -12,6 +12,7 @@ import { i18n } from '../i18n';
 import type {
   Dashboard,
   JobTarget,
+  PromptOverlay,
   PromptSetSummary,
   TrainingSession,
 } from '../api/client';
@@ -20,9 +21,11 @@ import TrainView from './TrainView.vue';
 const apiMocks = vi.hoisted(() => ({
   createSessionStream: vi.fn(),
   getDashboard: vi.fn(),
+  getPromptPreferences: vi.fn(),
   listJobTargets: vi.fn(),
   listProjects: vi.fn(),
   listPromptSets: vi.fn(),
+  savePromptPreferences: vi.fn(),
 }));
 
 vi.mock('../api/client', async () => {
@@ -69,6 +72,20 @@ function buildPromptSet(
     label: 'Stable v1',
     status: 'stable',
     is_default: true,
+    ...overrides,
+  };
+}
+
+function buildPromptOverlay(
+  overrides: Partial<PromptOverlay> = {},
+): PromptOverlay {
+  return {
+    tone: 'direct',
+    detail_level: 'balanced',
+    followup_intensity: 'pressure',
+    answer_language: 'zh-CN',
+    focus_tags: ['depth', 'structure'],
+    custom_instruction: '多问边界和取舍。',
     ...overrides,
   };
 }
@@ -120,15 +137,19 @@ async function mountTrainView(initialPath = '/train'): Promise<VueWrapper> {
 
 beforeEach(() => {
   apiMocks.getDashboard.mockReset();
+  apiMocks.getPromptPreferences.mockReset();
   apiMocks.listJobTargets.mockReset();
   apiMocks.listProjects.mockReset();
   apiMocks.listPromptSets.mockReset();
+  apiMocks.savePromptPreferences.mockReset();
   apiMocks.createSessionStream.mockReset();
 
   apiMocks.getDashboard.mockResolvedValue(buildDashboard());
+  apiMocks.getPromptPreferences.mockResolvedValue({});
   apiMocks.listJobTargets.mockResolvedValue([]);
   apiMocks.listProjects.mockResolvedValue([]);
   apiMocks.listPromptSets.mockResolvedValue([buildPromptSet()]);
+  apiMocks.savePromptPreferences.mockResolvedValue({});
   apiMocks.createSessionStream.mockResolvedValue(buildSession());
 });
 
@@ -218,6 +239,30 @@ describe('TrainView', () => {
       expect.objectContaining({
         job_target_id: undefined,
         ignore_active_job_target: true,
+      }),
+      expect.any(Function),
+    );
+  });
+
+  it('submits normalized prompt overlay from saved preferences', async () => {
+    apiMocks.getPromptPreferences.mockResolvedValue(buildPromptOverlay());
+
+    const wrapper = await mountTrainView();
+    await flushPromises();
+
+    await wrapper.get('form').trigger('submit.prevent');
+    await flushPromises();
+
+    expect(apiMocks.createSessionStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt_overlay: {
+          tone: 'direct',
+          detail_level: 'balanced',
+          followup_intensity: 'pressure',
+          answer_language: 'zh-CN',
+          focus_tags: ['depth', 'structure'],
+          custom_instruction: '多问边界和取舍。',
+        },
       }),
       expect.any(Function),
     );

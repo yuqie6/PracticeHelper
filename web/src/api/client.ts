@@ -15,6 +15,7 @@ import type {
   ProjectImportJob,
   ProjectProfile,
   PromptExperimentReport,
+  PromptOverlay,
   PromptSetSummary,
   ReviewCard,
   ReviewScheduleItem,
@@ -39,6 +40,7 @@ export type {
   PromptExperimentMetrics,
   PromptExperimentReport,
   PromptExperimentSample,
+  PromptOverlay,
   PromptSetSummary,
   RetrievalTrace,
   ReviewCard,
@@ -303,6 +305,19 @@ export function listPromptSets(): Promise<PromptSetSummary[]> {
   return request('/api/prompt-sets');
 }
 
+export function getPromptPreferences(): Promise<PromptOverlay> {
+  return request('/api/prompt-preferences');
+}
+
+export function savePromptPreferences(
+  payload: PromptOverlay,
+): Promise<PromptOverlay> {
+  return request('/api/prompt-preferences', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function listPromptExperimentPromptSets(): Promise<PromptSetSummary[]> {
   return request('/api/prompt-experiments/prompt-sets');
 }
@@ -401,6 +416,7 @@ export function createSession(payload: {
   project_id?: string;
   job_target_id?: string;
   prompt_set_id?: string;
+  prompt_overlay?: PromptOverlay;
   ignore_active_job_target?: boolean;
   intensity: string;
   max_turns?: number;
@@ -418,6 +434,7 @@ export function createSessionStream(
     project_id?: string;
     job_target_id?: string;
     prompt_set_id?: string;
+    prompt_overlay?: PromptOverlay;
     ignore_active_job_target?: boolean;
     intensity: string;
     max_turns?: number;

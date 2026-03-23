@@ -213,6 +213,13 @@
           <p v-if="session.prompt_set" class="neo-note">
             {{ session.prompt_set.label }} · {{ session.prompt_set.status }}
           </p>
+          <p v-if="sessionPromptOverlaySummary" class="neo-note">
+            {{
+              t('session.promptOverlaySummary', {
+                summary: sessionPromptOverlaySummary,
+              })
+            }}
+          </p>
         </section>
 
         <section class="neo-panel session-side-panel">
@@ -253,6 +260,7 @@ import ProgressPanel from '../components/ProgressPanel.vue';
 import StreamTracePanel from '../components/StreamTracePanel.vue';
 import { resolveApiErrorMessage } from '../lib/apiErrors';
 import { formatStatusLabel } from '../lib/labels';
+import { formatPromptOverlaySummary } from '../lib/promptOverlay';
 import { isSubmitShortcut } from '../lib/shortcuts';
 import { appendStreamEvent, type StreamSection } from '../lib/streaming';
 import { useProgressSteps } from '../lib/useProgressSteps';
@@ -315,6 +323,13 @@ const currentStatusLabel = computed(() => {
 
   return formatStatusLabel(t, session.value.status);
 });
+const sessionPromptOverlaySummary = computed(() =>
+  formatPromptOverlaySummary(
+    t,
+    session.value?.prompt_overlay,
+    session.value?.prompt_overlay_hash,
+  ),
+);
 const sessionHeroTitle = computed(
   () => currentTurn.value?.question || t('session.currentQuestion'),
 );

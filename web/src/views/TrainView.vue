@@ -1,88 +1,14 @@
 <template>
   <section class="neo-page train-page space-y-6 xl:space-y-8">
-    <header class="neo-panel-hero train-stage bg-[var(--neo-red)] text-black">
-      <div class="train-stage-copy">
-        <p class="neo-kicker bg-white">{{ t('train.hero.kicker') }}</p>
-        <h1 class="train-stage-title">
-          {{ t('train.hero.title') }}
-        </h1>
-        <p class="train-stage-note">
-          {{ t('train.hero.description') }}
-        </p>
-
-        <div class="train-stage-stats neo-stagger-list">
-          <article class="train-stage-stat">
-            <span>{{ projectCount }}</span>
-            <small>{{ t('projects.listTitle') }}</small>
-          </article>
-          <article class="train-stage-stat">
-            <span>{{ readyJobTargetCount }}</span>
-            <small>{{ t('jobs.listTitle') }}</small>
-          </article>
-          <article class="train-stage-stat">
-            <span>{{ promptSetCount }}</span>
-            <small>{{ t('train.fields.promptSet') }}</small>
-          </article>
-        </div>
-      </div>
-
-      <div class="train-stage-side">
-        <article v-if="currentSession" class="train-stage-context">
-          <p class="neo-kicker bg-white">
-            {{ t('home.currentSession.kicker') }}
-          </p>
-          <h2 class="text-xl font-black">{{ t('train.resumeTitle') }}</h2>
-          <p class="neo-note">
-            {{
-              t('train.resumeDescription', {
-                name: formatSessionName(t, currentSession),
-                status: formatStatusLabel(t, currentSession.status),
-              })
-            }}
-          </p>
-          <RouterLink
-            :to="buildSessionTarget(currentSession)"
-            class="neo-button-dark w-full"
-          >
-            {{ t('common.resume') }}
-          </RouterLink>
-        </article>
-
-        <article
-          v-else-if="onboardingMode"
-          class="train-stage-context bg-[color:var(--neo-yellow)]"
-        >
-          <p class="neo-kicker bg-white">{{ t('train.onboarding.kicker') }}</p>
-          <h2 class="text-xl font-black">{{ t('train.onboarding.title') }}</h2>
-          <p class="neo-note">{{ t('train.onboarding.description') }}</p>
-        </article>
-
-        <article v-else class="train-stage-context">
-          <p class="neo-kicker bg-white">{{ t('train.fields.jobTarget') }}</p>
-          <h2 class="text-xl font-black">
-            {{
-              activeJobTarget
-                ? activeJobTarget.title
-                : t('train.genericJobTargetOption')
-            }}
-          </h2>
-          <p class="neo-note">
-            {{
-              activeJobTarget
-                ? describeJobTargetStatus(
-                    t,
-                    'trainFallback',
-                    activeJobTarget.latest_analysis_status,
-                    {
-                      name: activeJobTarget.title,
-                    },
-                  )
-                : t('common.noRecommendation')
-            }}
-          </p>
-        </article>
-      </div>
-    </header>
+    <TrainStageHero
+      :onboarding-mode="onboardingMode"
+      :project-count="projectCount"
+      :ready-job-target-count="readyJobTargetCount"
+      :prompt-set-count="promptSetCount"
+      :fallback-job-target-title="fallbackJobTargetTitle"
+      :fallback-job-target-description="fallbackJobTargetDescription"
+      :current-session="currentSessionCard"
+    />
 
     <ProgressPanel
       v-if="isStarting"
@@ -110,273 +36,46 @@
       :message="startError"
     />
 
+    <NoticePanel
+      v-if="promptPreferencesError"
+      tone="error"
+      :title="t('promptOverlay.saveErrorTitle')"
+      :message="promptPreferencesError"
+    />
+
     <div class="train-shell">
-      <form
-        class="neo-panel train-form-panel neo-stagger-list"
-        @submit.prevent="submit"
-      >
-        <section class="train-form-section">
-          <div class="train-section-head">
-            <div class="space-y-2">
-              <p class="neo-kicker bg-[var(--neo-yellow)]">
-                {{ t('train.fields.mode') }}
-              </p>
-              <h2 class="train-section-title">{{ t('train.hero.title') }}</h2>
-            </div>
-          </div>
+      <TrainConfigForm
+        :form="form"
+        :projects="projects ?? []"
+        :job-targets="jobTargets ?? []"
+        :prompt-sets="promptSets ?? []"
+        :selected-prompt-set="selectedPromptSet"
+        :focus-title="trainFocusTitle"
+        :focus-hint="trainFocusHint"
+        :job-target-blocked-reason="jobTargetBlockedReason"
+        :selected-job-target-hint="selectedJobTargetHint"
+        :active-job-target-fallback-notice="activeJobTargetFallbackNotice"
+        :is-starting="isStarting"
+        :is-saving-prompt-preferences="isSavingPromptPreferences"
+        :format-prompt-set-label="formatPromptSetLabel"
+        @submit="submit"
+        @touch-job-target="markJobTargetSelectionTouched"
+        @save-prompt-preferences="savePromptPreferencesFromForm"
+      />
 
-          <div class="train-grid">
-            <label class="space-y-2">
-              <span class="neo-subheading">{{ t('train.fields.mode') }}</span>
-              <select v-model="form.mode" class="neo-select">
-                <option value="basics">
-                  {{ formatModeLabel(t, 'basics') }}
-                </option>
-                <option value="project">
-                  {{ formatModeLabel(t, 'project') }}
-                </option>
-              </select>
-            </label>
-            <label class="space-y-2">
-              <span class="neo-subheading">
-                {{ t('train.fields.intensity') }}
-              </span>
-              <select v-model="form.intensity" class="neo-select">
-                <option value="auto">
-                  {{ formatIntensityLabel(t, 'auto') }}
-                </option>
-                <option value="light">
-                  {{ formatIntensityLabel(t, 'light') }}
-                </option>
-                <option value="standard">
-                  {{ formatIntensityLabel(t, 'standard') }}
-                </option>
-                <option value="pressure">
-                  {{ formatIntensityLabel(t, 'pressure') }}
-                </option>
-              </select>
-            </label>
-            <label class="space-y-2">
-              <span class="neo-subheading">
-                {{ t('train.fields.maxTurns') }}
-              </span>
-              <select v-model.number="form.max_turns" class="neo-select">
-                <option :value="2">2</option>
-                <option :value="3">3</option>
-                <option :value="4">4</option>
-                <option :value="5">5</option>
-              </select>
-            </label>
-          </div>
-        </section>
-
-        <section class="train-form-section">
-          <div class="train-section-head">
-            <div class="space-y-2">
-              <p class="neo-kicker bg-[var(--neo-blue)]">
-                {{
-                  form.mode === 'basics'
-                    ? t('train.fields.topic')
-                    : t('train.fields.project')
-                }}
-              </p>
-              <h2 class="train-section-title">{{ trainFocusTitle }}</h2>
-            </div>
-            <p class="neo-note train-section-note">{{ trainFocusHint }}</p>
-          </div>
-
-          <label v-if="form.mode === 'basics'" class="space-y-2">
-            <span class="neo-subheading">{{ t('train.fields.topic') }}</span>
-            <select v-model="form.topic" class="neo-select">
-              <option value="mixed">{{ formatTopicLabel(t, 'mixed') }}</option>
-              <option value="go">{{ formatTopicLabel(t, 'go') }}</option>
-              <option value="redis">{{ formatTopicLabel(t, 'redis') }}</option>
-              <option value="kafka">{{ formatTopicLabel(t, 'kafka') }}</option>
-              <option value="mysql">{{ formatTopicLabel(t, 'mysql') }}</option>
-              <option value="system_design">
-                {{ formatTopicLabel(t, 'system_design') }}
-              </option>
-              <option value="distributed">
-                {{ formatTopicLabel(t, 'distributed') }}
-              </option>
-              <option value="network">
-                {{ formatTopicLabel(t, 'network') }}
-              </option>
-              <option value="microservice">
-                {{ formatTopicLabel(t, 'microservice') }}
-              </option>
-              <option value="os">{{ formatTopicLabel(t, 'os') }}</option>
-              <option value="docker_k8s">
-                {{ formatTopicLabel(t, 'docker_k8s') }}
-              </option>
-            </select>
-          </label>
-
-          <label v-else class="space-y-2">
-            <span class="neo-subheading">{{ t('train.fields.project') }}</span>
-            <select v-model="form.project_id" class="neo-select">
-              <option disabled value="">{{ t('train.chooseProject') }}</option>
-              <option
-                v-for="project in projects ?? []"
-                :key="project.id"
-                :value="project.id"
-              >
-                {{ project.name }}
-              </option>
-            </select>
-          </label>
-        </section>
-
-        <section class="train-form-section">
-          <div class="train-section-head">
-            <div class="space-y-2">
-              <p class="neo-kicker bg-[var(--neo-green)]">
-                {{ t('train.fields.jobTarget') }}
-              </p>
-              <h2 class="train-section-title">
-                {{ t('train.fields.jobTarget') }}
-              </h2>
-            </div>
-          </div>
-
-          <label class="space-y-2">
-            <span class="neo-subheading">{{
-              t('train.fields.jobTarget')
-            }}</span>
-            <select
-              v-model="form.job_target_id"
-              class="neo-select"
-              @change="markJobTargetSelectionTouched"
-            >
-              <option value="">{{ t('train.genericJobTargetOption') }}</option>
-              <option
-                v-for="jobTarget in jobTargets ?? []"
-                :key="jobTarget.id"
-                :value="jobTarget.id"
-              >
-                {{ jobTarget.title }}
-              </option>
-            </select>
-          </label>
-
-          <p
-            v-if="jobTargetBlockedReason"
-            class="neo-note text-[var(--neo-red)]"
-          >
-            {{ jobTargetBlockedReason }}
-          </p>
-          <p
-            v-else-if="selectedJobTargetHint"
-            class="neo-note text-[var(--neo-green)]"
-          >
-            {{ selectedJobTargetHint }}
-          </p>
-          <p
-            v-else-if="activeJobTargetFallbackNotice"
-            class="neo-note text-[var(--neo-red)]"
-          >
-            {{ activeJobTargetFallbackNotice }}
-          </p>
-        </section>
-
-        <section class="train-form-section">
-          <div class="train-section-head">
-            <div class="space-y-2">
-              <p class="neo-kicker bg-[var(--neo-yellow)]">
-                {{ t('train.fields.promptSet') }}
-              </p>
-              <h2 class="train-section-title">
-                {{ t('train.fields.promptSet') }}
-              </h2>
-            </div>
-          </div>
-
-          <label class="space-y-2">
-            <span class="neo-subheading">{{
-              t('train.fields.promptSet')
-            }}</span>
-            <select v-model="form.prompt_set_id" class="neo-select">
-              <option
-                v-for="promptSet in promptSets ?? []"
-                :key="promptSet.id"
-                :value="promptSet.id"
-              >
-                {{ formatPromptSetLabel(promptSet) }}
-              </option>
-            </select>
-          </label>
-
-          <p v-if="selectedPromptSet" class="neo-note">
-            {{ selectedPromptSet.description }}
-          </p>
-        </section>
-
-        <div class="train-form-actions">
-          <button
-            type="submit"
-            class="neo-button-dark w-full sm:w-auto"
-            :disabled="isStarting || Boolean(jobTargetBlockedReason)"
-          >
-            {{ isStarting ? t('common.starting') : t('train.startAction') }}
-          </button>
-        </div>
-      </form>
-
-      <aside class="train-side neo-stagger-list">
-        <section class="neo-panel train-side-panel">
-          <p class="neo-kicker bg-[var(--neo-blue)]">
-            {{
-              form.mode === 'basics'
-                ? t('train.fields.topic')
-                : t('train.fields.project')
-            }}
-          </p>
-          <h2 class="train-section-title">{{ trainFocusTitle }}</h2>
-          <p class="neo-note">{{ trainFocusHint }}</p>
-        </section>
-
-        <section class="neo-panel train-side-panel">
-          <p class="neo-kicker bg-[var(--neo-green)]">
-            {{ t('train.fields.jobTarget') }}
-          </p>
-          <h2 class="train-section-title">
-            {{
-              selectedJobTarget
-                ? selectedJobTarget.title
-                : activeJobTarget
-                  ? activeJobTarget.title
-                  : t('train.genericJobTargetOption')
-            }}
-          </h2>
-          <p class="neo-note">
-            {{
-              jobTargetBlockedReason ||
-              selectedJobTargetHint ||
-              activeJobTargetFallbackNotice ||
-              t('common.noRecommendation')
-            }}
-          </p>
-        </section>
-
-        <section class="neo-panel train-side-panel">
-          <p class="neo-kicker bg-[var(--neo-yellow)]">
-            {{ t('train.fields.promptSet') }}
-          </p>
-          <h2 class="train-section-title">
-            {{
-              selectedPromptSet
-                ? formatPromptSetLabel(selectedPromptSet)
-                : t('train.fields.promptSet')
-            }}
-          </h2>
-          <p class="neo-note">
-            {{
-              selectedPromptSet?.description ||
-              t('progress.createSession.description')
-            }}
-          </p>
-        </section>
-      </aside>
+      <TrainContextSummary
+        :focus-kicker="
+          form.mode === 'basics'
+            ? t('train.fields.topic')
+            : t('train.fields.project')
+        "
+        :focus-title="trainFocusTitle"
+        :focus-hint="trainFocusHint"
+        :job-target-title="contextJobTargetTitle"
+        :job-target-description="contextJobTargetDescription"
+        :prompt-set-title="contextPromptSetTitle"
+        :prompt-set-description="contextPromptSetDescription"
+      />
     </div>
   </section>
 </template>
@@ -385,39 +84,47 @@
 import { useMutation, useQuery } from '@tanstack/vue-query';
 import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { RouterLink, useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import {
   ApiError,
   createSessionStream,
   getDashboard,
+  getPromptPreferences,
   listJobTargets,
   listPromptSets,
   listProjects,
+  savePromptPreferences,
   type PromptSetSummary,
   type StreamEvent,
 } from '../api/client';
 import NoticePanel from '../components/NoticePanel.vue';
 import ProgressPanel from '../components/ProgressPanel.vue';
 import StreamTracePanel from '../components/StreamTracePanel.vue';
+import TrainConfigForm from '../components/TrainConfigForm.vue';
+import TrainContextSummary from '../components/TrainContextSummary.vue';
+import TrainStageHero from '../components/TrainStageHero.vue';
 import { resolveApiErrorMessage } from '../lib/apiErrors';
 import {
   describeJobTargetStatus,
   isJobTargetReady,
 } from '../lib/jobTargetStatus';
+import { formatStatusLabel, formatTopicLabel } from '../lib/labels';
 import {
-  formatIntensityLabel,
-  formatModeLabel,
-  formatStatusLabel,
-  formatTopicLabel,
-} from '../lib/labels';
+  emptyPromptOverlayForm,
+  formatPromptOverlaySummary,
+  normalizePromptOverlay,
+  toPromptOverlayFormState,
+} from '../lib/promptOverlay';
 import { buildSessionTarget, formatSessionName } from '../lib/sessionSummary';
 import { appendStreamEvent, type StreamSection } from '../lib/streaming';
 import { useProgressSteps } from '../lib/useProgressSteps';
+import { useToast } from '../lib/useToast';
 
 const router = useRouter();
 const route = useRoute();
 const { t, tm } = useI18n();
+const { show: showToast } = useToast();
 const onboardingMode = computed(() => route.query.onboarding === '1');
 
 const form = reactive({
@@ -428,11 +135,14 @@ const form = reactive({
   prompt_set_id: '',
   intensity: 'auto',
   max_turns: 2,
+  prompt_overlay: emptyPromptOverlayForm(),
 });
 const jobTargetSelectionTouched = ref(false);
+const promptPreferencesHydrated = ref(false);
 const streamSections = ref<StreamSection[]>([]);
 const streamEvents = ref<StreamEvent[]>([]);
 const startError = ref('');
+const promptPreferencesError = ref('');
 
 const { data: projects } = useQuery({
   queryKey: ['projects'],
@@ -452,6 +162,11 @@ const { data: dashboard } = useQuery({
 const { data: promptSets } = useQuery({
   queryKey: ['prompt-sets'],
   queryFn: listPromptSets,
+});
+
+const { data: promptPreferences } = useQuery({
+  queryKey: ['prompt-preferences'],
+  queryFn: getPromptPreferences,
 });
 
 const currentSession = computed(() => dashboard.value?.current_session ?? null);
@@ -524,6 +239,37 @@ const readyJobTargetCount = computed(
     ).length,
 );
 const promptSetCount = computed(() => (promptSets.value ?? []).length);
+const currentSessionCard = computed(() => {
+  const session = currentSession.value;
+  if (!session) {
+    return null;
+  }
+
+  return {
+    description: t('train.resumeDescription', {
+      name: formatSessionName(t, session),
+      status: formatStatusLabel(t, session.status),
+    }),
+    href: buildSessionTarget(session),
+  };
+});
+const fallbackJobTargetTitle = computed(() =>
+  activeJobTarget.value
+    ? activeJobTarget.value.title
+    : t('train.genericJobTargetOption'),
+);
+const fallbackJobTargetDescription = computed(() =>
+  activeJobTarget.value
+    ? describeJobTargetStatus(
+        t,
+        'trainFallback',
+        activeJobTarget.value.latest_analysis_status,
+        {
+          name: activeJobTarget.value.title,
+        },
+      )
+    : t('common.noRecommendation'),
+);
 const trainFocusTitle = computed(() =>
   form.mode === 'basics'
     ? formatTopicLabel(t, form.topic)
@@ -536,6 +282,37 @@ const trainFocusHint = computed(() => {
 
   return selectedProject.value?.summary || t('projects.emptyList');
 });
+const contextJobTargetTitle = computed(() =>
+  selectedJobTarget.value
+    ? selectedJobTarget.value.title
+    : activeJobTarget.value
+      ? activeJobTarget.value.title
+      : t('train.genericJobTargetOption'),
+);
+const contextJobTargetDescription = computed(
+  () =>
+    jobTargetBlockedReason.value ||
+    selectedJobTargetHint.value ||
+    activeJobTargetFallbackNotice.value ||
+    t('common.noRecommendation'),
+);
+const contextPromptSetTitle = computed(() =>
+  selectedPromptSet.value
+    ? formatPromptSetLabel(selectedPromptSet.value)
+    : t('train.fields.promptSet'),
+);
+const promptOverlaySummary = computed(() =>
+  formatPromptOverlaySummary(t, normalizePromptOverlay(form.prompt_overlay)),
+);
+const contextPromptSetDescription = computed(() => {
+  const baseDescription =
+    selectedPromptSet.value?.description ||
+    t('progress.createSession.description');
+  if (!promptOverlaySummary.value) {
+    return baseDescription;
+  }
+  return `${baseDescription} · ${promptOverlaySummary.value}`;
+});
 
 const mutation = useMutation({
   mutationFn: (payload: {
@@ -544,6 +321,7 @@ const mutation = useMutation({
     project_id?: string;
     job_target_id?: string;
     prompt_set_id?: string;
+    prompt_overlay?: ReturnType<typeof normalizePromptOverlay>;
     ignore_active_job_target?: boolean;
     intensity: string;
     max_turns?: number;
@@ -561,7 +339,26 @@ const mutation = useMutation({
   },
 });
 
+const savePromptPreferencesMutation = useMutation({
+  mutationFn: () => {
+    promptPreferencesError.value = '';
+    return savePromptPreferences(
+      normalizePromptOverlay(form.prompt_overlay) ?? {},
+    );
+  },
+  onSuccess: () => {
+    promptPreferencesError.value = '';
+    showToast(t('promptOverlay.saveSuccess'), 'success');
+  },
+  onError: (error) => {
+    promptPreferencesError.value = resolveStartErrorMessage(error);
+  },
+});
+
 const isStarting = computed(() => mutation.isPending.value);
+const isSavingPromptPreferences = computed(
+  () => savePromptPreferencesMutation.isPending.value,
+);
 const createSessionSteps = computed(
   () => tm('progress.createSession.steps') as string[],
 );
@@ -661,13 +458,28 @@ watch(
   { immediate: true },
 );
 
+watch(
+  promptPreferences,
+  (value) => {
+    if (promptPreferencesHydrated.value || value == null) {
+      return;
+    }
+
+    Object.assign(form.prompt_overlay, toPromptOverlayFormState(value));
+    promptPreferencesHydrated.value = true;
+  },
+  { immediate: true },
+);
+
 function submit() {
+  const promptOverlay = normalizePromptOverlay(form.prompt_overlay);
   mutation.mutate({
     mode: form.mode,
     topic: form.mode === 'basics' ? form.topic : undefined,
     project_id: form.mode === 'project' ? form.project_id : undefined,
     job_target_id: form.job_target_id || undefined,
     prompt_set_id: form.prompt_set_id || undefined,
+    prompt_overlay: promptOverlay,
     ignore_active_job_target:
       !form.job_target_id && Boolean(activeJobTarget.value),
     intensity: form.intensity,
@@ -713,6 +525,13 @@ function markJobTargetSelectionTouched() {
   jobTargetSelectionTouched.value = true;
 }
 
+function savePromptPreferencesFromForm() {
+  if (isSavingPromptPreferences.value) {
+    return;
+  }
+  savePromptPreferencesMutation.mutate();
+}
+
 function formatPromptSetLabel(item: PromptSetSummary): string {
   return `${item.label} · ${item.status}`;
 }
@@ -723,181 +542,15 @@ function formatPromptSetLabel(item: PromptSetSummary): string {
   position: relative;
 }
 
-.train-stage {
-  display: grid;
-  gap: 1.5rem;
-  overflow: hidden;
-  position: relative;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--neo-red) 82%, white) 0%,
-    color-mix(in srgb, var(--neo-red) 58%, var(--neo-yellow)) 100%
-  );
-}
-
-.train-stage::before {
-  content: '';
-  position: absolute;
-  inset: 1rem;
-  border: 1px solid color-mix(in srgb, var(--neo-border) 20%, transparent);
-  pointer-events: none;
-}
-
-.train-stage-copy,
-.train-stage-side {
-  position: relative;
-  z-index: 1;
-}
-
-.train-stage-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.train-stage-title {
-  font-size: clamp(2.1rem, 6vw, 4.8rem);
-  font-weight: 900;
-  letter-spacing: -0.06em;
-  line-height: 0.95;
-  margin: 0;
-  max-width: 11ch;
-  text-transform: uppercase;
-}
-
-.train-stage-note {
-  font-size: 1rem;
-  font-weight: 700;
-  line-height: 1.7;
-  margin: 0;
-  max-width: 38rem;
-}
-
-.train-stage-stats {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.train-stage-stat,
-.train-stage-context {
-  background: color-mix(in srgb, var(--neo-surface) 90%, transparent);
-  border: 2px solid var(--neo-border);
-  box-shadow: 6px 6px 0 0 rgba(var(--neo-shadow-rgb), var(--neo-shadow-alpha));
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 1rem;
-}
-
-.train-stage-stat span {
-  font-size: clamp(2.4rem, 8vw, 4rem);
-  font-weight: 900;
-  letter-spacing: -0.08em;
-  line-height: 0.9;
-}
-
-.train-stage-stat small {
-  font-size: 0.75rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.train-stage-side {
-  display: grid;
-  gap: 1rem;
-}
-
 .train-shell {
   display: grid;
   gap: 1rem;
 }
 
-.train-form-panel,
-.train-side-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-.train-form-section {
-  border-top: 1px solid color-mix(in srgb, var(--neo-border) 18%, transparent);
-  display: grid;
-  gap: 1rem;
-  padding-top: 1rem;
-}
-
-.train-form-section:first-child {
-  border-top: 0;
-  padding-top: 0;
-}
-
-.train-section-head {
-  align-items: end;
-  border-bottom: 2px solid
-    color-mix(in srgb, var(--neo-border) 18%, transparent);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  justify-content: space-between;
-  padding-bottom: 1rem;
-}
-
-.train-section-title {
-  font-size: 1.35rem;
-  font-weight: 900;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  margin: 0;
-  text-transform: uppercase;
-}
-
-.train-section-note {
-  line-height: 1.7;
-  margin: 0;
-  max-width: 24rem;
-}
-
-.train-grid {
-  display: grid;
-  gap: 1rem;
-}
-
-.train-form-actions {
-  border-top: 1px solid color-mix(in srgb, var(--neo-border) 18%, transparent);
-  margin-top: 0.5rem;
-  padding-top: 1rem;
-}
-
-.train-side {
-  display: grid;
-  gap: 1rem;
-}
-
-@media (min-width: 768px) {
-  .train-stage-stats {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .train-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 @media (min-width: 1280px) {
-  .train-stage {
-    align-items: start;
-    grid-template-columns: minmax(0, 1.2fr) minmax(19rem, 0.8fr);
-  }
-
   .train-shell {
     align-items: start;
     grid-template-columns: minmax(0, 1fr) minmax(18rem, 21rem);
-  }
-
-  .train-side {
-    position: sticky;
-    top: 1.5rem;
   }
 }
 </style>

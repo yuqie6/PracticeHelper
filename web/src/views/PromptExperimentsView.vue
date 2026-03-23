@@ -53,6 +53,10 @@
             </div>
           </div>
 
+          <p class="neo-note">
+            {{ t('promptExperiments.overlayNotice') }}
+          </p>
+
           <div class="prompt-filter-grid">
             <label class="space-y-2">
               <span class="neo-subheading">

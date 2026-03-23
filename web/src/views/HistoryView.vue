@@ -222,6 +222,12 @@
                       })
                     }}
                   </span>
+                  <span
+                    v-if="item.prompt_overlay_hash"
+                    class="neo-badge bg-[var(--neo-green)]"
+                  >
+                    {{ t('history.promptOverlayBadge') }}
+                  </span>
                 </div>
                 <span class="text-sm font-semibold">
                   {{ formatStatusLabel(t, item.status) }}

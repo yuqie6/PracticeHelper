@@ -6,6 +6,15 @@ export interface PromptSetSummary {
   is_default?: boolean;
 }
 
+export interface PromptOverlay {
+  tone?: string;
+  detail_level?: string;
+  followup_intensity?: string;
+  answer_language?: string;
+  focus_tags?: string[];
+  custom_instruction?: string;
+}
+
 export interface PromptExperimentMetrics {
   prompt_set: PromptSetSummary;
   session_count: number;
