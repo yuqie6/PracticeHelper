@@ -1,48 +1,53 @@
 # Docs Guide
 
-> 这份索引用来回答两个问题：
-> 1. `docs/` 里每份文档该去哪里找
-> 2. 当几份文档说法不完全一样时，先信哪一份
+> 这套文档现在只做一件事：让人能在几分钟内搞清楚
+> “项目现在是什么、当前主线是什么、细节该去哪找”。
 
-## 目录结构
+## 先看哪几份
 
-```text
-docs/
-├── README.md
-├── current/   # 当前事实主链
-├── plans/     # 专项计划与执行方案
-└── records/   # 已完成阶段的设计记录
-```
+如果你只想快速恢复上下文，先看这 3 份：
 
-## 怎么读
+1. [`current/VISION.md`](./current/VISION.md)：这个产品现在到底是什么。
+2. [`current/PLAN.md`](./current/PLAN.md)：当前主线到底在做什么。
+3. [`current/ARCHITECTURE.md`](./current/ARCHITECTURE.md)：代码和进程边界怎么分。
 
-优先级默认这样看：
+## 先信谁
+
+默认优先级：
 
 1. `current/`
 2. `plans/`
 3. `records/`
 
-含义是：
+解释很简单：
 
-- `current/` 讲的是当前仓库事实，是默认入口。
-- `plans/` 讲的是某条专项主线怎么推进，不单独覆盖当前事实。
-- `records/` 讲的是当时为什么这么做、边界是什么，主要用于回溯。
+- `current/` 是当前事实主链，冲突时默认先信它。
+- `plans/` 是专项执行文档，只回答某条线怎么推进。
+- `records/` 是历史设计记录，用来追溯，不用来判断当前待办。
+
+## 每类文档管什么
+
+| 目录 | 用途 | 什么时候看 |
+|:-----|:-----|:-----------|
+| `current/` | 当前产品、当前主线、当前架构 | 日常开发、恢复上下文、判断边界 |
+| `plans/` | 某条专项怎么继续推进 | 你准备继续那条专项时 |
+| `records/` | 已完成阶段当时为什么这么做 | 你要追历史决策时 |
 
 ## current
 
 | 文档 | 作用 |
 |:-----|:-----|
-| [`current/VISION.md`](./current/VISION.md) | 产品方向锚点 |
-| [`current/PRD.md`](./current/PRD.md) | 当前产品边界 |
-| [`current/ROADMAP.md`](./current/ROADMAP.md) | 阶段顺序与推进原则 |
-| [`current/PLAN.md`](./current/PLAN.md) | 当前主线与近期任务 |
-| [`current/ARCHITECTURE.md`](./current/ARCHITECTURE.md) | 当前技术事实、状态机、Schema、API |
+| [`current/VISION.md`](./current/VISION.md) | 产品定位和当前形态约束 |
+| [`current/PRD.md`](./current/PRD.md) | 当前产品边界、页面和成功标准 |
+| [`current/ROADMAP.md`](./current/ROADMAP.md) | 阶段顺序、推进原则、哪些明确延后 |
+| [`current/PLAN.md`](./current/PLAN.md) | 当前主线、当前该做什么、什么不该继续展开 |
+| [`current/ARCHITECTURE.md`](./current/ARCHITECTURE.md) | 三端边界、关键数据、状态机和接口面 |
 
 ## plans
 
 | 文档 | 作用 |
 |:-----|:-----|
-| [`plans/PRODUCT_UPGRADE_PLAN.md`](./plans/PRODUCT_UPGRADE_PLAN.md) | 阶段 C 产品升级清单 |
+| [`plans/PRODUCT_UPGRADE_PLAN.md`](./plans/PRODUCT_UPGRADE_PLAN.md) | 阶段 C 的产品升级清单与当前进度 |
 | [`plans/ARCHITECTURE_CONVERGENCE_PLAN.md`](./plans/ARCHITECTURE_CONVERGENCE_PLAN.md) | 当前工程收口专项 |
 | [`plans/AGENT_DEEP_REDESIGN_PLAN.md`](./plans/AGENT_DEEP_REDESIGN_PLAN.md) | sidecar agent runtime 深改专项 |
 
@@ -50,15 +55,11 @@ docs/
 
 | 文档 | 作用 |
 |:-----|:-----|
-| [`records/JD_TRAINING_STAGE_B.md`](./records/JD_TRAINING_STAGE_B.md) | 阶段 B 的设计记录与验收口径 |
-| [`records/ANSWER_FEEDBACK_UX_V2.md`](./records/ANSWER_FEEDBACK_UX_V2.md) | 阶段 A 的答题反馈 V2 设计记录 |
+| [`records/JD_TRAINING_STAGE_B.md`](./records/JD_TRAINING_STAGE_B.md) | 阶段 B 的方案与验收口径 |
+| [`records/ANSWER_FEEDBACK_UX_V2.md`](./records/ANSWER_FEEDBACK_UX_V2.md) | 阶段 A 的答题反馈 V2 记录 |
 
-## 最短阅读路径
+## 不建议的读法
 
-如果只是想快速恢复项目上下文，按这个顺序看：
-
-1. [`current/VISION.md`](./current/VISION.md)
-2. [`current/PRD.md`](./current/PRD.md)
-3. [`current/ROADMAP.md`](./current/ROADMAP.md)
-4. [`current/PLAN.md`](./current/PLAN.md)
-5. [`current/ARCHITECTURE.md`](./current/ARCHITECTURE.md)
+- 不要一上来先读最长的计划文档。
+- 不要把 `records/` 当成当前事实。
+- 如果只是要继续开发当前主线，没必要先翻完全部 `docs/`。
