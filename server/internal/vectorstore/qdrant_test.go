@@ -131,3 +131,37 @@ func TestQdrantStoreSearchUsesPayloadFilterAndReturnsScores(t *testing.T) {
 		t.Fatalf("expected filter.must with 2 conditions, got %+v", capturedFilter)
 	}
 }
+
+func TestQdrantStoreDeletePostsPointIDs(t *testing.T) {
+	var capturedIDs []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/collections/practicehelper_memory/points/delete":
+			if r.Method != http.MethodPost {
+				t.Fatalf("unexpected method: %s", r.Method)
+			}
+			var payload struct {
+				Points []string `json:"points"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode delete payload: %v", err)
+			}
+			capturedIDs = append(capturedIDs, payload.Points...)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"result":{"status":"acknowledged"}}`))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	store := NewQdrantStore(server.URL, "secret", "practicehelper_memory", time.Second)
+	if err := store.Delete(context.Background(), []string{"memidx_1", "memidx_2"}); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	if len(capturedIDs) != 2 || capturedIDs[0] != "memidx_1" || capturedIDs[1] != "memidx_2" {
+		t.Fatalf("unexpected deleted point ids: %+v", capturedIDs)
+	}
+}

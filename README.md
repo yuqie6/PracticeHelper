@@ -91,7 +91,7 @@ PracticeHelper 由 **三个本地进程 + 一个可选向量服务** 通过 HTTP
 | **API 服务** | 路由、状态机、持久化、sidecar 编排 | Go (Gin)、SQLite + FTS5 |
 | **AI Sidecar** | 仓库分析、出题、评估、复盘 | Python (FastAPI)、LangGraph、Pydantic |
 | **业务存储** | 训练数据、画像、历史、审计 | SQLite |
-| **向量检索** | repo chunk / memory embedding 与向量召回 | Qdrant（可选，本地开发可直接启动） |
+| **向量检索** | repo chunk / memory embedding 与向量召回 | Qdrant（可选，当前唯一已实现 provider，可本地或云端） |
 
 ### 关键设计决策
 
@@ -136,6 +136,7 @@ PRACTICEHELPER_SIDECAR_OPENAI_API_KEY=你的密钥
 ```
 
 Sidecar 使用 OpenAI 兼容 API 格式，任何暴露该接口的服务（OpenAI、Anthropic 代理、vLLM / Ollama 本地模型等）都可以直接接入。
+如果本地服务没有鉴权，`PRACTICEHELPER_SIDECAR_OPENAI_API_KEY` 可以留空。
 
 > **不配置 LLM 时，所有 AI 功能返回 503。** 系统不做启发式兜底。
 
@@ -147,10 +148,16 @@ Sidecar 使用 OpenAI 兼容 API 格式，任何暴露该接口的服务（OpenA
 PRACTICEHELPER_SIDECAR_GITHUB_TOKEN=ghp_xxx
 
 # 启用 repo chunk / memory 向量召回
+# 当前 vector store provider 只实现 qdrant；本地 Docker 和 Qdrant Cloud 共用这一组配置。
+PRACTICEHELPER_SERVER_VECTOR_STORE_PROVIDER=qdrant
 PRACTICEHELPER_SERVER_VECTOR_STORE_URL=http://127.0.0.1:6333
+PRACTICEHELPER_SERVER_VECTOR_STORE_API_KEY=
 PRACTICEHELPER_SERVER_VECTOR_WRITE_ENABLED=true
 PRACTICEHELPER_SERVER_VECTOR_READ_ENABLED=true
 PRACTICEHELPER_SERVER_VECTOR_RERANK_ENABLED=true
+
+# embedding / rerank 可以指向云端 API，也可以指向本地 OpenAI-compatible 服务；
+# 本地服务没有鉴权时，API key 可以留空。
 PRACTICEHELPER_SIDECAR_EMBEDDING_MODEL=你的 embedding 模型
 PRACTICEHELPER_SIDECAR_EMBEDDING_BASE_URL=http://127.0.0.1:3000/v1
 PRACTICEHELPER_SIDECAR_EMBEDDING_API_KEY=你的密钥

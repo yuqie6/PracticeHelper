@@ -37,6 +37,7 @@ type StoredPoint struct {
 type Store interface {
 	Enabled() bool
 	Upsert(ctx context.Context, points []Point, vectorSize int) error
+	Delete(ctx context.Context, ids []string) error
 	Get(ctx context.Context, ids []string) (map[string]StoredPoint, error)
 	Search(ctx context.Context, vector []float64, filter SearchFilter, limit int) ([]SearchResult, error)
 }
@@ -84,6 +85,16 @@ func (s *QdrantStore) Upsert(ctx context.Context, points []Point, vectorSize int
 		"points": points,
 	}
 	return s.callJSON(ctx, http.MethodPut, "/collections/"+s.collection+"/points?wait=true", payload, nil)
+}
+
+func (s *QdrantStore) Delete(ctx context.Context, ids []string) error {
+	if !s.Enabled() || len(ids) == 0 {
+		return nil
+	}
+
+	return s.callJSON(ctx, http.MethodPost, "/collections/"+s.collection+"/points/delete?wait=true", map[string]any{
+		"points": ids,
+	}, nil)
 }
 
 func (s *QdrantStore) Get(ctx context.Context, ids []string) (map[string]StoredPoint, error) {

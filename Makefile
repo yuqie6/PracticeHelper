@@ -21,6 +21,7 @@ SIDECAR_COVERAGE_MIN := 70
 	lint lint-web lint-server lint-sidecar \
 	format format-web format-server format-sidecar \
 	test test-web test-server test-sidecar \
+	test-rag \
 	coverage coverage-web coverage-server coverage-sidecar test-gate \
 	build build-web build-server \
 	e2e-live
@@ -125,6 +126,10 @@ test-server: ## 运行 Go 测试
 
 test-sidecar: ## 运行 Python 测试
 	$(ENV_LOADER); uv run --project "$(SIDECAR_DIR)" pytest
+
+test-rag: ## 运行 RAG 相关 smoke：vectorstore / sidecar internal / service / controller
+	$(ENV_LOADER); cd "$(SERVER_DIR)" && GOCACHE=/tmp/go-build go test -tags "$(GO_SQLITE_TAGS)" ./internal/vectorstore ./internal/sidecar ./internal/service ./internal/controller -run 'Test(SearchProjectChunks|GetAgentContextUsesVectorSimilarityForSessionSummaries|SyncOrQueueMemoryEmbeddings|ProcessNextRepoChunkEmbeddingJob|EnqueueProjectRepoChunkEmbeddings|InternalSearchChunks|InternalSessionDetailReturnsSessionAndReview)'
+	$(ENV_LOADER); uv run --project "$(SIDECAR_DIR)" pytest "$(SIDECAR_DIR)/tests/test_main_streaming.py" -q
 
 coverage: coverage-web coverage-server coverage-sidecar ## 运行三端覆盖率统计
 

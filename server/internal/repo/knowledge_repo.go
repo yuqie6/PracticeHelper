@@ -592,13 +592,14 @@ func (s *Store) upsertKnowledgeUpdateTx(
 		return "", nil, fmt.Errorf("update knowledge node %s: %w", node.ID, err)
 	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO knowledge_snapshots (id, node_id, session_id, proficiency, evidence, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO knowledge_snapshots (id, node_id, session_id, proficiency, confidence, evidence, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`,
 		newID("kgs"),
 		node.ID,
 		sessionID,
 		update.Proficiency,
+		confidence,
 		update.Evidence,
 		assessedAt,
 	); err != nil {

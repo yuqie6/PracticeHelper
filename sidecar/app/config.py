@@ -26,16 +26,16 @@ class Settings:
 
     @property
     def llm_enabled(self) -> bool:
-        # 三个配置缺一不可；半配状态统一按关闭处理，避免请求跑到不确定的降级分支。
-        return bool(self.model and self.openai_base_url and self.openai_api_key)
+        # 本地 OpenAI-compatible 服务通常不要求鉴权，因此这里只强制 model/base_url。
+        return bool(self.model and self.openai_base_url)
 
     @property
     def embedding_enabled(self) -> bool:
-        return bool(self.embedding_model and self.embedding_base_url and self.embedding_api_key)
+        return bool(self.embedding_model and self.embedding_base_url)
 
     @property
     def rerank_enabled(self) -> bool:
-        return bool(self.rerank_model and self.rerank_base_url and self.rerank_api_key)
+        return bool(self.rerank_model and self.rerank_base_url)
 
     @property
     def backend_enabled(self) -> bool:

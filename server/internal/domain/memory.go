@@ -34,6 +34,7 @@ type KnowledgeSnapshot struct {
 	NodeID      string    `json:"node_id"`
 	SessionID   string    `json:"session_id,omitempty"`
 	Proficiency float64   `json:"proficiency"`
+	Confidence  float64   `json:"confidence"`
 	Evidence    string    `json:"evidence,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 }

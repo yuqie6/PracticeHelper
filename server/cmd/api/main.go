@@ -42,14 +42,35 @@ func main() {
 	repository := repo.New(db)
 
 	sidecarClient := sidecar.New(cfg.SidecarURL, cfg.SidecarTimeout)
-	var memoryVectorStore vectorstore.Store
-	if cfg.VectorStoreURL != "" {
-		memoryVectorStore = vectorstore.NewQdrantStore(
+	memoryVectorStore, err := vectorstore.NewStore(
+		cfg.VectorStoreProvider,
+		cfg.VectorStoreURL,
+		cfg.VectorStoreAPIKey,
+		cfg.VectorStoreCollection,
+		cfg.VectorStoreTimeout,
+	)
+	if err != nil {
+		logger.Error(
+			"build vector store failed",
+			"provider",
+			cfg.VectorStoreProvider,
+			"url",
 			cfg.VectorStoreURL,
-			cfg.VectorStoreAPIKey,
-			cfg.VectorStoreCollection,
-			cfg.VectorStoreTimeout,
+			"error",
+			err,
 		)
+		os.Exit(1)
+	}
+	if (cfg.VectorWriteEnabled || cfg.VectorReadEnabled || cfg.VectorRerankEnabled) &&
+		(memoryVectorStore == nil || !memoryVectorStore.Enabled()) {
+		logger.Error(
+			"vector retrieval is enabled but vector store is not configured",
+			"provider",
+			cfg.VectorStoreProvider,
+			"url",
+			cfg.VectorStoreURL,
+		)
+		os.Exit(1)
 	}
 	svc := service.New(
 		repository,

@@ -282,7 +282,8 @@ class AgentRuntime:
     def _require_model_client(self) -> OpenAICompatibleModelClient:
         if self._model_client is None:
             raise ModelClientError(
-                "LLM is required for sidecar core flows. Configure PRACTICEHELPER_SIDECAR_MODEL, "
-                "PRACTICEHELPER_SIDECAR_OPENAI_BASE_URL, and PRACTICEHELPER_SIDECAR_OPENAI_API_KEY."
+                "LLM is required for sidecar core flows. Configure PRACTICEHELPER_SIDECAR_MODEL "
+                "and PRACTICEHELPER_SIDECAR_OPENAI_BASE_URL. If the provider requires auth, also "
+                "set PRACTICEHELPER_SIDECAR_OPENAI_API_KEY."
             )
         return self._model_client

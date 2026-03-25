@@ -232,6 +232,7 @@ func TestGetAgentContextUsesVectorSimilarityForSessionSummaries(t *testing.T) {
 
 type fakeVectorStore struct {
 	points    map[string]vectorstore.StoredPoint
+	deleted   []string
 	searchErr error
 }
 
@@ -250,6 +251,14 @@ func (s *fakeVectorStore) Upsert(_ context.Context, points []vectorstore.Point, 
 			Vector:  append([]float64(nil), point.Vector...),
 			Payload: point.Payload,
 		}
+	}
+	return nil
+}
+
+func (s *fakeVectorStore) Delete(_ context.Context, ids []string) error {
+	s.deleted = append(s.deleted, ids...)
+	for _, id := range ids {
+		delete(s.points, id)
 	}
 	return nil
 }

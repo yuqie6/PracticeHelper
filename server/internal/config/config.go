@@ -14,6 +14,7 @@ type Config struct {
 	SidecarTimeout           time.Duration
 	InternalToken            string
 	LogPath                  string
+	VectorStoreProvider      string
 	VectorStoreURL           string
 	VectorStoreAPIKey        string
 	VectorStoreCollection    string
@@ -34,6 +35,7 @@ func Load() Config {
 		SidecarTimeout:           getEnvDurationSeconds("PRACTICEHELPER_SERVER_SIDECAR_TIMEOUT_SECONDS", 90*time.Second),
 		InternalToken:            getEnv("PRACTICEHELPER_INTERNAL_TOKEN", ""),
 		LogPath:                  getEnv("PRACTICEHELPER_SERVER_LOG_PATH", "../data/logs/server.log"),
+		VectorStoreProvider:      getEnv("PRACTICEHELPER_SERVER_VECTOR_STORE_PROVIDER", ""),
 		VectorStoreURL:           getEnv("PRACTICEHELPER_SERVER_VECTOR_STORE_URL", ""),
 		VectorStoreAPIKey:        getEnv("PRACTICEHELPER_SERVER_VECTOR_STORE_API_KEY", ""),
 		VectorStoreCollection:    getEnv("PRACTICEHELPER_SERVER_VECTOR_STORE_COLLECTION", "practicehelper_memory"),

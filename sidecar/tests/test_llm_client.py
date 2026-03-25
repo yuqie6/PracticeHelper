@@ -39,19 +39,25 @@ class FakeHTTPResponse:
         return False
 
 
-def build_settings(base_url: str = "https://example.com/v1") -> Settings:
+def build_settings(
+    base_url: str = "https://example.com/v1",
+    *,
+    openai_api_key: str = "test-key",
+    embedding_api_key: str = "embed-key",
+    rerank_api_key: str = "rerank-key",
+) -> Settings:
     return Settings(
         github_token="",
         model="test-model",
         openai_base_url=base_url,
-        openai_api_key="test-key",
+        openai_api_key=openai_api_key,
         llm_timeout_seconds=5,
         embedding_model="embed-model",
         embedding_base_url="https://embed.example.com/v1",
-        embedding_api_key="embed-key",
+        embedding_api_key=embedding_api_key,
         rerank_model="rerank-model",
         rerank_base_url="https://rerank.example.com",
-        rerank_api_key="rerank-key",
+        rerank_api_key=rerank_api_key,
     )
 
 
@@ -63,6 +69,14 @@ def test_chat_completion_url_accepts_multiple_base_url_shapes() -> None:
     assert bare._chat_completions_url == "https://example.com/v1/chat/completions"
     assert versioned._chat_completions_url == "https://example.com/v1/chat/completions"
     assert full._chat_completions_url == "https://example.com/chat/completions"
+
+
+def test_settings_treat_local_endpoints_without_api_keys_as_enabled() -> None:
+    settings = build_settings(openai_api_key="", embedding_api_key="", rerank_api_key="")
+
+    assert settings.llm_enabled is True
+    assert settings.embedding_enabled is True
+    assert settings.rerank_enabled is True
 
 
 def test_create_completion_normalizes_segmented_content_and_tool_calls(monkeypatch) -> None:
@@ -114,6 +128,37 @@ def test_create_completion_raises_model_client_error_on_http_error(monkeypatch) 
         assert "rate_limited" in str(exc)
     else:
         raise AssertionError("expected ModelClientError")
+
+
+def test_create_completion_omits_authorization_header_when_api_key_is_empty(monkeypatch) -> None:
+    captured: dict[str, str | None] = {}
+
+    def fake_urlopen(request, timeout):
+        captured["authorization"] = request.headers.get("Authorization")
+        return FakeHTTPResponse(
+            [
+                json.dumps(
+                    {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": "ok",
+                                    "tool_calls": [],
+                                }
+                            }
+                        ]
+                    }
+                ).encode("utf-8")
+            ]
+        )
+
+    monkeypatch.setattr(llm_client.urllib_request, "urlopen", fake_urlopen)
+
+    client = OpenAICompatibleModelClient(build_settings(openai_api_key=""))
+    result = client.create_completion(messages=[{"role": "user", "content": "hello"}])
+
+    assert result.content == "ok"
+    assert captured["authorization"] is None
 
 
 def test_create_completion_stream_falls_back_to_non_sse_json(monkeypatch) -> None:
@@ -196,6 +241,32 @@ def test_create_embeddings_uses_embedding_endpoint_and_parses_vectors(monkeypatc
     assert captured["url"] == "https://embed.example.com/v1/embeddings"
     assert model_name == "embed-model"
     assert vectors == [[0.9, 0.1], [0.2, 0.3]]
+
+
+def test_create_embeddings_omits_authorization_header_when_api_key_is_empty(monkeypatch) -> None:
+    captured: dict[str, str | None] = {}
+
+    def fake_urlopen(request, timeout):
+        captured["authorization"] = request.headers.get("Authorization")
+        return FakeHTTPResponse(
+            [
+                json.dumps(
+                    {
+                        "model": "embed-model",
+                        "data": [{"index": 0, "embedding": [0.9, 0.1]}],
+                    }
+                ).encode("utf-8")
+            ]
+        )
+
+    monkeypatch.setattr(llm_client.urllib_request, "urlopen", fake_urlopen)
+
+    client = OpenAICompatibleModelClient(build_settings(embedding_api_key=""))
+    vectors, model_name = client.create_embeddings(["query"])
+
+    assert model_name == "embed-model"
+    assert vectors == [[0.9, 0.1]]
+    assert captured["authorization"] is None
 
 
 def test_rerank_documents_uses_rerank_endpoint_and_sorts_scores(monkeypatch) -> None:

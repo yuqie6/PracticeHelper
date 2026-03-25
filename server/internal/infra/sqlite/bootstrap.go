@@ -253,6 +253,7 @@ func migrate(db *sql.DB) error {
 			node_id TEXT NOT NULL,
 			session_id TEXT NOT NULL DEFAULT '',
 			proficiency REAL NOT NULL,
+			confidence REAL NOT NULL DEFAULT 0.5,
 			evidence TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL
 		);`,
@@ -456,6 +457,9 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 	if err := ensureColumn(db, "project_import_jobs", "claim_expires_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "knowledge_snapshots", "confidence", "REAL NOT NULL DEFAULT 0.5"); err != nil {
 		return err
 	}
 	if _, err := db.Exec(`

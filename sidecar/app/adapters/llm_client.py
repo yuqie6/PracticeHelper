@@ -57,10 +57,7 @@ class OpenAICompatibleModelClient:
         request = urllib_request.Request(
             self._chat_completions_url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self._settings.openai_api_key}",
-                "Content-Type": "application/json",
-            },
+            headers=self._json_headers(self._settings.openai_api_key),
             method="POST",
         )
 
@@ -103,10 +100,7 @@ class OpenAICompatibleModelClient:
         request = urllib_request.Request(
             self._chat_completions_url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self._settings.openai_api_key}",
-                "Content-Type": "application/json",
-            },
+            headers=self._json_headers(self._settings.openai_api_key),
             method="POST",
         )
 
@@ -137,9 +131,9 @@ class OpenAICompatibleModelClient:
     def create_embeddings(self, texts: list[str]) -> tuple[list[list[float]], str]:
         if not self._settings.embedding_enabled:
             raise ModelClientError(
-                "Embedding model is required. Configure PRACTICEHELPER_SIDECAR_EMBEDDING_MODEL, "
-                "PRACTICEHELPER_SIDECAR_EMBEDDING_BASE_URL, "
-                "and PRACTICEHELPER_SIDECAR_EMBEDDING_API_KEY."
+                "Embedding provider is required. Configure PRACTICEHELPER_SIDECAR_EMBEDDING_MODEL "
+                "and PRACTICEHELPER_SIDECAR_EMBEDDING_BASE_URL. If the provider requires auth, "
+                "also set PRACTICEHELPER_SIDECAR_EMBEDDING_API_KEY."
             )
         if not texts:
             return [], ""
@@ -152,10 +146,7 @@ class OpenAICompatibleModelClient:
                     "input": texts,
                 }
             ).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self._settings.embedding_api_key}",
-                "Content-Type": "application/json",
-            },
+            headers=self._json_headers(self._settings.embedding_api_key),
             method="POST",
         )
 
@@ -196,8 +187,9 @@ class OpenAICompatibleModelClient:
     ) -> list[dict[str, float | int]]:
         if not self._settings.rerank_enabled:
             raise ModelClientError(
-                "Rerank model is required. Configure PRACTICEHELPER_SIDECAR_RERANK_MODEL, "
-                "PRACTICEHELPER_SIDECAR_RERANK_BASE_URL, and PRACTICEHELPER_SIDECAR_RERANK_API_KEY."
+                "Rerank provider is required. Configure PRACTICEHELPER_SIDECAR_RERANK_MODEL and "
+                "PRACTICEHELPER_SIDECAR_RERANK_BASE_URL. If the provider requires auth, also set "
+                "PRACTICEHELPER_SIDECAR_RERANK_API_KEY."
             )
         if not documents:
             return []
@@ -213,10 +205,7 @@ class OpenAICompatibleModelClient:
                     "return_documents": False,
                 }
             ).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self._settings.rerank_api_key}",
-                "Content-Type": "application/json",
-            },
+            headers=self._json_headers(self._settings.rerank_api_key),
             method="POST",
         )
 
@@ -279,6 +268,13 @@ class OpenAICompatibleModelClient:
         if base.endswith("/rerank"):
             return base
         return f"{base}/rerank"
+
+    @staticmethod
+    def _json_headers(api_key: str) -> dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        return headers
 
     @staticmethod
     def _normalize_content(content: Any) -> str:
