@@ -11,22 +11,40 @@
       </div>
 
       <div class="history-filter-grid">
-        <select :value="filters.mode" class="neo-select w-full" @change="emitFilter('mode', $event)">
+        <select
+          :value="filters.mode"
+          class="neo-select w-full"
+          @change="emitFilter('mode', $event)"
+        >
           <option value="">{{ t('history.filters.allModes') }}</option>
           <option value="basics">{{ formatModeLabel(t, 'basics') }}</option>
           <option value="project">{{ formatModeLabel(t, 'project') }}</option>
         </select>
-        <select :value="filters.topic" class="neo-select w-full" @change="emitFilter('topic', $event)">
+        <select
+          :value="filters.topic"
+          class="neo-select w-full"
+          @change="emitFilter('topic', $event)"
+        >
           <option value="">{{ t('history.filters.allTopics') }}</option>
           <option v-for="topic in availableTopics" :key="topic" :value="topic">
             {{ formatTopicLabel(t, topic) }}
           </option>
         </select>
-        <select :value="filters.status" class="neo-select w-full" @change="emitFilter('status', $event)">
+        <select
+          :value="filters.status"
+          class="neo-select w-full"
+          @change="emitFilter('status', $event)"
+        >
           <option value="">{{ t('history.filters.allStatuses') }}</option>
-          <option value="completed">{{ formatStatusLabel(t, 'completed') }}</option>
-          <option value="waiting_answer">{{ formatStatusLabel(t, 'waiting_answer') }}</option>
-          <option value="review_pending">{{ formatStatusLabel(t, 'review_pending') }}</option>
+          <option value="completed">
+            {{ formatStatusLabel(t, 'completed') }}
+          </option>
+          <option value="waiting_answer">
+            {{ formatStatusLabel(t, 'waiting_answer') }}
+          </option>
+          <option value="review_pending">
+            {{ formatStatusLabel(t, 'review_pending') }}
+          </option>
         </select>
       </div>
     </section>
@@ -51,16 +69,29 @@
         <select
           :value="exportFormat"
           class="neo-select"
-          @change="emit('update:exportFormat', ($event.target as HTMLSelectElement).value)"
+          @change="
+            emit(
+              'update:exportFormat',
+              ($event.target as HTMLSelectElement).value,
+            )
+          "
         >
-          <option v-for="item in exportFormatOptions" :key="item.value" :value="item.value">
+          <option
+            v-for="item in exportFormatOptions"
+            :key="item.value"
+            :value="item.value"
+          >
             {{ item.label }}
           </option>
         </select>
       </label>
 
       <div class="history-batch-actions">
-        <button type="button" class="neo-button w-full bg-white" @click="emit('toggle-select-all')">
+        <button
+          type="button"
+          class="neo-button history-select-page-button w-full bg-white"
+          @click="emit('toggle-select-all')"
+        >
           {{
             allSelectedOnPage
               ? t('history.batch.clearPageAction', { count: pageCount })
@@ -77,14 +108,29 @@
         </button>
         <button
           type="button"
+          class="neo-button-dark history-batch-delete-button w-full"
+          :disabled="selectedCount === 0 || isDeleting"
+          @click="emit('delete')"
+        >
+          {{
+            isDeleting
+              ? t('history.batch.deletingAction')
+              : t('history.batch.deleteAction', { count: selectedCount })
+          }}
+        </button>
+        <button
+          type="button"
           class="neo-button-dark w-full"
-          :disabled="selectedCount === 0 || isExporting"
+          :disabled="selectedCount === 0 || isExporting || isDeleting"
           @click="emit('export')"
         >
           {{
             isExporting
               ? t('history.batch.exportingAction')
-              : t('history.batch.exportAction', { count: selectedCount, format: exportFormatLabel })
+              : t('history.batch.exportAction', {
+                  count: selectedCount,
+                  format: exportFormatLabel,
+                })
           }}
         </button>
       </div>
@@ -98,6 +144,15 @@
       :message="exportError"
       @dismiss="emit('dismiss-export-error')"
     />
+
+    <NoticePanel
+      v-if="deleteError"
+      tone="error"
+      dismissible
+      :title="t('history.deleteErrorTitle')"
+      :message="deleteError"
+      @dismiss="emit('dismiss-delete-error')"
+    />
   </aside>
 </template>
 
@@ -105,7 +160,11 @@
 import { useI18n } from 'vue-i18n';
 
 import NoticePanel from './NoticePanel.vue';
-import { formatModeLabel, formatStatusLabel, formatTopicLabel } from '../lib/labels';
+import {
+  formatModeLabel,
+  formatStatusLabel,
+  formatTopicLabel,
+} from '../lib/labels';
 
 defineProps<{
   filters: { mode: string; topic: string; status: string };
@@ -117,7 +176,9 @@ defineProps<{
   exportFormatLabel: string;
   exportFormatOptions: Array<{ value: string; label: string }>;
   exportError: string;
+  deleteError: string;
   isExporting: boolean;
+  isDeleting: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -125,8 +186,10 @@ const emit = defineEmits<{
   (event: 'update:exportFormat', value: string): void;
   (event: 'toggle-select-all'): void;
   (event: 'clear-selection'): void;
+  (event: 'delete'): void;
   (event: 'export'): void;
   (event: 'dismiss-export-error'): void;
+  (event: 'dismiss-delete-error'): void;
 }>();
 
 const { t } = useI18n();
@@ -153,7 +216,8 @@ function emitFilter(field: string, event: Event) {
 
 .history-section-head {
   align-items: end;
-  border-bottom: 2px solid color-mix(in srgb, var(--neo-border) 18%, transparent);
+  border-bottom: 2px solid
+    color-mix(in srgb, var(--neo-border) 18%, transparent);
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;

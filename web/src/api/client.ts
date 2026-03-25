@@ -7,6 +7,7 @@ import {
   SESSION_EXPORT_FORMAT,
 } from '../lib/export';
 import type {
+  DeleteSessionsResult,
   Dashboard,
   EvaluationLogEntry,
   JobTarget,
@@ -27,6 +28,7 @@ import type {
   WeaknessTrend,
 } from './types';
 export type {
+  DeleteSessionsResult,
   Dashboard,
   EvaluationLogEntry,
   JobTarget,
@@ -476,6 +478,17 @@ export function listSessionEvaluationLogs(
   sessionId: string,
 ): Promise<EvaluationLogEntry[]> {
   return request(`/api/sessions/${sessionId}/evaluation-logs`);
+}
+
+export function deleteSessions(
+  sessionIds: string[],
+): Promise<DeleteSessionsResult> {
+  return request('/api/sessions/delete', {
+    method: 'POST',
+    body: JSON.stringify({
+      session_ids: sessionIds,
+    }),
+  });
 }
 
 export async function downloadSessionExport(

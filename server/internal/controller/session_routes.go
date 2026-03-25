@@ -15,6 +15,7 @@ import (
 func registerSessionRoutes(api *gin.RouterGroup, handler *Handler) {
 	api.GET("/sessions", handler.listSessions)
 	api.POST("/sessions", handler.createSession)
+	api.POST("/sessions/delete", handler.deleteSessions)
 	api.POST("/sessions/export", handler.exportSessions)
 	api.POST("/sessions/stream", handler.createSessionStream)
 	api.GET("/sessions/:id", handler.getSession)
@@ -178,6 +179,29 @@ func (h *Handler) exportSessions(c *gin.Context) {
 	c.Header("Content-Type", "application/zip")
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	c.Data(http.StatusOK, "application/zip", content)
+}
+
+func (h *Handler) deleteSessions(c *gin.Context) {
+	var request domain.DeleteSessionsRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	data, err := h.service.DeleteSessions(c.Request.Context(), request.SessionIDs)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrEmptyDeleteSelection):
+			writeError(c, http.StatusBadRequest, err)
+		case errors.Is(err, service.ErrSessionNotFound):
+			writeError(c, http.StatusNotFound, err)
+		default:
+			writeError(c, http.StatusInternalServerError, err)
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": data})
 }
 
 func (h *Handler) submitAnswer(c *gin.Context) {

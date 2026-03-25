@@ -21,6 +21,7 @@ var (
 	ErrPromptSetNotFound         = errors.New("prompt set not found")
 	ErrInvalidPromptOverlay      = errors.New("invalid prompt overlay")
 	ErrEmptyExportSelection      = errors.New("session ids are required")
+	ErrEmptyDeleteSelection      = errors.New("session ids are required")
 	ErrUnsupportedExportFormat   = errors.New("unsupported export format")
 	ErrImportJobNotFound         = errors.New("import job not found")
 	ErrSessionNotRecoverable     = errors.New("session is not in a recoverable state")

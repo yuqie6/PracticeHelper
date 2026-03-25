@@ -1,6 +1,9 @@
 <template>
   <section class="neo-page history-page space-y-6 xl:space-y-8">
-    <HistoryStageHero :export-format-label="exportFormatLabel" :stats="historyStageStats" />
+    <HistoryStageHero
+      :export-format-label="exportFormatLabel"
+      :stats="historyStageStats"
+    />
 
     <div class="history-shell">
       <HistoryFiltersPanel
@@ -13,13 +16,17 @@
         :export-format-label="exportFormatLabel"
         :export-format-options="exportFormatOptions"
         :export-error="exportError"
+        :delete-error="deleteError"
         :is-exporting="isExporting"
+        :is-deleting="isDeleting"
         @update:filter="updateFilter"
         @update:export-format="updateExportFormat"
         @toggle-select-all="toggleSelectAll"
         @clear-selection="clearSelection"
+        @delete="deleteSelected"
         @export="exportSelected"
         @dismiss-export-error="exportError = ''"
+        @dismiss-delete-error="deleteError = ''"
       />
 
       <HistoryResultsPanel
@@ -28,8 +35,10 @@
         :current-page="currentPage"
         :total-pages="totalPages"
         :selected-session-ids="selectedSessionIds"
+        :deleting-session-ids="deletingSessionIds"
         :resolve-session-link="resolveSessionLink"
         @toggle-selected="toggleSelected"
+        @delete="deleteSingle"
       />
     </div>
 
@@ -59,12 +68,13 @@
 </template>
 
 <script setup lang="ts">
-import { useQuery } from '@tanstack/vue-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import {
   ApiError,
+  deleteSessions,
   downloadSessionBatchExport,
   listSessions,
   type TrainingSessionSummary,
@@ -82,10 +92,13 @@ import { useToast } from '../lib/useToast';
 
 const { t } = useI18n();
 const { show: showToast } = useToast();
+const queryClient = useQueryClient();
 const currentPage = ref(1);
 const selectedSessionIds = ref<string[]>([]);
 const exportError = ref('');
+const deleteError = ref('');
 const isExporting = ref(false);
+const deletingSessionIds = ref<string[]>([]);
 const exportFormat = ref<SessionExportFormat>(SESSION_EXPORT_FORMAT);
 const filters = reactive({
   mode: '',
@@ -126,6 +139,7 @@ const { data, isLoading } = useQuery({
 const sessions = computed(() => data.value?.items ?? []);
 const totalPages = computed(() => data.value?.total_pages ?? 1);
 const selectedCount = computed(() => selectedSessionIds.value.length);
+const isDeleting = computed(() => deleteMutation.isPending.value);
 const allSelectedOnPage = computed(
   () =>
     sessions.value.length > 0 &&
@@ -145,6 +159,55 @@ const exportFormatOptions = computed(() =>
 const exportFormatLabel = computed(() =>
   t(`common.exportFormats.${exportFormat.value}`),
 );
+
+watch(totalPages, (value) => {
+  if (value > 0 && currentPage.value > value) {
+    currentPage.value = value;
+  }
+});
+
+const deleteMutation = useMutation({
+  mutationFn: (sessionIds: string[]) => deleteSessions(sessionIds),
+  onMutate: (sessionIds) => {
+    deleteError.value = '';
+    deletingSessionIds.value = [...sessionIds];
+  },
+  onSuccess: async (result) => {
+    selectedSessionIds.value = selectedSessionIds.value.filter(
+      (id) => !result.deleted_session_ids.includes(id),
+    );
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['sessions'] }),
+      queryClient.invalidateQueries({ queryKey: ['session'] }),
+      queryClient.invalidateQueries({ queryKey: ['review'] }),
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+      queryClient.invalidateQueries({ queryKey: ['weaknesses'] }),
+      queryClient.invalidateQueries({ queryKey: ['weakness-trends'] }),
+      queryClient.invalidateQueries({ queryKey: ['due-reviews'] }),
+      queryClient.invalidateQueries({ queryKey: ['prompt-experiment'] }),
+      queryClient.invalidateQueries({ queryKey: ['session-evaluation-logs'] }),
+      queryClient.invalidateQueries({ queryKey: ['review-evaluation-logs'] }),
+    ]);
+    showToast(
+      t('history.deleteSuccess', { count: result.deleted_count }),
+      'success',
+    );
+  },
+  onError: (error) => {
+    if (error instanceof ApiError) {
+      deleteError.value = error.message;
+      return;
+    }
+    if (error instanceof Error) {
+      deleteError.value = error.message;
+      return;
+    }
+    deleteError.value = t('common.requestFailed');
+  },
+  onSettled: () => {
+    deletingSessionIds.value = [];
+  },
+});
 
 function updateFilter(payload: { field: string; value: string }) {
   if (payload.field === 'mode') {
@@ -191,8 +254,16 @@ function clearSelection() {
   selectedSessionIds.value = [];
 }
 
+function deleteSelected() {
+  confirmDelete(selectedSessionIds.value);
+}
+
+function deleteSingle(sessionId: string) {
+  confirmDelete([sessionId]);
+}
+
 async function exportSelected() {
-  if (selectedCount.value === 0 || isExporting.value) {
+  if (selectedCount.value === 0 || isExporting.value || isDeleting.value) {
     return;
   }
 
@@ -221,6 +292,19 @@ async function exportSelected() {
 
 function resolveSessionLink(item: TrainingSessionSummary) {
   return item.review_id ? `/reviews/${item.review_id}` : `/sessions/${item.id}`;
+}
+
+function confirmDelete(sessionIds: string[]) {
+  if (sessionIds.length === 0 || isDeleting.value) {
+    return;
+  }
+  const confirmed = window.confirm(
+    t('history.deleteConfirm', { count: sessionIds.length }),
+  );
+  if (!confirmed) {
+    return;
+  }
+  deleteMutation.mutate(sessionIds);
 }
 </script>
 

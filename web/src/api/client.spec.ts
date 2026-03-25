@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createSessionStream,
+  deleteSessions,
   downloadSessionBatchExport,
   getDashboard,
   submitAnswerStream,
@@ -170,6 +171,32 @@ describe('api client', () => {
         session_ids: ['sess_1', 'sess_2'],
         format: 'json',
       }),
+    });
+  });
+
+  it('posts delete requests with selected session ids', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: {
+          deleted_count: 2,
+          deleted_session_ids: ['sess_1', 'sess_2'],
+        },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deleteSessions(['sess_1', 'sess_2']);
+
+    expect(result.deleted_count).toBe(2);
+    expect(fetchMock).toHaveBeenCalledWith('/api/sessions/delete', {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      body: JSON.stringify({
+        session_ids: ['sess_1', 'sess_2'],
+      }),
+      signal: expect.any(AbortSignal),
     });
   });
 });

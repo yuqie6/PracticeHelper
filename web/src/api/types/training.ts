@@ -200,6 +200,11 @@ export interface PaginatedList<T> {
   total_pages: number;
 }
 
+export interface DeleteSessionsResult {
+  deleted_count: number;
+  deleted_session_ids: string[];
+}
+
 export interface WeaknessTrendPoint {
   session_id: string;
   severity: number;

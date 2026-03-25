@@ -175,6 +175,15 @@ type ExportSessionsRequest struct {
 	Format     string   `json:"format" binding:"required"`
 }
 
+type DeleteSessionsRequest struct {
+	SessionIDs []string `json:"session_ids" binding:"required"`
+}
+
+type DeleteSessionsResult struct {
+	DeletedCount      int      `json:"deleted_count"`
+	DeletedSessionIDs []string `json:"deleted_session_ids"`
+}
+
 type SubmitAnswerRequest struct {
 	Answer string `json:"answer" binding:"required"`
 }

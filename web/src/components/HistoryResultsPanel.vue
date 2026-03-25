@@ -16,31 +16,60 @@
           </p>
           <h2 class="history-section-title">{{ t('history.hero.title') }}</h2>
         </div>
-        <span class="neo-badge bg-white">{{ currentPage }} / {{ totalPages }}</span>
+        <span class="neo-badge bg-white"
+          >{{ currentPage }} / {{ totalPages }}</span
+        >
       </div>
 
       <article v-for="item in sessions" :key="item.id" class="history-row">
-        <label class="flex shrink-0 items-center pt-1">
-          <input
-            class="neo-checkbox"
-            type="checkbox"
-            :checked="selectedSessionIds.includes(item.id)"
-            @change="emit('toggle-selected', item.id)"
-          />
-        </label>
+        <div class="history-row-actions">
+          <label class="flex shrink-0 items-center pt-1">
+            <input
+              class="neo-checkbox"
+              type="checkbox"
+              :checked="selectedSessionIds.includes(item.id)"
+              :disabled="deletingSessionIds.includes(item.id)"
+              @change="emit('toggle-selected', item.id)"
+            />
+          </label>
+          <button
+            type="button"
+            class="neo-button history-delete-button"
+            :disabled="deletingSessionIds.includes(item.id)"
+            @click="emit('delete', item.id)"
+          >
+            {{
+              deletingSessionIds.includes(item.id)
+                ? t('history.deletingAction')
+                : t('history.deleteAction')
+            }}
+          </button>
+        </div>
 
         <RouterLink :to="resolveSessionLink(item)" class="history-row-link">
           <div class="history-row-top">
             <div class="space-y-2">
               <span class="block text-base font-black">
                 {{ formatModeLabel(t, item.mode) }}
-                <template v-if="item.topic"> · {{ formatTopicLabel(t, item.topic) }}</template>
-                <template v-if="item.project_name"> · {{ item.project_name }}</template>
+                <template v-if="item.topic">
+                  · {{ formatTopicLabel(t, item.topic) }}</template
+                >
+                <template v-if="item.project_name">
+                  · {{ item.project_name }}</template
+                >
               </span>
-              <span v-if="item.prompt_set" class="neo-badge bg-[var(--neo-blue)]">
-                {{ t('history.promptSetBadge', { name: item.prompt_set.label }) }}
+              <span
+                v-if="item.prompt_set"
+                class="neo-badge bg-[var(--neo-blue)]"
+              >
+                {{
+                  t('history.promptSetBadge', { name: item.prompt_set.label })
+                }}
               </span>
-              <span v-if="item.prompt_overlay_hash" class="neo-badge bg-[var(--neo-green)]">
+              <span
+                v-if="item.prompt_overlay_hash"
+                class="neo-badge bg-[var(--neo-green)]"
+              >
                 {{ t('history.promptOverlayBadge') }}
               </span>
             </div>
@@ -50,14 +79,22 @@
           </div>
 
           <div class="history-row-middle">
-            <span v-if="item.job_target" class="neo-note">{{ item.job_target.title }}</span>
+            <span v-if="item.job_target" class="neo-note">{{
+              item.job_target.title
+            }}</span>
             <span v-else class="neo-note">{{ t('history.noJobTarget') }}</span>
-            <span class="text-sm font-black">{{ item.total_score > 0 ? item.total_score : '—' }}</span>
+            <span class="text-sm font-black">{{
+              item.total_score > 0 ? item.total_score : '—'
+            }}</span>
           </div>
 
           <div class="history-row-bottom">
-            <span class="neo-note">{{ new Date(item.updated_at).toLocaleString() }}</span>
-            <span class="neo-badge bg-[var(--neo-yellow)]">{{ t('history.openAction') }}</span>
+            <span class="neo-note">{{
+              new Date(item.updated_at).toLocaleString()
+            }}</span>
+            <span class="neo-badge bg-[var(--neo-yellow)]">{{
+              t('history.openAction')
+            }}</span>
           </div>
         </RouterLink>
       </article>
@@ -70,7 +107,11 @@ import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
 
 import type { TrainingSessionSummary } from '../api/client';
-import { formatModeLabel, formatStatusLabel, formatTopicLabel } from '../lib/labels';
+import {
+  formatModeLabel,
+  formatStatusLabel,
+  formatTopicLabel,
+} from '../lib/labels';
 
 defineProps<{
   isLoading: boolean;
@@ -78,11 +119,13 @@ defineProps<{
   currentPage: number;
   totalPages: number;
   selectedSessionIds: string[];
+  deletingSessionIds: string[];
   resolveSessionLink: (item: TrainingSessionSummary) => string;
 }>();
 
 const emit = defineEmits<{
   (event: 'toggle-selected', id: string): void;
+  (event: 'delete', id: string): void;
 }>();
 
 const { t } = useI18n();
@@ -102,7 +145,8 @@ const { t } = useI18n();
 
 .history-section-head {
   align-items: end;
-  border-bottom: 2px solid color-mix(in srgb, var(--neo-border) 18%, transparent);
+  border-bottom: 2px solid
+    color-mix(in srgb, var(--neo-border) 18%, transparent);
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
@@ -132,6 +176,13 @@ const { t } = useI18n();
   padding-top: 0;
 }
 
+.history-row-actions {
+  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 .history-row-link {
   display: grid;
   gap: 0.85rem;
@@ -150,6 +201,10 @@ const { t } = useI18n();
   gap: 0.5rem;
 }
 
+.history-delete-button {
+  min-width: 5.5rem;
+}
+
 @media (min-width: 768px) {
   .history-row-top,
   .history-row-middle,
@@ -157,6 +212,10 @@ const { t } = useI18n();
     align-items: center;
     flex-direction: row;
     justify-content: space-between;
+  }
+
+  .history-row-actions {
+    align-items: start;
   }
 }
 </style>

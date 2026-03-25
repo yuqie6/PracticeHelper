@@ -144,6 +144,8 @@ func errorCode(err error) string {
 		return "invalid_prompt_overlay"
 	case errors.Is(err, service.ErrEmptyExportSelection):
 		return "empty_export_selection"
+	case errors.Is(err, service.ErrEmptyDeleteSelection):
+		return "empty_delete_selection"
 	case errors.Is(err, service.ErrUnsupportedExportFormat):
 		return "invalid_export_format"
 	case errors.Is(err, service.ErrImportJobNotFound):

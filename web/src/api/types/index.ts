@@ -13,6 +13,7 @@ export type {
   PromptSetSummary,
 } from './prompt';
 export type {
+  DeleteSessionsResult,
   Dashboard,
   EvaluationLogEntry,
   MemoryRetrievalHit,
