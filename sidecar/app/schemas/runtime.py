@@ -74,7 +74,6 @@ class AgentCommandEnvelope(BaseModel):
     command_type: Literal[
         "transition_session",
         "upsert_review_path",
-        "enqueue_long_job",
     ]
     session_id: str = ""
     # sidecar 只负责“提议命令”，Go 侧会按这个幂等键去重并决定是否真正执行。
@@ -85,6 +84,7 @@ class AgentCommandEnvelope(BaseModel):
 
 class AgentCommandResult(BaseModel):
     command_id: str
+    command_type: str = ""
     status: Literal["accepted", "rejected", "applied", "deferred"]
     applied: bool = False
     data: dict[str, Any] = Field(default_factory=dict)

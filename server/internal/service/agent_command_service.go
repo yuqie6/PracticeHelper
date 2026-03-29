@@ -208,16 +208,14 @@ func resolveEvaluateAnswerCommandDecision(
 	sideEffects *domain.EvaluateAnswerSideEffects,
 	defaultMaxTurns int,
 ) (string, int) {
-	if len(commandResults) > 0 {
-		result := commandResults[len(commandResults)-1]
-		if result.Status == domain.AgentCommandStatusDeferred {
-			signal := stringValue(result.Data["resolved_depth_signal"])
-			if signal == "" {
-				signal = domain.DepthSignalNormal
-			}
-			maxTurns := intValue(result.Data["resolved_max_turns"], defaultMaxTurns)
-			return signal, maxTurns
+	result, ok := latestCommandResultByType(commandResults, domain.AgentCommandTypeTransitionSession)
+	if ok && result.Status == domain.AgentCommandStatusDeferred {
+		signal := stringValue(result.Data["resolved_depth_signal"])
+		if signal == "" {
+			signal = domain.DepthSignalNormal
 		}
+		maxTurns := intValue(result.Data["resolved_max_turns"], defaultMaxTurns)
+		return signal, maxTurns
 	}
 	if sideEffects == nil || sideEffects.DepthSignal == "" {
 		return domain.DepthSignalNormal, defaultMaxTurns
@@ -247,27 +245,41 @@ func (s *Service) applyReviewPathDecision(
 	sideEffects *domain.GenerateReviewSideEffects,
 	commandResults []domain.AgentCommandResult,
 ) error {
-	if len(commandResults) > 0 {
-		result := commandResults[len(commandResults)-1]
-		if result.Status == domain.AgentCommandStatusApplied {
-			if next, ok := nextSessionValue(result.Data["recommended_next"]); ok {
-				review.RecommendedNext = next
-			}
-			if topics := stringSliceValue(result.Data["suggested_topics"]); len(topics) > 0 {
-				review.SuggestedTopics = topics
-			}
-			if focus := stringSliceValue(result.Data["next_training_focus"]); len(focus) > 0 {
-				review.NextTrainingFocus = focus
-			}
-			if prerequisiteTopic := stringValue(result.Data["prerequisite_topic"]); prerequisiteTopic != "" {
-				return s.repo.EnsureKnowledgePrerequisiteEdge(
-					ctx,
-					prerequisiteTopic,
-					normalizeBasicsTopic(session.Topic),
-				)
-			}
-			return nil
+	result, ok := latestCommandResultByType(commandResults, domain.AgentCommandTypeUpsertReviewPath)
+	if ok && result.Status == domain.AgentCommandStatusApplied {
+		if next, ok := nextSessionValue(result.Data["recommended_next"]); ok {
+			review.RecommendedNext = next
 		}
+		if topics := stringSliceValue(result.Data["suggested_topics"]); len(topics) > 0 {
+			review.SuggestedTopics = topics
+		}
+		if focus := stringSliceValue(result.Data["next_training_focus"]); len(focus) > 0 {
+			review.NextTrainingFocus = focus
+		}
+		if prerequisiteTopic := stringValue(result.Data["prerequisite_topic"]); prerequisiteTopic != "" {
+			return s.repo.EnsureKnowledgePrerequisiteEdge(
+				ctx,
+				prerequisiteTopic,
+				normalizeBasicsTopic(session.Topic),
+			)
+		}
+		return nil
 	}
 	return s.normalizeRecommendedNext(ctx, session, review, sideEffects)
+}
+
+func latestCommandResultByType(
+	commandResults []domain.AgentCommandResult,
+	commandType string,
+) (domain.AgentCommandResult, bool) {
+	for index := len(commandResults) - 1; index >= 0; index-- {
+		item := commandResults[index]
+		if strings.TrimSpace(item.CommandType) == commandType {
+			return item, true
+		}
+	}
+	if len(commandResults) == 1 && strings.TrimSpace(commandResults[0].CommandType) == "" {
+		return commandResults[0], true
+	}
+	return domain.AgentCommandResult{}, false
 }

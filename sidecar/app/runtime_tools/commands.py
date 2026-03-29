@@ -254,7 +254,7 @@ def execute_command(
     serialized = serialize_command_result(command, result, deduped=False)
     state.command_counts[command.command_type] = used + 1
     state.command_cache[command.idempotency_key] = serialized
-    state.command_results.append(result.model_dump(mode="json"))
+    state.command_results.append(dict(serialized))
     return serialized
 
 

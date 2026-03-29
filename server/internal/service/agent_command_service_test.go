@@ -114,3 +114,62 @@ func TestExecuteAgentCommandUpsertReviewPathReturnsAppliedNormalizedPath(t *test
 		t.Fatalf("expected normalized recommended next redis, got %+v", result.Data)
 	}
 }
+
+func TestResolveEvaluateAnswerCommandDecisionUsesMatchingCommandType(t *testing.T) {
+	signal, maxTurns := resolveEvaluateAnswerCommandDecision(
+		[]domain.AgentCommandResult{
+			{
+				CommandID:   "cmd_upsert_review_path",
+				CommandType: domain.AgentCommandTypeUpsertReviewPath,
+				Status:      domain.AgentCommandStatusApplied,
+				Data: map[string]any{
+					"recommended_next": map[string]any{"mode": "basics", "topic": "redis"},
+				},
+			},
+			{
+				CommandID:   "cmd_transition_session_turn_1_extend",
+				CommandType: domain.AgentCommandTypeTransitionSession,
+				Status:      domain.AgentCommandStatusDeferred,
+				Data: map[string]any{
+					"resolved_depth_signal": domain.DepthSignalExtend,
+					"resolved_max_turns":    3,
+				},
+			},
+			{
+				CommandID:   "cmd_upsert_review_path_2",
+				CommandType: domain.AgentCommandTypeUpsertReviewPath,
+				Status:      domain.AgentCommandStatusApplied,
+			},
+		},
+		&domain.EvaluateAnswerSideEffects{DepthSignal: domain.DepthSignalSkipFollowup},
+		2,
+	)
+
+	if signal != domain.DepthSignalExtend {
+		t.Fatalf("expected transition_session command to win, got %s", signal)
+	}
+	if maxTurns != 3 {
+		t.Fatalf("expected resolved max turns 3, got %d", maxTurns)
+	}
+}
+
+func TestLatestCommandResultByTypeFallsBackForLegacySingleItem(t *testing.T) {
+	result, ok := latestCommandResultByType(
+		[]domain.AgentCommandResult{
+			{
+				CommandID: "legacy_cmd_transition_session",
+				Status:    domain.AgentCommandStatusDeferred,
+				Data: map[string]any{
+					"resolved_depth_signal": domain.DepthSignalExtend,
+				},
+			},
+		},
+		domain.AgentCommandTypeTransitionSession,
+	)
+	if !ok {
+		t.Fatal("expected legacy single-item fallback to match")
+	}
+	if result.CommandID != "legacy_cmd_transition_session" {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}

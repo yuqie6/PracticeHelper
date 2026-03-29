@@ -51,7 +51,7 @@ def validate_evaluation_result(
     if not result.strengths and not result.gaps:
         return "missing strengths/gaps"
 
-    transition_result = latest_command_result(command_results)
+    transition_result = latest_command_result_for_type(command_results, "transition_session")
     # 如果 Go 已经根据命令结果裁决过 turn 深度，就以裁决结果为准，
     # 不再相信模型早先写进 side_effects 的乐观意图。
     depth_signal = resolved_depth_signal(transition_result, side_effects)
@@ -88,7 +88,7 @@ def validate_review_result(
     if not result.score_breakdown:
         return "missing score_breakdown"
 
-    review_path_result = latest_command_result(command_results)
+    review_path_result = latest_command_result_for_type(command_results, "upsert_review_path")
     if command_result_status(review_path_result) == "applied":
         # review 路径一旦已经由 Go 侧命令落地，模型输出就必须和持久化结果对齐，
         # 否则前端看到的推荐训练方向会和数据库里的真实下一步打架。
@@ -113,13 +113,23 @@ def validate_review_result(
     return ""
 
 
-def latest_command_result(command_results: list[dict[str, Any]]) -> dict[str, Any] | None:
-    if not command_results:
-        return None
-    candidate = command_results[-1]
-    if not isinstance(candidate, dict):
-        return None
-    return candidate
+def latest_command_result_for_type(
+    command_results: list[dict[str, Any]],
+    command_type: str,
+) -> dict[str, Any] | None:
+    for candidate in reversed(command_results):
+        if not isinstance(candidate, dict):
+            continue
+        current_type = candidate.get("command_type")
+        if isinstance(current_type, str) and current_type.strip() == command_type:
+            return candidate
+
+    if len(command_results) == 1 and isinstance(command_results[0], dict):
+        candidate = command_results[0]
+        if not candidate.get("command_type"):
+            return candidate
+
+    return None
 
 
 def command_result_status(command_result: dict[str, Any] | None) -> str:

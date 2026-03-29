@@ -1,5 +1,10 @@
 # ruff: noqa: F403,F405
 from runtime_test_support import *
+from app.schemas import NextSession
+from app.runtime.validation import (
+    validate_evaluation_result,
+    validate_review_result,
+)
 
 
 def test_evaluate_answer_task_accepts_transition_session_command_result() -> None:
@@ -238,3 +243,110 @@ def test_stream_generate_review_emits_command_status_and_command_results() -> No
         result_event["data"]["command_results"][0]["data"]["recommended_next"]["topic"] == "redis"
     )
     assert any(event["type"] == "trace" and event["data"]["phase"] == "command" for event in events)
+
+
+def test_validate_evaluation_result_uses_matching_command_type() -> None:
+    error = validate_evaluation_result(
+        EvaluateAnswerRequest(
+            session_id="sess_validate_eval",
+            mode="basics",
+            topic="redis",
+            question="Redis 为什么快？",
+            expected_points=["内存访问"],
+            answer="因为主要在内存里。",
+            turn_index=1,
+            max_turns=1,
+        ),
+        EvaluationResult(
+            score=86,
+            score_breakdown={"准确性": 86},
+            strengths=["主线完整"],
+            gaps=["例子不够具体"],
+            followup_question="如果线上抖动，你会先看什么？",
+            followup_expected_points=["先止血", "再定位"],
+            weakness_hits=[],
+        ),
+        {"depth_signal": "skip_followup"},
+        [
+            {
+                "command_id": "cmd_upsert_review_path",
+                "command_type": "upsert_review_path",
+                "status": "applied",
+                "data": {},
+            },
+            {
+                "command_id": "cmd_transition_session_turn_1_extend",
+                "command_type": "transition_session",
+                "status": "deferred",
+                "data": {
+                    "resolved_depth_signal": "extend",
+                    "resolved_max_turns": 2,
+                },
+            },
+            {
+                "command_id": "cmd_upsert_review_path_2",
+                "command_type": "upsert_review_path",
+                "status": "applied",
+                "data": {},
+            },
+        ],
+    )
+
+    assert error == ""
+
+
+def test_validate_review_result_uses_matching_command_type() -> None:
+    error = validate_review_result(
+        ReviewCard(
+            overall="总结",
+            top_fix="先补缓存一致性取舍",
+            top_fix_reason="这是目前最影响说服力的短板",
+            highlights=["主线清楚"],
+            gaps=["缺缓存一致性取舍"],
+            suggested_topics=["redis"],
+            next_training_focus=["补缓存一致性表达"],
+            recommended_next=NextSession(
+                mode="basics",
+                topic="redis",
+                reason="先补缓存一致性取舍",
+            ),
+            score_breakdown={"准确性": 72},
+        ),
+        {},
+        [
+            {
+                "command_id": "cmd_transition_session_turn_1_extend",
+                "command_type": "transition_session",
+                "status": "deferred",
+                "data": {
+                    "resolved_depth_signal": "extend",
+                    "resolved_max_turns": 2,
+                },
+            },
+            {
+                "command_id": "cmd_upsert_review_path",
+                "command_type": "upsert_review_path",
+                "status": "applied",
+                "data": {
+                    "recommended_next": {
+                        "mode": "basics",
+                        "topic": "redis",
+                        "reason": "先补缓存一致性取舍",
+                    },
+                    "suggested_topics": ["redis"],
+                    "next_training_focus": ["补缓存一致性表达"],
+                },
+            },
+            {
+                "command_id": "cmd_transition_session_turn_1_skip_followup",
+                "command_type": "transition_session",
+                "status": "deferred",
+                "data": {
+                    "resolved_depth_signal": "skip_followup",
+                    "resolved_max_turns": 1,
+                },
+            },
+        ],
+    )
+
+    assert error == ""

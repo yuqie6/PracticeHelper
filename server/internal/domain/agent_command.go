@@ -3,7 +3,6 @@ package domain
 const (
 	AgentCommandTypeTransitionSession = "transition_session"
 	AgentCommandTypeUpsertReviewPath  = "upsert_review_path"
-	AgentCommandTypeEnqueueLongJob    = "enqueue_long_job"
 
 	AgentCommandStatusAccepted = "accepted"
 	AgentCommandStatusRejected = "rejected"
@@ -22,6 +21,7 @@ type AgentCommandEnvelope struct {
 
 type AgentCommandResult struct {
 	CommandID    string         `json:"command_id"`
+	CommandType  string         `json:"command_type,omitempty"`
 	Status       string         `json:"status"`
 	Applied      bool           `json:"applied,omitempty"`
 	Data         map[string]any `json:"data,omitempty"`

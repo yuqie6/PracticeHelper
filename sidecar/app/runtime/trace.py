@@ -63,7 +63,7 @@ def runtime_error_code(exc: Exception, *, fallback: str) -> str:
 
 
 def is_command_tool(tool_name: str) -> bool:
-    return tool_name in {"transition_session", "upsert_review_path", "enqueue_long_job"}
+    return tool_name in {"transition_session", "upsert_review_path"}
 
 
 def tool_failure_code(tool_name: str, exc: Exception) -> str:
