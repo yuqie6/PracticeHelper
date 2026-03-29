@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  ApiError,
   createSessionStream,
   deleteSessions,
   downloadSessionBatchExport,
@@ -30,6 +31,7 @@ function ndjsonResponse(events: unknown[], init?: ResponseInit): Response {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -198,5 +200,44 @@ describe('api client', () => {
       }),
       signal: expect.any(AbortSignal),
     });
+  });
+
+  it('maps non-timeout aborts to canceled instead of timeout', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() =>
+        Promise.reject(new DOMException('The user aborted a request.', 'AbortError')),
+      ),
+    );
+
+    await expect(getDashboard()).rejects.toMatchObject<ApiError>({
+      code: 'canceled',
+      message: 'Request canceled',
+    });
+  });
+
+  it('maps internal request timers to timeout', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((_, init?: RequestInit) => {
+        const signal = init?.signal;
+        return new Promise((_, reject) => {
+          signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('The operation was aborted.', 'AbortError')),
+            { once: true },
+          );
+        });
+      }),
+    );
+
+    const pending = expect(getDashboard()).rejects.toMatchObject<ApiError>({
+      code: 'timeout',
+      message: 'Request timeout',
+    });
+    await vi.advanceTimersByTimeAsync(90_000);
+
+    await pending;
   });
 });

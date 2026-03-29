@@ -91,19 +91,28 @@ function toTimeoutError(): ApiError {
   return new ApiError('Request timeout', { code: 'timeout' });
 }
 
+function toCanceledError(): ApiError {
+  return new ApiError('Request canceled', { code: 'canceled' });
+}
+
 function bindAbortSignal(
   source: AbortSignal | null | undefined,
   target: AbortController,
+  onAbort?: () => void,
 ): () => void {
   if (!source) {
     return () => {};
   }
   if (source.aborted) {
+    onAbort?.();
     target.abort();
     return () => {};
   }
 
-  const abort = () => target.abort();
+  const abort = () => {
+    onAbort?.();
+    target.abort();
+  };
   source.addEventListener('abort', abort, { once: true });
   return () => source.removeEventListener('abort', abort);
 }
@@ -117,8 +126,14 @@ async function request<T>(
   // 成功响应默认是 { data: T }，失败响应尽量从 { error.message } 提取可展示文案。
   // 如果后续出现 204、文件下载或非 JSON 接口，应该新增专用请求函数而不是继续复用这里。
   const controller = new AbortController();
-  const cleanupAbort = bindAbortSignal(init?.signal, controller);
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let abortKind: 'timeout' | 'canceled' | null = null;
+  const cleanupAbort = bindAbortSignal(init?.signal, controller, () => {
+    abortKind = 'canceled';
+  });
+  const timer = setTimeout(() => {
+    abortKind = 'timeout';
+    controller.abort();
+  }, timeoutMs);
 
   try {
     const response = await fetch(path, {
@@ -144,7 +159,7 @@ async function request<T>(
     return payload.data;
   } catch (error) {
     if (isAbortError(error)) {
-      throw toTimeoutError();
+      throw abortKind === 'timeout' ? toTimeoutError() : toCanceledError();
     }
     throw error;
   } finally {
@@ -159,14 +174,23 @@ async function requestStream<T>(
   onEvent: (event: StreamEvent) => void,
 ): Promise<T> {
   const controller = new AbortController();
-  const cleanupAbort = bindAbortSignal(init.signal, controller);
-  const totalTimer = setTimeout(() => controller.abort(), 300_000);
+  let abortKind: 'timeout' | 'canceled' | null = null;
+  const cleanupAbort = bindAbortSignal(init.signal, controller, () => {
+    abortKind = 'canceled';
+  });
+  const totalTimer = setTimeout(() => {
+    abortKind = 'timeout';
+    controller.abort();
+  }, 300_000);
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   const resetIdle = () => {
     if (idleTimer != null) {
       clearTimeout(idleTimer);
     }
-    idleTimer = setTimeout(() => controller.abort(), 120_000);
+    idleTimer = setTimeout(() => {
+      abortKind = 'timeout';
+      controller.abort();
+    }, 120_000);
   };
 
   try {
@@ -249,7 +273,7 @@ async function requestStream<T>(
     return result;
   } catch (error) {
     if (isAbortError(error)) {
-      throw toTimeoutError();
+      throw abortKind === 'timeout' ? toTimeoutError() : toCanceledError();
     }
     throw error;
   } finally {

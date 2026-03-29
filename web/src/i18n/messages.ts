@@ -67,6 +67,7 @@ export const messages = {
         singleShotFailed: '回退到单轮生成后仍未成功，请稍后再试。',
         backendCallbackFailed: '系统补取训练材料时失败了，请稍后重试。',
         timeout: '这次请求处理超时了，请直接重试。',
+        canceled: '这次请求已被取消。',
         llmRequired: '当前环境没有可用模型，暂时不能继续生成。',
         unknownError: '这次生成失败了，请稍后重试。',
       },
@@ -882,6 +883,7 @@ export const messages = {
         backendCallbackFailed:
           'The system failed while fetching extra training material from the backend.',
         timeout: 'This request timed out. Please retry.',
+        canceled: 'This request was canceled.',
         llmRequired:
           'No working model is configured right now, so generation is unavailable.',
         unknownError: 'This run failed. Please retry later.',

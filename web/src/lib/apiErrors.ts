@@ -16,6 +16,7 @@ const ERROR_KEY_BY_CODE: Record<string, string> = {
   single_shot_failed: 'common.apiErrors.singleShotFailed',
   backend_callback_failed: 'common.apiErrors.backendCallbackFailed',
   timeout: 'common.apiErrors.timeout',
+  canceled: 'common.apiErrors.canceled',
   llm_required: 'common.apiErrors.llmRequired',
   unknown_error: 'common.apiErrors.unknownError',
 };
