@@ -315,24 +315,26 @@ PRACTICEHELPER_SIDECAR_LOG_PATH=../data/logs/sidecar.log
 |:-----|:-----|:-----|
 | **A** 训练体验做稳 | ✅ 已完成 | 反馈 UX、弱项衰减、可行动的复盘 |
 | **B** 接入岗位视角 | ✅ 已完成 | JD 管理、分析历史、训练绑定 |
-| **C** 训练深度与留存 | 🔄 进行中 | 多轮训练、间隔复习、Prompt 实验 |
+| **C** 训练深度与留存 | 🔄 进行中 | 检索证据绑定、Prompt 实验可信度、推荐与复习闭环、回归验证 |
 | **D** 项目证据映射 | 📋 规划中 | 能力标签、证据片段、项目支撑的评估 |
 | **E** 学习规划闭环 | 📋 规划中 | 阶段性学习建议、能力雷达图、每周重点 |
 
-完整产品方向见 [`docs/current/VISION.md`](docs/current/VISION.md)，当前阶段任务见 [`docs/current/PLAN.md`](docs/current/PLAN.md)。
+详细阶段顺序看 [`docs/current/ROADMAP.md`](docs/current/ROADMAP.md)，
+当前执行清单看 [`docs/current/PLAN.md`](docs/current/PLAN.md)。
 
 ## 文档索引
 
 如果几份文档读起来像在打架，默认这样理解：
 
-`README / docs/current/*` 是当前事实主链；
+`docs/current/*` 才是当前事实主链；
+根 `README.md` 负责项目介绍、快速开始和文档导航，不单独定义当前主线；
 专项计划和阶段设计文档要结合各自的“状态”字段阅读，不单独覆盖主链事实。
 
 | 文档 | 角色 | 当前状态 | 什么时候看 |
 |:-----|:-----|:---------|:-----------|
 | [`docs/README.md`](docs/README.md) | 文档总索引 | 当前有效 | 想先搞清楚 `docs/` 怎么分层 |
-| [`VISION.md`](docs/current/VISION.md) | 方向锚点 | 当前有效 | 想确认产品最终要长成什么 |
-| [`PRD.md`](docs/current/PRD.md) | 产品边界 | 当前有效 | 想确认现在做什么、不做什么 |
+| [`NORTH_STAR.md`](docs/current/NORTH_STAR.md) | 长期锚点 | 当前有效 | 想确认未来 6-12 个月值得长成什么 |
+| [`VISION.md`](docs/current/VISION.md) | 当前定位 | 当前有效 | 想确认产品现在是什么、产品形态约束是什么 |
 | [`ROADMAP.md`](docs/current/ROADMAP.md) | 阶段顺序 | 当前有效 | 想确认为什么按这个顺序推进 |
 | [`PLAN.md`](docs/current/PLAN.md) | 当前主线 | 当前有效 | 想确认这一轮优先做什么 |
 | [`ARCHITECTURE.md`](docs/current/ARCHITECTURE.md) | 技术事实 | 当前有效 | 想确认系统分层、状态机、Schema、API |
